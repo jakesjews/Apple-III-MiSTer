@@ -46,3 +46,4 @@ sim/obj_dir
 sim/gen/
 sim/work/
 sim/**/obj_dir/
+rtl/rom/*.hex
