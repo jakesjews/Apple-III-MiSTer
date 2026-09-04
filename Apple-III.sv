@@ -51,8 +51,7 @@ module emu
 		"O67,Write Protect,None,Drive 1,Drive 2,Both;",
 		"-;",
 		"R0,Reset;",
-		"J1,Button 1,Button 2;",
-		"J2,Button 1,Button 2;",
+		"J,Button 1,Button 2;",
 		"V,v",`BUILD_DATE
 	};
 
@@ -110,7 +109,9 @@ module emu
 	assign sd_blk_cnt[0] = 6'd0;
 	assign sd_blk_cnt[1] = 6'd0;
 
-	hps_io #(.CONF_STR(CONF_STR), .VDNUM(2)) hps_io_inst
+	// F12 is the Apple /// RESET key (Ctrl+F12 = reset, F12 alone = NMI), so
+	// the framework menu moves to the MiSTer convention of Win+F12.
+	hps_io #(.CONF_STR(CONF_STR), .VDNUM(2), .F12KEYMOD(1)) hps_io_inst
 	(
 		.clk_sys(clk_14m),
 		.HPS_BUS(HPS_BUS),
@@ -289,6 +290,20 @@ module emu
 		.disk1_active(disk1_active), .disk2_active(disk2_active)
 	);
 
+	// Register the video outputs in the machine-clock domain.  video_mixer
+	// samples them from CLK_VIDEO on ce_pix, and the phase of the free-running
+	// pixel divider relative to clk_14m is not controlled, so the crossing has
+	// to close within one 57.27 MHz cycle for every phase.  Only a
+	// register-to-register path can do that; the combinational pixel path was
+	// measured at 34 ns.
+	logic [7:0] core_r_q, core_g_q, core_b_q;
+	logic core_hblank_q, core_vblank_q, core_hsync_q, core_vsync_q;
+	always_ff @(posedge clk_14m) begin
+		{core_r_q, core_g_q, core_b_q} <= {core_r, core_g, core_b};
+		{core_hblank_q, core_vblank_q, core_hsync_q, core_vsync_q} <=
+			{core_hblank, core_vblank, core_hsync, core_vsync};
+	end
+
 	assign LED_USER = disk_activity;
 	assign AUDIO_L = core_audio;
 	assign AUDIO_R = core_audio;
@@ -306,9 +321,9 @@ module emu
 	(
 		.CLK_VIDEO(CLK_VIDEO), .CE_PIXEL(CE_PIXEL), .ce_pix(ce_pix),
 		.scandoubler(use_scandoubler), .hq2x(video_effect == 3'd1),
-		.gamma_bus(gamma_bus), .R(core_r), .G(core_g), .B(core_b),
-		.HSync(core_hsync), .VSync(core_vsync),
-		.HBlank(core_hblank), .VBlank(core_vblank),
+		.gamma_bus(gamma_bus), .R(core_r_q), .G(core_g_q), .B(core_b_q),
+		.HSync(core_hsync_q), .VSync(core_vsync_q),
+		.HBlank(core_hblank_q), .VBlank(core_vblank_q),
 		.HDMI_FREEZE(HDMI_FREEZE), .freeze_sync(),
 		.VGA_R(VGA_R), .VGA_G(VGA_G), .VGA_B(VGA_B),
 		.VGA_VS(VGA_VS), .VGA_HS(VGA_HS), .VGA_DE(VGA_DE)
