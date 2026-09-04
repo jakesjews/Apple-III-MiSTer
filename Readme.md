@@ -1,49 +1,145 @@
-# Template core for MiSTer
+# Apple III for MiSTer
 
-## General description
-This core contains the latest version of framework and will be updated when framework is updated. There will be no releases. This core is only for developers. Besides the framework, core demonstrates the basic usage. New or ported cores should use it as a template.
+An FPGA implementation of Apple's 1980 Apple III computer for the MiSTer
+platform. This core is an original hardware model built from Apple service
+documentation, schematics and software sources, decoded motherboard PROMs,
+patents, and programs tested on original machines. MAME is used as one
+cross-check, not as the implementation specification.
 
-It's highly recommended to follow the notes to keep it standardized for easier maintenance and collaboration with other developers.
+The core is under active development. The stock ROM completes diagnostics and
+disk bootstrap, SOS 1.3 loads its interpreter, kernel, and drivers in the
+integrated RTL/CPU simulation, and the same image reaches the System Utilities
+selector on MiSTer hardware. Broad Apple III software compatibility is not yet
+established.
 
-## Source structure
+## Implemented hardware
 
-### Legend:
-* `<core_name>` - you have to use the same name where you see this in this manual. Basically it's your core name.
+- 6502 CPU with Apple III 1/2 MHz cycle scheduling and video/refresh contention.
+- Stock 256 KiB 5 V memory organization, bank register, relocatable zero page and
+  stack, sister-byte reads, write protection, and Apple III extended addressing.
+- 4 KiB stock boot ROM and optional 8 KiB dual-bank ROM images.
+- Native Apple III text and graphics modes: 40/80-column text, 280/560-pixel
+  monochrome, 140-pixel 16-colour, and 280-pixel foreground/background colour.
+- Downloadable character generator RAM, inverse/flash attributes, page selection,
+  screen blanking, and smooth vertical scrolling.
+- Two 6522 VIAs, keyboard encoder and repeat behavior, MM58167-style clock,
+  joystick switches and analog inputs, speaker toggle, bell, and six-bit audio.
+- Internal Disk III plus one external drive through the Disk II-compatible
+  controller path. MiSTer mounts `NIB` images with write protection.
+- A minimal 6551-compatible register model sufficient for the startup path.
 
-### Standard MiSTer core should have following folders:
-* `sys` - the framework. Basically it's prohibited to change any files in this folder. Framework updates may erase any customization in this folder. All MiSTer cores have to include sys folder as is from this core.
-* `rtl` - the actual source of core. It's up to the developer how to organize the inner structure of this folder. Exception is pll folder/files (see below).
-* `releases` - the folder where rbf files should be placed. format of each rbf is: <core_name>_YYYYMMDD.rbf (YYYYMMDD is date code of release).
+## Current limitations
 
-### Other standard files:
-* `<core_name>.qpf`- quartus project file. Copy it as is and then modify the line `PROJECT_REVISION = "<core_name>"` according to your core name.
-* `<core_name>.qsf` - quartus settings file. In most cases you don't need to modify anything inside (although you may wont to adjust some settings in quartus - this is fine, but keep changes minimal). You also need to watch this file before you make a commit. Quartus in some conditions may "spit" all settings from different files into this file so it will become large. If you see this, then simply revert it to original file.
-* `<core_name>.srf` - optional file to disable some warnings which are safe to disable and make message list more clean, so you will have less chance to miss some important warnings. You are free to modify it.
-* `<core_name>.sdc` - optional file for constraints in case if core require some special constraints. You are free to modify it.
-* `<core_name>.sv` - glue logic between framework and core. This is where you adapt core specific signals to framework.
-* `files.qip` - list of all core files. You need to edit it manually to add/remove files. Quartus will use this file but can't edit it. If you add files in Quartus IDE, then they will be added to `<core_name>.qsf` which is recommended manually move them to `files.qip`.
-* `clean.bat` - windows batch file to clean the whole project from temporary files. In most cases you don't need to modify it.
-* `.gitignore` - list of files should be ignored by git, so temporary files wont be included in commits.
-* `jtag.cdf` - it will be produced when you compile the core. By clicking it in Quartus IDE, you will launch programmer where you can send the core to MiSTer over USB blaster cable (see manual for DE10-nano how to connect it). This file normally is not present on cleaned project and not included in commits.
+- Slots 1-4 and their peripheral cards are not implemented.
+- The RS-232 ACIA is not connected to MiSTer's UART and is not yet cycle-complete.
+- The Silentype serial/printer functions shared with joystick port A are not
+  implemented.
+- Only drives 1 and 2 are exposed; the original controller could select four.
+- Copy-protected software requiring flux-level media cannot be represented by the
+  currently supported sector/track formats.
+- The optional third-party 512 KiB memory expansion is not enabled. The RTL MMU
+  remains parameterized for 128/256/512 KiB configurations.
 
-### PLL:
-Framework implies use of at least one PLL in the core. Framework doesn't contain this PLL but requires it to be placed in `rtl` folder, so `pll` folder and `pll.v`, `pll.qip` files must be present, however PLL settings are up to the core.
+## ROM
 
-### Verilog Macros
+Copyrighted ROMs are not distributed in this repository. Set `APPLE3_ROM` to a
+4096-byte stock ROM or an 8192-byte dual-bank ROM when building:
 
-The following macros can be defined and will affect the framework features:
+```sh
+APPLE3_ROM=/path/to/apple3.rom ./build.sh compile
+```
 
-Macro                    |   Effect
--------------------------|---------------------------------
-MISTER_DEBUG_NOHDMI      | Disable HDMI-related modules. Speeds up compilation but only analogue/direct video is available
-MISTER_DUAL_SDRAM        | Changes configuration of FPGA pins to work with dual SDRAM I/O boards
-MISTER_FB                | Allows to use framebuffer from the core
-MISTER_SMALL_VBUF        | Sets a smaller video buffer for the ASCAL
-MISTER_DOWNSCALE_NN      | Ascal's downscale mode
-MISTER_DISABLE_ADAPTIVE  | Disables adaptive scan lines
-MISTER_FB_PALETTE        | Framebuffer palette
+The resulting RBF contains that ROM. A 4 KiB or 8 KiB `.bin` can also be loaded
+at runtime from the MiSTer menu.
 
+## Disk images
 
-# Quartus version
-Cores must be developed in **Quartus v17.0.x**. It's recommended to have updates, so it will be **v17.0.2**. Newer versions won't give any benefits to FPGA used in MiSTer, however they will introduce incompatibilities in project settings and it will make harder to maintain the core and collaborate with others. **So please stick to good old 17.0.x version.** You may use either Lite or Standard license.
+MiSTer's host currently enables its transparent `DSK`/`DO`/`PO`-to-`NIB`
+translation only for cores named Apple II or TK2000. Apple III therefore
+advertises the native 232,960-byte `NIB` format instead of silently treating a
+140 KiB sector image as nibble data. A small converter using the same 6-and-2
+layout as the integration test is included:
 
+```sh
+c++ -std=c++17 -O2 tools/dsk2nib.cpp -o /tmp/apple3-dsk2nib
+/tmp/apple3-dsk2nib system.dsk system.nib
+```
+
+For Apple III system disks, the converter also reconstructs the address-field
+volume key used by SOS's synchronized-track check. Use `.do` for DOS-order
+sector images and `.po` for ProDOS-order images.
+
+For an automated MGL boot, name the deployed RBF by its absolute path. MiSTer's
+version-family shorthand (for example `_Computer/Apple-III`) resolves the dated
+RBF but did not reliably initialize the disk mount in hardware testing. The
+following deterministic sequence also resets before mounting and allows the
+track cache time to initialize:
+
+```xml
+<mistergamedescription>
+  <rbf>/media/fat/Apple-III.rbf</rbf>
+  <reset delay="1" hold="1"/>
+  <file delay="3" type="s" index="0" path="/media/fat/games/Apple-III/system.nib"/>
+</mistergamedescription>
+```
+
+`sim/Apple-III-Hardware-Test.mgl` contains this tested sequence. Passing a NIB
+as the second argument to `deploy.sh` installs it as `system.nib`, copies the
+MGL, and launches the hardware test automatically.
+
+## Build and test
+
+Quartus Prime 17.0.x is required, following MiSTer conventions. `build.sh` is
+configured for the local Quartus 17 CrossOver bottle:
+
+```sh
+./sim/run_tests.sh
+./sim/run_core_boot.sh 30000000
+./sim/run_core_boot.sh 2000000000 /path/to/system.dsk
+./sim/run_core_boot.sh 2000000000 /path/to/system.nib --buffered
+./build.sh map
+./build.sh compile
+./deploy.sh output_files/Apple-III.rbf /path/to/system.nib
+```
+
+The first command runs focused Icarus Verilog testbenches for the MMU, timing,
+memory, video, keyboard, I/O, clock/ACIA, and floppy controller. The second uses
+Verilator, the T65 CPU, the stock ROM, and the integrated machine to verify that
+reset, memory sizing, reconfiguration, and the disk boot path execute together.
+With a disk-image argument it also converts sector media to NIB in memory,
+requires the ROM to read block 0 and jump to its `$A000` bootstrap, follows SOS
+past an instruction-boundary enhanced-addressing regression, and waits for SOS
+to return successfully to the user/interpreter environment. The `--buffered`
+variant additionally models MiSTer's 512-byte HPS transfers and the synthesized
+13-block track cache, including track changes while a load is in progress.
+`deploy.sh` copies the generated core to `root@mister`; with no disk argument it
+launches the bare core, and with a NIB it uses the reset-then-mount MGL above.
+
+## Accuracy sources
+
+The implementation is intentionally source-diverse. The detailed mapping from
+hardware behavior to evidence is in [docs/DESIGN.md](docs/DESIGN.md). Principal
+sources include:
+
+- Apple III Level 2 Service Reference Manual and motherboard schematics.
+- Apple's SOS 1.3 kernel, console, disk-driver, formatter, and boot-ROM sources.
+- Decoded equations for the timing, status, address, video, and DRAM-control PROMs.
+- Apple patents US4383296, US4278972, and US4533909.
+- John Jeppson's contemporary Apple III hardware articles and Apple's 1981
+  “Funny Mode and SOS” engineering memo.
+- `diskhero`, Rob Justice's Apple III tools and software, and other programs known
+  to run on original hardware.
+- Stephen A. Edwards' schematic-derived FPGA reconstruction of the Woz clock
+  generator, used to cross-check the 65th-cycle HPE stretch.
+- MAME's Apple III driver and the historical Sara emulator as secondary behavioral
+  comparisons.
+- The current Apple II MiSTer core for MiSTer framework and disk-image integration,
+  not for Apple III motherboard behavior.
+
+The research inventory and source-specific notes live under `research/` in the
+development checkout and are excluded from release artifacts.
+
+## License
+
+See [LICENSE](LICENSE). Imported T65, VIA, MiSTer framework, and floppy support
+retain their respective source notices.

@@ -8,7 +8,7 @@
 //-- Write support by (c)2022 Gyorgy Szombathelyi
 //--
 //-------------------------------------------------------------------------------
-module drive_ii(CLK_14M, CLK_2M, PHASE_ZERO, RESET, DISK_READY, D_IN, D_OUT, DISK_ACTIVE, MOTOR_PHASE, WRITE_MODE, READ_DISK, WRITE_REG, TRACK_ZERO_STEP, TRACK, TRACK_ADDR, TRACK_DI, TRACK_DO, TRACK_WE, TRACK_BUSY);
+module drive_ii(CLK_14M, CLK_2M, PHASE_ZERO, RESET, DISK_READY, D_IN, D_OUT, DISK_ACTIVE, MOTOR_PHASE, WRITE_MODE, READ_DISK, READ_STROBE, WRITE_REG, TRACK_ZERO_STEP, TRACK, TRACK_ADDR, TRACK_DI, TRACK_DO, TRACK_WE, TRACK_BUSY);
    input        CLK_14M;
    input        CLK_2M;
    input        PHASE_ZERO;
@@ -20,6 +20,7 @@ module drive_ii(CLK_14M, CLK_2M, PHASE_ZERO, RESET, DISK_READY, D_IN, D_OUT, DIS
    input [3:0]  MOTOR_PHASE;
    input        WRITE_MODE;
    input        READ_DISK;
+   input        READ_STROBE;
    input        WRITE_REG;
    output reg   TRACK_ZERO_STEP;
    output [5:0] TRACK;
@@ -36,7 +37,6 @@ module drive_ii(CLK_14M, CLK_2M, PHASE_ZERO, RESET, DISK_READY, D_IN, D_OUT, DIS
 
    reg [12:0]    track_byte_addr;
    reg [7:0]    data_reg;
-   reg          reset_data_reg;
 
 
    always @(posedge CLK_14M or posedge RESET)
@@ -154,8 +154,7 @@ module drive_ii(CLK_14M, CLK_2M, PHASE_ZERO, RESET, DISK_READY, D_IN, D_OUT, DIS
       begin
          track_byte_addr <= {13{1'b0}};
          byte_delay = {6{1'b0}};
-         reset_data_reg <= 1'b0;
-         CLK_2M_D <= CLK_2M;
+         CLK_2M_D <= 1'b0;
          data_reg <= 8'h00;
          TRACK_WE <= 1'b0;
       end
@@ -163,19 +162,30 @@ module drive_ii(CLK_14M, CLK_2M, PHASE_ZERO, RESET, DISK_READY, D_IN, D_OUT, DIS
       begin
          TRACK_WE <= 1'b0;
 
+         // The original sequencer clears the read latch after the processor
+         // consumes Q6L.  The Apple II-derived model inferred that event from
+         // the address level and PHI0 at a later Q3 edge.  Apple III's HPE
+         // stretch can put that edge on a byte boundary, losing the newly
+         // loaded nibble.  The core has an exact CPU-cycle strobe, so clear on
+         // that strobe instead; a simultaneous byte load below takes priority.
+         if (WRITE_MODE == 1'b0 && READ_STROBE == 1'b1)
+            data_reg <= 8'h00;
+
+         // The HPS cache is shared by all tracks.  While a requested track is
+         // being filled, TRACK_DO still contains bytes from the previous
+         // track.  Present an empty latch until the cache is coherent instead
+         // of letting the controller lock onto a valid-looking stale sector.
+         if (TRACK_BUSY == 1'b1)
+            data_reg <= 8'h00;
+
          CLK_2M_D <= CLK_2M;
-         if (CLK_2M == 1'b1 & CLK_2M_D == 1'b0 & DISK_READY == 1'b1 & DISK_ACTIVE == 1'b1)
+         if (CLK_2M == 1'b1 & CLK_2M_D == 1'b0 & DISK_READY == 1'b1 &
+             DISK_ACTIVE == 1'b1 & TRACK_BUSY == 1'b0)
          begin
             byte_delay = byte_delay - 6'd1;
 
             if (WRITE_MODE == 1'b0)
             begin
-               if (reset_data_reg == 1'b1)
-               begin
-                  data_reg <= {8{1'b0}};
-                  reset_data_reg <= 1'b0;
-               end
-
                if (byte_delay == 0)
                begin
                   data_reg <= TRACK_DO;
@@ -184,8 +194,6 @@ module drive_ii(CLK_14M, CLK_2M, PHASE_ZERO, RESET, DISK_READY, D_IN, D_OUT, DIS
                   else
                      track_byte_addr <= track_byte_addr + 13'd1;
                end
-               if (READ_DISK == 1'b1 & PHASE_ZERO == 1'b1)
-                  reset_data_reg <= 1'b1;
             end
             else
             begin

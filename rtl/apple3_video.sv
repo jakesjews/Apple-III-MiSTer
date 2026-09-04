@@ -1,7 +1,7 @@
 // Apple /// RGB video generator.
 //
 // Display memory is prefetched into an 80-byte line buffer during horizontal
-// blanking.  This preserves the machine's byte layout and lets the main 512 KiB
+// blanking.  This preserves the machine's byte layout and lets the main RAM
 // store remain synchronous FPGA block RAM.  Address and pixel rules are derived
 // from the service manual, video/mux PROMs, Apple's US4383296/US4533909 patents,
 // SOS console driver, and diskhero; MAME is a secondary cross-check.
@@ -33,7 +33,10 @@ module apple3_video (
 	output logic        vsync
 );
 
-	logic [7:0] line_buffer [0:79];
+	// The hardware fetches two 40-byte halves.  Keeping them separate both
+	// mirrors that organization and gives Quartus exact index ranges.
+	logic [7:0] line_buffer_low [0:39];
+	logic [7:0] line_buffer_high [0:39];
 	logic [7:0] character_ram [0:1023];
 	logic [5:0] flash_count;
 
@@ -187,7 +190,13 @@ module apple3_video (
 					<= ram_q[7:0];
 			end
 			else begin
-				line_buffer[request_index_d] <= request_lane_d ? ram_q[15:8] : ram_q[7:0];
+				if (request_index_d < 7'd40) begin
+					line_buffer_low[request_index_d] <= request_lane_d ? ram_q[15:8] : ram_q[7:0];
+				end
+				else begin
+					line_buffer_high[request_index_d - 7'd40]
+						<= request_lane_d ? ram_q[15:8] : ram_q[7:0];
+				end
 			end
 		end
 
@@ -204,6 +213,7 @@ module apple3_video (
 		logic [23:0] rgb;
 		logic [5:0] pair_index;
 		logic [2:0] bit_index;
+		logic [5:0] colour_buffer_index;
 
 		rgb = 24'h000000;
 		pair_index = 6'd0;
@@ -224,6 +234,7 @@ module apple3_video (
 		char_position = 7'd0;
 		byte_position = h_state[5:0];
 		colour_position = h_state[5:1];
+		colour_buffer_index = {colour_position, 1'b0};
 		within_28 = {h_state[0], state_dot};
 		glyph_row = v_count[2:0] + (smooth_enable ? smooth_offset : 3'd0);
 		glyph_column = state_dot[3:1];
@@ -234,8 +245,10 @@ module apple3_video (
 			case ({video_mode[3], video_mode[1], video_mode[0]})
 				3'b000, 3'b001: begin
 					// 40-column text: the other half of the sister pair carries colour.
-					char_code = line_buffer[(video_mode[2] ? 7'd40 : 7'd0) + h_state];
-					colour_byte = line_buffer[(video_mode[2] ? 7'd0 : 7'd40) + h_state];
+					char_code = video_mode[2] ? line_buffer_high[h_state] :
+					                                  line_buffer_low[h_state];
+					colour_byte = video_mode[2] ? line_buffer_low[h_state] :
+					                                    line_buffer_high[h_state];
 					glyph = character_ram[{char_code[6:0], glyph_row}];
 					pixel_on = glyph[glyph_column];
 					invert_pixel = !char_code[7] && (!glyph[7] || flash_count[3]);
@@ -252,8 +265,8 @@ module apple3_video (
 					// 80-column text: page select exchanges the two 40-byte halves.
 					char_position = {h_state[5:0], 1'b0} + (state_dot >= 4'd7);
 					pair_index = char_position[6:1];
-					char_code = line_buffer[
-						((char_position[0] ^ video_mode[2]) ? 7'd40 : 7'd0) + pair_index];
+					char_code = (char_position[0] ^ video_mode[2]) ?
+					            line_buffer_high[pair_index] : line_buffer_low[pair_index];
 					glyph_column = (state_dot >= 4'd7) ?
 					               state_dot[2:0] + 1'b1 : state_dot[2:0];
 					glyph = character_ram[{char_code[6:0], glyph_row}];
@@ -264,14 +277,14 @@ module apple3_video (
 				end
 
 				3'b100: begin
-					bitmap_byte = line_buffer[{1'b0, byte_position}];
+					bitmap_byte = line_buffer_low[byte_position];
 					bit_index = state_dot[3:1];
 					colour_index = bitmap_byte[bit_index] ? 4'hf : 4'h0;
 				end
 
 				3'b101: begin
-					bitmap_byte = line_buffer[{1'b0, byte_position}];
-					colour_byte = line_buffer[7'd40 + {1'b0, byte_position}];
+					bitmap_byte = line_buffer_low[byte_position];
+					colour_byte = line_buffer_high[byte_position];
 					bit_index = state_dot[3:1];
 					colour_index = bitmap_byte[bit_index] ? colour_byte[7:4] : colour_byte[3:0];
 					graphics_palette = 1'b1;
@@ -279,21 +292,21 @@ module apple3_video (
 
 				3'b110: begin
 					if (state_dot < 4'd7) begin
-						bitmap_byte = line_buffer[{1'b0, byte_position}];
+						bitmap_byte = line_buffer_low[byte_position];
 						bit_index = state_dot[2:0];
 					end
 					else begin
-						bitmap_byte = line_buffer[7'd40 + {1'b0, byte_position}];
+						bitmap_byte = line_buffer_high[byte_position];
 						bit_index = state_dot[2:0] + 1'b1;
 					end
 					colour_index = bitmap_byte[bit_index] ? 4'hf : 4'h0;
 				end
 
 				default: begin
-					p1 = line_buffer[{1'b0, colour_position, 1'b0}];
-					p2 = line_buffer[7'd40 + {1'b0, colour_position, 1'b0}];
-					p3 = line_buffer[{1'b0, colour_position, 1'b0} + 7'd1];
-					p4 = line_buffer[7'd40 + {1'b0, colour_position, 1'b0} + 7'd1];
+					p1 = line_buffer_low[colour_buffer_index];
+					p2 = line_buffer_high[colour_buffer_index];
+					p3 = line_buffer_low[colour_buffer_index + 1'b1];
+					p4 = line_buffer_high[colour_buffer_index + 1'b1];
 					packed_140 = {p4[6:0], p3[6:0], p2[6:0], p1[6:0]};
 					case (within_28[4:2])
 						3'd0: colour_index = packed_140[3:0];

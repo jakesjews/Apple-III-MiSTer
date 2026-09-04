@@ -1,0 +1,5 @@
+<mistergamedescription>
+	<rbf>/media/fat/Apple-III.rbf</rbf>
+	<reset delay="1" hold="1"/>
+	<file delay="3" type="s" index="0" path="/media/fat/games/Apple-III/system.nib"/>
+</mistergamedescription>

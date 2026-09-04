@@ -52,6 +52,8 @@ module storage_tb;
 		pulse_cycle();
 		if (!active || bank !== 8'h83) $fatal(1, "extended latch did not persist");
 		sync = 1; ext_cpu_addr = 16'hf000;
+		#1;
+		if (active || bank !== 8'h00) $fatal(1, "SYNC opcode fetch remained extended");
 		pulse_cycle();
 		if (active || bank !== 8'h00) $fatal(1, "SYNC did not clear extended latch");
 

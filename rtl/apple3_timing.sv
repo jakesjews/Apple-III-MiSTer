@@ -15,6 +15,7 @@ module apple3_timing (
 	output logic        cpu_enable,
 	output logic        via_rising,
 	output logic        via_falling,
+	output logic        q3,
 	output logic        pixel_enable,
 	output logic        hblank,
 	output logic        vblank,
@@ -28,6 +29,7 @@ module apple3_timing (
 );
 
 	logic       fast_a_slot;
+	logic [2:0] q_divider;
 
 	always_comb begin
 		hblank       = (h_count >= 10'd560);
@@ -48,6 +50,10 @@ module apple3_timing (
 		             ((state_dot == 4'd6) && fast_a_slot);
 		via_rising  = (state_dot == 4'd0);
 		via_falling = (state_dot == 4'd7);
+		// Q3 is the asymmetric 2.045 MHz disk/state-machine clock: four
+		// master clocks high and three low.  HPE freezes the shift register
+		// for the final two clocks of each 912-clock scan line.
+		q3 = (q_divider < 3'd4);
 	end
 
 	always_ff @(posedge clk_14m) begin
@@ -57,29 +63,37 @@ module apple3_timing (
 			v_count   <= 9'd0;
 			h_state   <= 7'd0;
 			state_dot <= 4'd0;
+			q_divider <= 3'd0;
 		end
-		else if (((h_state == 7'd64) && (state_dot == 4'd15)) ||
+		else begin
+			if (!((h_state == 7'd64) && (state_dot >= 4'd14))) begin
+				if (q_divider == 3'd6) q_divider <= 3'd0;
+				else q_divider <= q_divider + 1'b1;
+			end
+
+			if (((h_state == 7'd64) && (state_dot == 4'd15)) ||
 		         ((h_state != 7'd64) && (state_dot == 4'd13))) begin
-			state_dot <= 4'd0;
-			if (h_state == 7'd64) begin
-				h_state <= 7'd0;
-				h_count <= 10'd0;
-				if (v_count == 9'd261) begin
-					v_count    <= 9'd0;
-					frame_tick <= 1'b1;
+				state_dot <= 4'd0;
+				if (h_state == 7'd64) begin
+					h_state <= 7'd0;
+					h_count <= 10'd0;
+					if (v_count == 9'd261) begin
+						v_count    <= 9'd0;
+						frame_tick <= 1'b1;
+					end
+					else begin
+						v_count <= v_count + 1'b1;
+					end
 				end
 				else begin
-					v_count <= v_count + 1'b1;
+					h_state <= h_state + 1'b1;
+					h_count <= h_count + 1'b1;
 				end
 			end
 			else begin
-				h_state <= h_state + 1'b1;
-				h_count <= h_count + 1'b1;
+				state_dot <= state_dot + 1'b1;
+				h_count   <= h_count + 1'b1;
 			end
-		end
-		else begin
-			state_dot <= state_dot + 1'b1;
-			h_count   <= h_count + 1'b1;
 		end
 	end
 

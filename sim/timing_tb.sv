@@ -3,13 +3,14 @@
 module timing_tb;
 	logic clk_14m = 0, reset = 1;
 	logic slow_mode = 0, screen_enable = 0, peripheral_cycle = 0;
-	wire cpu_enable, via_rising, via_falling, pixel_enable;
+	wire cpu_enable, via_rising, via_falling, q3, pixel_enable;
 	wire hblank, vblank, display_slot, refresh_slot, frame_tick;
 	wire [9:0] h_count;
 	wire [8:0] v_count;
 	wire [6:0] h_state;
 	wire [3:0] state_dot;
-	integer cpu_count, rise_count, fall_count, refresh_count;
+	integer cpu_count, rise_count, fall_count, refresh_count, q3_rise_count;
+	logic q3_old;
 
 	apple3_timing dut (.*);
 	always #5 clk_14m = ~clk_14m;
@@ -18,7 +19,8 @@ module timing_tb;
 	                          output integer falls, output integer refreshes);
 	integer i;
 	begin
-		cpus = 0; rises = 0; falls = 0; refreshes = 0;
+		cpus = 0; rises = 0; falls = 0; refreshes = 0; q3_rise_count = 0;
+		q3_old = q3;
 		@(negedge clk_14m);
 		while (h_count != 10'd0) @(negedge clk_14m);
 		for (i = 0; i < 912; i = i + 1) begin
@@ -27,8 +29,12 @@ module timing_tb;
 			if (via_rising) rises = rises + 1;
 			if (via_falling) falls = falls + 1;
 			if ((state_dot == 4'd6) && refresh_slot) refreshes = refreshes + 1;
+			if (q3 && !q3_old) q3_rise_count = q3_rise_count + 1;
+			q3_old = q3;
 		end
 		if (h_count != 10'd0) $fatal(1, "line did not wrap after 912 clocks");
+		if (q3_rise_count != 130)
+			$fatal(1, "Q3 cycles per line=%0d, expected 130", q3_rise_count);
 	end
 	endtask
 

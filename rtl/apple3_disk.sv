@@ -55,6 +55,7 @@ module apple3_disk (
 	logic       selected_internal;
 	logic       selected_external;
 	logic       read_disk;
+	logic       read_strobe;
 	logic       write_register;
 	logic [7:0] drive1_data;
 	logic [7:0] drive2_data;
@@ -62,6 +63,7 @@ module apple3_disk (
 
 	always_comb begin
 		read_disk = select && (addr == 8'hec);
+		read_strobe = cycle_strobe && cpu_read && read_disk;
 		write_register = select && !cpu_read && q7 &&
 		                 ((addr == 8'hed) || (addr == 8'hef));
 
@@ -137,7 +139,8 @@ module apple3_disk (
 		.CLK_14M(clk_14m), .CLK_2M(clk_2m), .PHASE_ZERO(phase_zero),
 		.RESET(reset), .DISK_READY(disk_ready[0]), .D_IN(data_in),
 		.D_OUT(drive1_data), .DISK_ACTIVE(d1_active), .MOTOR_PHASE(motor_phase),
-		.WRITE_MODE(q7), .READ_DISK(read_disk), .WRITE_REG(write_register),
+		.WRITE_MODE(q7), .READ_DISK(read_disk), .READ_STROBE(read_strobe),
+		.WRITE_REG(write_register),
 		.TRACK_ZERO_STEP(d1_track_zero_step), .TRACK(track1),
 		.TRACK_ADDR(track1_addr), .TRACK_DI(track1_din), .TRACK_DO(track1_dout),
 		.TRACK_WE(track1_we), .TRACK_BUSY(track1_busy)
@@ -147,7 +150,8 @@ module apple3_disk (
 		.CLK_14M(clk_14m), .CLK_2M(clk_2m), .PHASE_ZERO(phase_zero),
 		.RESET(reset), .DISK_READY(disk_ready[1]), .D_IN(data_in),
 		.D_OUT(drive2_data), .DISK_ACTIVE(d2_active), .MOTOR_PHASE(motor_phase),
-		.WRITE_MODE(q7), .READ_DISK(read_disk), .WRITE_REG(write_register),
+		.WRITE_MODE(q7), .READ_DISK(read_disk), .READ_STROBE(read_strobe),
+		.WRITE_REG(write_register),
 		.TRACK_ZERO_STEP(d2_track_zero_step), .TRACK(track2),
 		.TRACK_ADDR(track2_addr), .TRACK_DI(track2_din), .TRACK_DO(track2_dout),
 		.TRACK_WE(track2_we), .TRACK_BUSY(track2_busy)

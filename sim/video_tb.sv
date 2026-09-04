@@ -27,8 +27,8 @@ module video_tb;
 	initial begin
 		repeat (2) @(posedge clk); reset = 0;
 		// Character A row 0 has its low bit set. Normal characters use bit 7.
-		dut.line_buffer[0] = 8'hc1;
-		dut.line_buffer[40] = 8'h21;
+		dut.line_buffer_low[0] = 8'hc1;
+		dut.line_buffer_high[0] = 8'h21;
 		dut.character_ram[{7'h41,3'd0}] = 8'h01;
 		video_mode = 4'b0000;
 		sample(0,0);
@@ -43,8 +43,8 @@ module video_tb;
 
 		// 560-pixel monochrome concatenates seven bits from each plane.
 		video_mode = 4'b1010;
-		dut.line_buffer[0] = 8'h01;
-		dut.line_buffer[40] = 8'h02;
+		dut.line_buffer_low[0] = 8'h01;
+		dut.line_buffer_high[0] = 8'h02;
 		sample(0,0);
 		if ({red,green,blue} !== 24'hffffff) $fatal(1, "SHGR plane 0");
 		sample(0,8);
@@ -52,10 +52,10 @@ module video_tb;
 
 		// 140-mode ignores each byte's high bit and packs seven 4-bit colours.
 		video_mode = 4'b1011;
-		dut.line_buffer[0] = 8'h21;
-		dut.line_buffer[40] = 8'h43;
-		dut.line_buffer[1] = 8'h65;
-		dut.line_buffer[41] = 8'h07;
+		dut.line_buffer_low[0] = 8'h21;
+		dut.line_buffer_high[0] = 8'h43;
+		dut.line_buffer_low[1] = 8'h65;
+		dut.line_buffer_high[1] = 8'h07;
 		sample(0,0);
 		if ({red,green,blue} !== 24'hdd0033) $fatal(1, "140 colour 0=%06x", {red,green,blue});
 		sample(0,4);

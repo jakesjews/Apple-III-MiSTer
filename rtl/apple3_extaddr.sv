@@ -15,21 +15,30 @@ module apple3_extaddr (
 	output logic       active,
 	output logic [7:0] bank
 );
+	logic active_latched;
+	logic [7:0] bank_latched;
+
+	// SYNC rises as the CPU presents the next opcode address.  Enhanced
+	// addressing is data-only, so mask the latch immediately for that fetch;
+	// waiting for the following clock edge would read the opcode from the old
+	// extended bank.
+	assign active = active_latched && !sync;
+	assign bank = sync ? 8'h00 : bank_latched;
 
 	always_ff @(posedge clk) begin
 		if (reset) begin
-			active <= 1'b0;
-			bank   <= 8'h00;
+			active_latched <= 1'b0;
+			bank_latched   <= 8'h00;
 		end
 		else if (cycle_strobe) begin
 			if (sync) begin
-				active <= 1'b0;
-				bank   <= 8'h00;
+				active_latched <= 1'b0;
+				bank_latched   <= 8'h00;
 			end
 			else if (cpu_read && (cpu_addr < 16'h0100) &&
 			         (zero_page >= 8'h18) && (zero_page <= 8'h1f)) begin
-				bank   <= sister_data & 8'h8f;
-				active <= sister_data[7];
+				bank_latched   <= sister_data & 8'h8f;
+				active_latched <= sister_data[7];
 			end
 		end
 	end

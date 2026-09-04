@@ -13,6 +13,9 @@ Sources (abbreviations used below):
   342-0061/-0063 RAS/CAS decode, 342-0056 CASB65.
 * **[SOS]** SOS 1.3 kernel/loader/disk driver source, console driver 1.31 source.
 * **[ROM]** Boot ROM source (ca65 transcription of the ROM listing).
+* **[EDW]** Stephen A. Edwards, "Reconstructing the Apple II+ on an FPGA"
+  (Circuit Cellar 224, 2009), a schematic-derived model of the same Woz clock
+  generator and its once-per-line extended cycle.
 * **[MAME]** MAME `apple3` driver (Nathan Woods / R. Belmont).
 * **[JEP]** John Jeppson, Softalk 1982/1983 articles.
 * **[DH]** diskhero (2022 game, verified on real hardware).
@@ -21,7 +24,12 @@ Sources (abbreviations used below):
 ## Clocks and CPU speed
 
 * Master clock 14.318 MHz. One video "state" = 14 clocks (65 states per line,
-  912 clocks per line: the 65th state is 16 clocks). 262 lines per frame. [SRM ch.5]
+  912 clocks per line: the 65th state is stretched to 16 clocks). 262 lines per
+  frame. [SRM ch.5, EDW]
+* Q3, the disk-state-machine clock, repeats every seven master clocks and is
+  high for four. HPE holds the Q shift register for the final two clocks of the
+  extended horizontal state. This preserves 130 Q3 cycles for 65 CPU cycles
+  while reproducing the physical once-per-line stretch. [SRM ch.5, schematics]
 * Each state has two 2 MHz slots. Slot B (second half) is always available to the
   CPU (`C1M` high). Slot A is the video/refresh slot; the CPU may use it in 2 MHz
   mode when nothing else needs the RAM. From the timing PROM [PROM 342-0046]:
@@ -46,10 +54,13 @@ Sources (abbreviations used below):
 
 ## Memory
 
-* RAM is N×32 KB banks (N = 4/8/16 for 128/256/512 KB). The system bank ("S") is
-  the highest bank. CPU $0000-$1FFF = S-bank offset $0000-$1FFF, CPU $A000-$FFFF =
-  S-bank offset $2000-$7FFF, CPU $2000-$9FFF = window into bank register bank.
-  [SRM ch.2, JEP, MAME]
+* RAM is N×32 KB banks (N = 4/8/16 for 128/256/512 KB). The MiSTer shell models
+  the stock 256 KB 5 V memory board (N=8), the largest configuration Apple
+  shipped; 512 KB requires a third-party expansion board. The parameterized MMU
+  also covers 128/512 KB for simulation and future backends. The system bank
+  ("S") is the highest bank. CPU $0000-$1FFF = S-bank offset $0000-$1FFF, CPU
+  $A000-$FFFF = S-bank offset $2000-$7FFF, CPU $2000-$9FFF = window into bank
+  register bank. [SRM ch.1-2, JEP, On Three 512K guide, MAME]
 * Bank register = E-VIA port A bits 3..0 ($FFEF). Selecting the S-bank's own number
   (N-1) selects bank 2 instead (verified from the RAS/CAS PROM decode for the 256 KB
   board: bank 7 decodes identically to bank 2; MAME implements the same rule).
@@ -130,8 +141,19 @@ Sources (abbreviations used below):
 Drive selection [SOS disk3 driver]: .D1 = $C0EA (internal I/O select) + $C0D4;
 .D2 = $C0EB + A1=0,A0=1; .D3 = $C0EB + A1=1,A0=0; .D4 = $C0EB + A1=1,A0=1.
 
-A/D channel codes (A/D2,A/D1,A/D0) from the emulation-mode monitor PREAD routine:
-001 = port A X, 010 = port A Y, 011 = port B X, 100 = port B Y.
+The MiSTer drive backend stores one pre-nibblized 6-and-2 byte every 64 Q3
+cycles. Q6L data is cleared on the completed CPU read strobe, after the CPU has
+sampled it. Using the strobe is important at the HPE boundary: inferring the
+read from an address level at a later Q3 edge can clear a newly arrived byte.
+While the HPS fills the 13-block track cache, its old contents belong to the
+previous track; the read head pauses and exposes an empty latch until `busy`
+clears. The buffered boot integration test models the same 512-byte HPS
+handshake and cache RAM latency. It exercises the stock ROM's 32-cycle nibble
+loops and the SOS disk driver's longer loader path. [ROM, SOS, PROM 341-0028]
+
+A/D channel codes (A/D2,A/D1,A/D0) from Service Reference Manual table 9 and
+the SOS 1.3 joystick driver: 001 = port B X, 010 = port B Y, 011 = port A X,
+100 = port A Y, 101 = clock battery, 110 = not connected, 111 = reference.
 
 ## VIAs
 

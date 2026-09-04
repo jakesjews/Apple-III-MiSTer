@@ -1,5 +1,27 @@
-set_global_assignment -name VERILOG_FILE rtl/lfsr.v
-set_global_assignment -name SYSTEMVERILOG_FILE rtl/cos.sv
-set_global_assignment -name SYSTEMVERILOG_FILE rtl/mycore.v
-set_global_assignment -name SDC_FILE Template.sdc
-set_global_assignment -name SYSTEMVERILOG_FILE Template.sv
+set_global_assignment -name QIP_FILE rtl/pll.qip
+
+set_global_assignment -name VHDL_FILE rtl/t65/T65_Pack.vhd
+set_global_assignment -name VHDL_FILE rtl/t65/T65_ALU.vhd
+set_global_assignment -name VHDL_FILE rtl/t65/T65_MCode.vhd
+set_global_assignment -name VHDL_FILE rtl/t65/T65.vhd
+set_global_assignment -name VHDL_FILE rtl/t65_wrapper.vhd
+set_global_assignment -name VHDL_FILE rtl/via/via6522.vhd
+set_global_assignment -name VHDL_FILE rtl/disk/dpram.vhd
+
+set_global_assignment -name VERILOG_FILE rtl/disk/drive_ii.v
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/disk/floppy_track.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_timing.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_mmu.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_ram.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_rom.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_extaddr.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_keyboard.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_rtc.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_acia.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_io.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_disk.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_video.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_core.sv
+
+set_global_assignment -name SDC_FILE Apple-III.sdc
+set_global_assignment -name SYSTEMVERILOG_FILE Apple-III.sv

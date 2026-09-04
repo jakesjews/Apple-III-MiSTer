@@ -44,9 +44,13 @@ module disk_tb;
 		touch(8'hed); // Q6 set: write-protect sense
 		addr = 8'hec; #1;
 		if (data_out !== 8'h80) $fatal(1, "D2 write protect=%02x", data_out);
-		touch(8'hec); // Q6 clear: data register
+		touch(8'hec); // Q6 clear and consume the current read latch
+		repeat (500) @(posedge clk_14m);
 		addr = 8'hec; #1;
 		if (data_out !== 8'h5a) $fatal(1, "D2 data=%02x", data_out);
+		touch(8'hec);
+		addr = 8'hec; #1;
+		if (data_out !== 8'h00) $fatal(1, "D2 data latch did not clear=%02x", data_out);
 
 		touch(8'hea); touch(8'hd4);
 		if (!d1_active || d2_active) $fatal(1, "return to D1");

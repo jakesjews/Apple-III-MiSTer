@@ -3,7 +3,10 @@
 
 module apple3_core #(
 	parameter ROM_INIT_FILE = "",
-	parameter integer ROM_INIT_START = 4096
+	parameter integer ROM_INIT_START = 4096,
+	parameter ROM_INIT_LOW_FILE = "",
+	parameter ROM_INIT_HIGH_FILE = "",
+	parameter integer RAM_BANKS = 8
 ) (
 	input  logic        clk_14m,
 	input  logic        reset,
@@ -43,6 +46,8 @@ module apple3_core #(
 	output logic        video_vsync,
 	output logic signed [15:0] audio,
 	output logic        disk_activity,
+	output logic        disk1_active,
+	output logic        disk2_active,
 
 	output logic [15:0] debug_pc,
 	output logic [15:0] debug_cpu_addr,
@@ -59,7 +64,11 @@ module apple3_core #(
 	output logic [7:0]  debug_e_pa_ddr,
 	output logic [7:0]  debug_a,
 	output logic [7:0]  debug_x,
-	output logic [7:0]  debug_y
+	output logic [7:0]  debug_y,
+	output logic [7:0]  debug_sp,
+	output logic [7:0]  debug_p,
+	output logic [18:0] debug_ram_byte_addr,
+	output logic        debug_ram_write
 );
 
 	logic        machine_reset;
@@ -128,7 +137,6 @@ module apple3_core #(
 	logic d1_active, d2_active, d1_motor_on, d2_motor_on;
 	logic d1_io_active, d2_io_active;
 	logic d1_track_zero_step, d2_track_zero_step;
-	logic [2:0] disk_clock_divider;
 	logic clk_2m;
 	logic phase_zero;
 	logic [5:0] dac_value;
@@ -173,12 +181,6 @@ module apple3_core #(
 		        (speaker ? 16'sd4096 : 16'sd0);
 	end
 
-	always_ff @(posedge clk_14m) begin
-		if (machine_reset) disk_clock_divider <= 3'd0;
-		else if (disk_clock_divider == 3'd6) disk_clock_divider <= 3'd0;
-		else disk_clock_divider <= disk_clock_divider + 1'b1;
-	end
-	assign clk_2m = (disk_clock_divider < 3'd3);
 	assign phase_zero = (state_dot >= 4'd7);
 
 	t65_wrapper cpu (
@@ -191,12 +193,12 @@ module apple3_core #(
 	apple3_timing timing (
 		.clk_14m, .reset(machine_reset), .slow_mode(environment[7]),
 		.screen_enable(environment[5]), .peripheral_cycle,
-		.cpu_enable, .via_rising, .via_falling, .pixel_enable,
+		.cpu_enable, .via_rising, .via_falling, .q3(clk_2m), .pixel_enable,
 		.hblank(timing_hblank), .vblank(timing_vblank), .display_slot,
 		.refresh_slot, .h_count, .v_count, .h_state, .state_dot, .frame_tick
 	);
 
-	apple3_mmu mmu (
+	apple3_mmu #(.RAM_BANKS(RAM_BANKS)) mmu (
 		.cpu_addr, .cpu_read(cpu_rwn), .environment, .zero_page,
 		.bank_register, .native_mode, .extended_active, .extended_bank,
 		.ram_byte_addr, .ram_word_addr, .ram_lane, .ram_read,
@@ -204,13 +206,16 @@ module apple3_core #(
 		.via_d_select, .via_e_select
 	);
 
-	apple3_ram ram (
+	apple3_ram #(.WORD_ADDRESS_BITS(14 + $clog2(RAM_BANKS))) ram (
 		.clk(clk_14m), .cpu_addr(ram_word_addr), .cpu_lane(ram_lane),
 		.cpu_we(cpu_enable && ram_write_allowed), .cpu_din(cpu_dout), .cpu_q(ram_q),
 		.video_addr(video_ram_addr), .video_q(video_ram_q)
 	);
 
-	apple3_rom #(.INIT_FILE(ROM_INIT_FILE), .INIT_START(ROM_INIT_START)) rom (
+	apple3_rom #(
+		.INIT_FILE(ROM_INIT_FILE), .INIT_START(ROM_INIT_START),
+		.INIT_LOW_FILE(ROM_INIT_LOW_FILE), .INIT_HIGH_FILE(ROM_INIT_HIGH_FILE)
+	) rom (
 		.clk(clk_14m), .addr(rom_addr), .q(rom_q), .host_we(rom_we),
 		.host_addr(rom_host_addr), .host_data(rom_host_data)
 	);
@@ -301,6 +306,8 @@ module apple3_core #(
 	);
 
 	assign disk_activity = d1_active || d2_active;
+	assign disk1_active = d1_active;
+	assign disk2_active = d2_active;
 	assign debug_pc = cpu_regs[63:48];
 	assign debug_cpu_addr = cpu_addr;
 	assign debug_environment = environment;
@@ -317,5 +324,9 @@ module apple3_core #(
 	assign debug_a = cpu_regs[7:0];
 	assign debug_x = cpu_regs[15:8];
 	assign debug_y = cpu_regs[23:16];
+	assign debug_p = cpu_regs[31:24];
+	assign debug_sp = cpu_regs[39:32];
+	assign debug_ram_byte_addr = ram_byte_addr;
+	assign debug_ram_write = cpu_enable && ram_write_allowed;
 
 endmodule
