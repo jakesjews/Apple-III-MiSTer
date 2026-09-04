@@ -14,3 +14,7 @@ vvp sim/obj_dir/timing_tb
 iverilog -g2012 -Wall -s storage_tb -o sim/obj_dir/storage_tb \
 	rtl/apple3_ram.sv rtl/apple3_extaddr.sv sim/storage_tb.sv
 vvp sim/obj_dir/storage_tb
+
+iverilog -g2012 -Wall -s video_tb -o sim/obj_dir/video_tb \
+	rtl/apple3_video.sv sim/video_tb.sv
+vvp sim/obj_dir/video_tb
