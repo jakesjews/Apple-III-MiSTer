@@ -30,8 +30,10 @@ module apple3_mmu #(
 	output logic        via_e_select
 );
 
-	localparam integer SYSTEM_BANK = RAM_BANKS - 1;
-	localparam logic [3:0] BANK_MASK = RAM_BANKS - 1;
+	localparam logic [3:0] SYSTEM_BANK =
+		(RAM_BANKS == 4) ? 4'd3 : (RAM_BANKS == 8) ? 4'd7 : 4'd15;
+	localparam logic [3:0] BANK_MASK =
+		(RAM_BANKS == 4) ? 4'h3 : (RAM_BANKS == 8) ? 4'h7 : 4'hf;
 
 	logic [3:0] selected_bank;
 	logic [3:0] mapped_bank;
@@ -48,7 +50,7 @@ module apple3_mmu #(
 		// Apple shipped power-of-two RAM configurations.  Selecting the physical
 		// system bank through the window aliases bank 2 in all configurations.
 		selected_bank = bank_register[3:0] & BANK_MASK;
-		if (selected_bank == SYSTEM_BANK[3:0]) selected_bank = 4'd2;
+		if (selected_bank == SYSTEM_BANK) selected_bank = 4'd2;
 
 		extended_cycle      = extended_active && extended_bank[7] &&
 		                      (cpu_addr >= 16'h0100);
@@ -59,7 +61,7 @@ module apple3_mmu #(
 		                       ((cpu_addr >= 16'hc800) && (cpu_addr < 16'hd000)));
 		always_ram_window   = (cpu_addr >= 16'hc500) && (cpu_addr < 16'hc800);
 
-		mapped_bank  = SYSTEM_BANK[3:0];
+		mapped_bank  = SYSTEM_BANK;
 		bank_offset  = cpu_addr[14:0];
 		mapped_page  = zero_page;
 
@@ -72,45 +74,45 @@ module apple3_mmu #(
 			// The zero-page register is itself a logical page number and is fed
 			// through the same fixed/window/fixed map as a normal CPU address.
 			if (mapped_page < 8'h20) begin
-				mapped_bank = SYSTEM_BANK[3:0];
-				bank_offset = {mapped_page[4:0], cpu_addr[7:0]};
+				mapped_bank = SYSTEM_BANK;
+				bank_offset = {2'b00, mapped_page[4:0], cpu_addr[7:0]};
 			end
 			else if (mapped_page < 8'ha0) begin
 				mapped_bank = extended_system_map ? 4'd0 : selected_bank;
 				bank_offset = {mapped_page[6:0] - 7'h20, cpu_addr[7:0]};
 			end
 			else begin
-				mapped_bank = SYSTEM_BANK[3:0];
-				bank_offset = {mapped_page - 8'h80, cpu_addr[7:0]};
+				mapped_bank = SYSTEM_BANK;
+				bank_offset = {mapped_page[6:0], cpu_addr[7:0]};
 			end
 		end
 		else if ((cpu_addr < 16'h0200) && !environment[2]) begin
 			// With STACK1XX clear, $01xx follows the page adjacent to ZP.
 			mapped_page = zero_page ^ 8'h01;
 			if (mapped_page < 8'h20) begin
-				mapped_bank = SYSTEM_BANK[3:0];
-				bank_offset = {mapped_page[4:0], cpu_addr[7:0]};
+				mapped_bank = SYSTEM_BANK;
+				bank_offset = {2'b00, mapped_page[4:0], cpu_addr[7:0]};
 			end
 			else if (mapped_page < 8'ha0) begin
 				mapped_bank = extended_system_map ? 4'd0 : selected_bank;
 				bank_offset = {mapped_page[6:0] - 7'h20, cpu_addr[7:0]};
 			end
 			else begin
-				mapped_bank = SYSTEM_BANK[3:0];
-				bank_offset = {mapped_page - 8'h80, cpu_addr[7:0]};
+				mapped_bank = SYSTEM_BANK;
+				bank_offset = {mapped_page[6:0], cpu_addr[7:0]};
 			end
 		end
 		else if (cpu_addr < 16'h2000) begin
-			mapped_bank = SYSTEM_BANK[3:0];
+			mapped_bank = SYSTEM_BANK;
 			bank_offset = cpu_addr[14:0];
 		end
 		else if (cpu_addr < 16'ha000) begin
 			mapped_bank = extended_system_map ? 4'd0 : selected_bank;
-			bank_offset = cpu_addr - 16'h2000;
+			bank_offset = cpu_addr[14:0] - 15'h2000;
 		end
 		else begin
-			mapped_bank = SYSTEM_BANK[3:0];
-			bank_offset = cpu_addr - 16'h8000;
+			mapped_bank = SYSTEM_BANK;
+			bank_offset = cpu_addr[14:0];
 		end
 
 		translated_addr = {mapped_bank, bank_offset};

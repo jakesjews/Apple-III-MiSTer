@@ -1,12 +1,11 @@
 module tb(input clk, input rst_n, output [15:0] pc_out, output [7:0] m10, m11, m12, m13, output sync_o);
-  wire [23:0] A; wire [7:0] DI, DO; wire RW_n; wire Sync;
+  wire [15:0] A; wire [7:0] DI, DO; wire RW_n; wire Sync;
   reg [7:0] ram[0:65535];
-  T65 cpu(.Mode(2'b00), .BCD_en(1'b1), .Res_n(rst_n), .Enable(1'b1), .Clk(clk), .Rdy(1'b1), .Abort_n(1'b1),
-          .IRQ_n(1'b1), .NMI_n(1'b1), .SO_n(1'b1), .R_W_n(RW_n), .Sync(Sync), .EF(), .MF(), .XF(), .ML_n(), .VP_n(), .VDA(), .VPA(),
-          .A(A), .DI(DI), .DO(DO), .Regs(), .NMI_ack());
-  assign DI = ram[A[15:0]];
-  always @(posedge clk) if (!RW_n) ram[A[15:0]] <= DO;
-  assign pc_out = A[15:0]; assign sync_o = Sync;
+  t65_wrapper cpu(.clk(clk), .reset_n(rst_n), .enable(1'b1), .irq_n(1'b1), .nmi_n(1'b1),
+                  .data_in(DI), .data_out(DO), .address(A), .read_nwrite(RW_n), .sync(Sync), .regs());
+  assign DI = ram[A];
+  always @(posedge clk) if (!RW_n) ram[A] <= DO;
+  assign pc_out = A; assign sync_o = Sync;
   assign m10 = ram[16'h10]; assign m11 = ram[16'h11]; assign m12 = ram[16'h12]; assign m13 = ram[16'h13];
   initial begin
     integer i; for (i=0;i<65536;i=i+1) ram[i]=8'hEA;

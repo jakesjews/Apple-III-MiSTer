@@ -133,7 +133,8 @@ module apple3_video (
 		line_request = (h_count >= 10'd600) && (h_count < 10'd680);
 		character_request = character_write && (v_count == 9'd261) &&
 		                    (h_count >= 10'd700) && (h_count < 10'd764);
-		request_index = line_request ? (h_count - 10'd600) : (h_count - 10'd700);
+		request_index = line_request ? (h_count[6:0] - 7'd88) :
+		                                (h_count[6:0] - 7'd60);
 		physical = 19'h00000;
 		gfx_line = 13'd0;
 		gfx_page = 15'd0;
@@ -144,25 +145,28 @@ module apple3_video (
 
 		if (character_request) begin
 			// Sixty-four screen-hole pairs describe arbitrary character rows.
-			char_slot = h_count - 10'd700;
+			char_slot = h_count[6:0] - 7'd60;
 			char_i = char_slot[5:3];
 			char_k = char_slot[2:0];
-			physical = {4'hf, 15'h0478 + {char_i, 7'b0000000} + char_k};
+			physical = {4'hf, 15'h0478 + {5'b00000, char_i, 7'b0000000} +
+			                           {12'b000000000000, char_k}};
 		end
 		else if (line_request && (next_y < 9'd192)) begin
 			if (!video_mode[3]) begin
 				text_base = text_line_base(next_y[7:3]);
 				physical = {4'hf, 4'b0000, text_base} +
 				           ((request_index >= 7'd40) ? 19'h00400 : 19'h00000) +
-				           ((request_index >= 7'd40) ? request_index - 7'd40 : request_index);
+				           ((request_index >= 7'd40) ?
+				            {12'd0, request_index - 7'd40} : {12'd0, request_index});
 			end
 			else begin
-				gfx_line = (text_line_base(next_y[7:3]) - 11'h400) +
+				gfx_line = {2'b00, (text_line_base(next_y[7:3]) - 11'h400)} +
 				           {next_y[2:0], 10'b0000000000};
 				gfx_page = video_mode[2] ? 15'h4000 : 15'h0000;
-				physical = {4'h0, gfx_page} + gfx_line +
+				physical = {4'h0, gfx_page} + {6'b000000, gfx_line} +
 				           ((request_index >= 7'd40) ? 19'h02000 : 19'h00000) +
-				           ((request_index >= 7'd40) ? request_index - 7'd40 : request_index);
+				           ((request_index >= 7'd40) ?
+				            {12'd0, request_index - 7'd40} : {12'd0, request_index});
 			end
 		end
 
@@ -250,7 +254,8 @@ module apple3_video (
 					pair_index = char_position[6:1];
 					char_code = line_buffer[
 						((char_position[0] ^ video_mode[2]) ? 7'd40 : 7'd0) + pair_index];
-					glyph_column = (state_dot >= 4'd7) ? state_dot - 4'd7 : state_dot[2:0];
+					glyph_column = (state_dot >= 4'd7) ?
+					               state_dot[2:0] + 1'b1 : state_dot[2:0];
 					glyph = character_ram[{char_code[6:0], glyph_row}];
 					pixel_on = glyph[glyph_column];
 					invert_pixel = !char_code[7] && (!glyph[7] || flash_count[3]);
@@ -259,14 +264,14 @@ module apple3_video (
 				end
 
 				3'b100: begin
-					bitmap_byte = line_buffer[byte_position];
+					bitmap_byte = line_buffer[{1'b0, byte_position}];
 					bit_index = state_dot[3:1];
 					colour_index = bitmap_byte[bit_index] ? 4'hf : 4'h0;
 				end
 
 				3'b101: begin
-					bitmap_byte = line_buffer[byte_position];
-					colour_byte = line_buffer[7'd40 + byte_position];
+					bitmap_byte = line_buffer[{1'b0, byte_position}];
+					colour_byte = line_buffer[7'd40 + {1'b0, byte_position}];
 					bit_index = state_dot[3:1];
 					colour_index = bitmap_byte[bit_index] ? colour_byte[7:4] : colour_byte[3:0];
 					graphics_palette = 1'b1;
@@ -274,21 +279,21 @@ module apple3_video (
 
 				3'b110: begin
 					if (state_dot < 4'd7) begin
-						bitmap_byte = line_buffer[byte_position];
+						bitmap_byte = line_buffer[{1'b0, byte_position}];
 						bit_index = state_dot[2:0];
 					end
 					else begin
-						bitmap_byte = line_buffer[7'd40 + byte_position];
-						bit_index = state_dot - 4'd7;
+						bitmap_byte = line_buffer[7'd40 + {1'b0, byte_position}];
+						bit_index = state_dot[2:0] + 1'b1;
 					end
 					colour_index = bitmap_byte[bit_index] ? 4'hf : 4'h0;
 				end
 
 				default: begin
-					p1 = line_buffer[{colour_position, 1'b0}];
-					p2 = line_buffer[7'd40 + {colour_position, 1'b0}];
-					p3 = line_buffer[{colour_position, 1'b0} + 1'b1];
-					p4 = line_buffer[7'd40 + {colour_position, 1'b0} + 1'b1];
+					p1 = line_buffer[{1'b0, colour_position, 1'b0}];
+					p2 = line_buffer[7'd40 + {1'b0, colour_position, 1'b0}];
+					p3 = line_buffer[{1'b0, colour_position, 1'b0} + 7'd1];
+					p4 = line_buffer[7'd40 + {1'b0, colour_position, 1'b0} + 7'd1];
 					packed_140 = {p4[6:0], p3[6:0], p2[6:0], p1[6:0]};
 					case (within_28[4:2])
 						3'd0: colour_index = packed_140[3:0];

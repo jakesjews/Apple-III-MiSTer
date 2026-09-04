@@ -64,11 +64,13 @@ module apple3_io (
 
 	always_comb begin
 		case (analog_select)
+			3'b000: selected_paddle = 8'h00; // ground/reference diagnostic
 			3'b001: selected_paddle = joy_b_x;
 			3'b010: selected_paddle = 8'hff - joy_b_y;
 			3'b011: selected_paddle = joy_a_x;
 			3'b100: selected_paddle = 8'hff - joy_a_y;
-			default: selected_paddle = 8'h7f;
+			3'b101: selected_paddle = 8'hc0; // nominal clock-battery channel
+			default: selected_paddle = 8'hff; // open and full-scale reference
 		endcase
 
 		data_out = 8'hff;
@@ -171,10 +173,12 @@ module apple3_io (
 						paddle_charge <= 12'd0;
 					end
 					8'h5d: begin
-						paddle_target <= (paddle_charge > 12'd82) ?
-						                 paddle_charge + ({4'd0, selected_paddle} * 4'd7) - 12'd100 :
-						                 paddle_charge;
-						paddle_active <= 1'b1;
+						// A complete CPU polling loop takes roughly the same time as
+						// seven of the 15-clock divider ticks.  This makes Y track the
+						// selected 8-bit channel while channel 0 (ground), used by the
+						// power-on diagnostic, times out immediately.
+						paddle_target <= {4'd0, selected_paddle} * 4'd7;
+						paddle_active <= (selected_paddle != 8'h00);
 					end
 					8'h5e, 8'h5f: analog_select[1] <= addr[0];
 					8'hd8, 8'hd9: smooth_scroll <= addr[0];

@@ -27,11 +27,9 @@ module apple3_timing (
 	output logic        frame_tick
 );
 
-	logic [4:0] state_length;
 	logic       fast_a_slot;
 
 	always_comb begin
-		state_length = (h_state == 7'd64) ? 5'd16 : 5'd14;
 		hblank       = (h_count >= 10'd560);
 		vblank       = (v_count >= 9'd192);
 		pixel_enable = 1'b1;
@@ -60,7 +58,8 @@ module apple3_timing (
 			h_state   <= 7'd0;
 			state_dot <= 4'd0;
 		end
-		else if (state_dot == state_length - 1'b1) begin
+		else if (((h_state == 7'd64) && (state_dot == 4'd15)) ||
+		         ((h_state != 7'd64) && (state_dot == 4'd13))) begin
 			state_dot <= 4'd0;
 			if (h_state == 7'd64) begin
 				h_state <= 7'd0;

@@ -3,7 +3,8 @@
 // hex file, while MiSTer can also load one through ioctl at run time.
 
 module apple3_rom #(
-	parameter INIT_FILE = ""
+	parameter INIT_FILE = "",
+	parameter integer INIT_START = 0
 )(
 	input  logic        clk,
 	input  logic [12:0] addr,
@@ -16,7 +17,7 @@ module apple3_rom #(
 	(* ramstyle = "M10K" *) logic [7:0] mem [0:8191];
 
 	initial begin
-		if (INIT_FILE != "") $readmemh(INIT_FILE, mem);
+		if (INIT_FILE != "") $readmemh(INIT_FILE, mem, INIT_START);
 	end
 
 	always_ff @(posedge clk) begin
