@@ -18,3 +18,7 @@ vvp sim/obj_dir/storage_tb
 iverilog -g2012 -Wall -s video_tb -o sim/obj_dir/video_tb \
 	rtl/apple3_video.sv sim/video_tb.sv
 vvp sim/obj_dir/video_tb
+
+iverilog -g2012 -Wall -s keyboard_tb -o sim/obj_dir/keyboard_tb \
+	rtl/apple3_keyboard.sv sim/keyboard_tb.sv
+vvp sim/obj_dir/keyboard_tb
