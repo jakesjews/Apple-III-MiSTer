@@ -77,9 +77,13 @@ module apple3_io (
 		if (select) begin
 			casez (addr)
 				8'b00000???: data_out = {key_strobe, key_code[6:0]};
+				// KB port: bit 7 = key code bit 7, bit 6 = 1 (mode committed),
+				// bits 5..2 are active-low switch inputs, bit 1 is active-HIGH
+				// shift (the SOS console driver's EOR #$3C flips bits 5..2 only and
+				// MAME's model agrees), bit 0 = any key down.
 				8'b00001???: data_out = {key_code[7], 1'b1, !solid_apple,
 				                               !open_apple, !alpha_lock, !control_key,
-				                               !shift, any_key_down};
+				                               shift, any_key_down};
 				8'h60, 8'h68: data_out = {joy_buttons[0], 7'h00};
 				8'h61, 8'h69: data_out = {joy_buttons[2], 7'h00};
 				8'h62, 8'h6a: data_out = {joy_buttons[1], 7'h00};

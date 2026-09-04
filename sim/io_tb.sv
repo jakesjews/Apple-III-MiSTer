@@ -33,7 +33,7 @@ module io_tb;
 		addr = 8'h00; #1;
 		if (data_out !== 8'hcb) $fatal(1, "KA port=%02x", data_out);
 		addr = 8'h08; #1;
-		if (data_out !== 8'heb) $fatal(1, "KB port=%02x", data_out);
+		if (data_out !== 8'he9) $fatal(1, "KB port=%02x", data_out);
 		access(8'h10, 1);
 		if (!clear_key_strobe) $fatal(1, "keyboard clear pulse");
 
