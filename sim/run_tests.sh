@@ -30,3 +30,7 @@ vvp sim/obj_dir/io_tb
 iverilog -g2012 -Wall -s rtc_acia_tb -o sim/obj_dir/rtc_acia_tb \
 	rtl/apple3_rtc.sv rtl/apple3_acia.sv sim/rtc_acia_tb.sv
 vvp sim/obj_dir/rtc_acia_tb
+
+iverilog -g2012 -Wall -s disk_tb -o sim/obj_dir/disk_tb \
+	rtl/disk/drive_ii.v rtl/apple3_disk.sv sim/disk_tb.sv
+vvp sim/obj_dir/disk_tb
