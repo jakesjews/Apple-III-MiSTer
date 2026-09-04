@@ -22,3 +22,11 @@ vvp sim/obj_dir/video_tb
 iverilog -g2012 -Wall -s keyboard_tb -o sim/obj_dir/keyboard_tb \
 	rtl/apple3_keyboard.sv sim/keyboard_tb.sv
 vvp sim/obj_dir/keyboard_tb
+
+iverilog -g2012 -Wall -s io_tb -o sim/obj_dir/io_tb \
+	rtl/apple3_io.sv sim/io_tb.sv
+vvp sim/obj_dir/io_tb
+
+iverilog -g2012 -Wall -s rtc_acia_tb -o sim/obj_dir/rtc_acia_tb \
+	rtl/apple3_rtc.sv rtl/apple3_acia.sv sim/rtc_acia_tb.sv
+vvp sim/obj_dir/rtc_acia_tb
