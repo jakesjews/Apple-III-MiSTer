@@ -1,6 +1,9 @@
 module core_tb (
 	input  logic clk,
 	input  logic reset,
+	input  logic [10:0] ps2_key,
+	input  logic [17:0] probe_addr,
+	output logic [15:0] probe_word,
 	input  logic disk_present,
 	input  logic buffered_disk,
 	input  logic [7:0] direct_track1_dout,
@@ -69,7 +72,7 @@ module core_tb (
 		.ROM_INIT_FILE("sim/gen/apple3.rom.hex"),
 		.ROM_INIT_START(4096)
 	) dut (
-		.clk_14m(clk), .reset, .ps2_key(11'd0), .host_rtc(65'd0),
+		.clk_14m(clk), .reset, .ps2_key(ps2_key), .host_rtc(65'd0),
 		.joy_a_x(8'h80), .joy_a_y(8'h80), .joy_b_x(8'h80), .joy_b_y(8'h80),
 		.joy_buttons(4'h0), .rom_we(1'b0), .rom_host_addr(13'd0),
 		.rom_host_data(8'd0), .disk_ready({1'b0, core_disk_ready}),
@@ -91,5 +94,9 @@ module core_tb (
 		.debug_sp(sp), .debug_p(p), .debug_ram_byte_addr(ram_byte_addr),
 		.debug_ram_write(ram_write)
 	);
+
+	// Simulation probe into the sister-byte RAM so the harness can decode the
+	// text page after injecting keystrokes.
+	assign probe_word = dut.ram.mem[probe_addr];
 
 endmodule

@@ -40,6 +40,14 @@ established.
 - The optional third-party 512 KiB memory expansion is not enabled. The RTL MMU
   remains parameterized for 128/256/512 KiB configurations.
 
+## Keyboard
+
+F12 is the Apple /// RESET key: Ctrl+F12 performs a hardware reset and F12 on
+its own raises the NMI, both gated by the environment register as on the real
+machine. Because the core claims F12, the MiSTer menu opens with Win+F12 (or
+the OSD button). Caps Lock toggles Alpha Lock, the Windows/Command keys are
+Open Apple and Alt is Solid Apple.
+
 ## ROM
 
 Copyrighted ROMs are not distributed in this repository. Set `APPLE3_ROM` to a
@@ -69,23 +77,27 @@ For Apple III system disks, the converter also reconstructs the address-field
 volume key used by SOS's synchronized-track check. Use `.do` for DOS-order
 sector images and `.po` for ProDOS-order images.
 
-For an automated MGL boot, name the deployed RBF by its absolute path. MiSTer's
-version-family shorthand (for example `_Computer/Apple-III`) resolves the dated
-RBF but did not reliably initialize the disk mount in hardware testing. The
-following deterministic sequence also resets before mounting and allows the
-track cache time to initialize:
+For an automated MGL boot, follow the MiSTer MGL conventions exactly. The `rbf`
+path is relative to the SD root with both the extension and the date stamp
+removed, and the `file` path is relative to the *core's games folder*
+(`/media/fat/games/Apple-III`), not to the SD root. An SD-root-relative or
+absolute `rbf` path loads nothing, and a file path written relative to the SD
+root silently mounts nothing because MiSTer appends it to the games folder. The
+mount must also come before the reset, so the boot ROM restarts with the disk
+already present:
 
 ```xml
 <mistergamedescription>
-  <rbf>/media/fat/Apple-III.rbf</rbf>
-  <reset delay="1" hold="1"/>
-  <file delay="3" type="s" index="0" path="/media/fat/games/Apple-III/system.nib"/>
+  <rbf>_Computer/Apple-III</rbf>
+  <file delay="2" type="s" index="0" path="system.nib"/>
+  <reset delay="1"/>
 </mistergamedescription>
 ```
 
-`sim/Apple-III-Hardware-Test.mgl` contains this tested sequence. Passing a NIB
-as the second argument to `deploy.sh` installs it as `system.nib`, copies the
-MGL, and launches the hardware test automatically.
+`sim/Apple-III-Hardware-Test.mgl` contains this tested sequence, which boots SOS
+to the System Utilities menu on hardware. Passing a NIB as the second argument
+to `deploy.sh` installs it as `system.nib`, copies the MGL, and launches the
+hardware test automatically.
 
 ## Build and test
 
@@ -97,6 +109,7 @@ configured for the local Quartus 17 CrossOver bottle:
 ./sim/run_core_boot.sh 30000000
 ./sim/run_core_boot.sh 2000000000 /path/to/system.dsk
 ./sim/run_core_boot.sh 2000000000 /path/to/system.nib --buffered
+./sim/run_core_boot.sh 1400000000 /path/to/sysutils.dsk --buffered --keytest
 ./build.sh map
 ./build.sh compile
 ./deploy.sh output_files/Apple-III.rbf /path/to/system.nib
@@ -111,7 +124,10 @@ requires the ROM to read block 0 and jump to its `$A000` bootstrap, follows SOS
 past an instruction-boundary enhanced-addressing regression, and waits for SOS
 to return successfully to the user/interpreter environment. The `--buffered`
 variant additionally models MiSTer's 512-byte HPS transfers and the synthesized
-13-block track cache, including track changes while a load is in progress.
+13-block track cache, including track changes while a load is in progress. `--keytest` waits for the System
+Utilities menu, injects PS/2 key events (letters, Escape, Return, arrows, Shift)
+and decodes the text page after each so keyboard behaviour can be checked
+without hardware.
 `deploy.sh` copies the generated core to `root@mister`; with no disk argument it
 launches the bare core, and with a NIB it uses the reset-then-mount MGL above.
 

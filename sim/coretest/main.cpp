@@ -33,8 +33,12 @@ int main(int argc, char **argv) {
 	Vcore_tb top;
 	std::vector<uint8_t> disk_image;
 	const bool disk_test = argc > 2;
-	const bool buffered_disk = disk_test && argc > 3 &&
-	                           std::string(argv[3]) == "--buffered";
+	bool buffered_disk = false;
+	bool key_test = false;
+	for (int i = 3; i < argc; ++i) {
+		if (std::string(argv[i]) == "--buffered") buffered_disk = true;
+		if (std::string(argv[i]) == "--keytest") key_test = true;
+	}
 	if (disk_test) {
 		std::string error;
 		if (!apple3_disk_image::load(argv[2], disk_image, error)) {
@@ -53,6 +57,8 @@ int main(int argc, char **argv) {
 	top.sd_buff_addr = 0;
 	top.sd_buff_dout = 0;
 	top.sd_buff_wr = 0;
+	top.ps2_key = 0;
+	top.probe_addr = 0;
 	uint8_t track_q = 0;
 	uint8_t next_track_q = 0;
 	std::size_t sd_byte = 0;
@@ -155,15 +161,121 @@ int main(int argc, char **argv) {
 	std::array<DiskReadEntry, 256> disk_reads{};
 	std::size_t disk_read_next = 0;
 	std::size_t disk_read_count = 0;
+	// Keyboard script: PS/2 events are injected at machine times after SOS has
+	// drawn its first menu, and the text page is decoded afterwards so the
+	// response can be compared with hardware screenshots.
+	struct KeyEvent { unsigned long long cycle; uint8_t code; bool ext; bool pressed; };
+	struct ScreenDump { unsigned long long cycle; const char *label; };
+	std::vector<KeyEvent> key_script;
+	std::vector<ScreenDump> dump_script;
+	const unsigned long long second = 14318181ULL;
+	auto tap = [&](double at, uint8_t code, bool ext, int only = -1) {
+		const unsigned long long start = static_cast<unsigned long long>(at * second);
+		if (only != 0) key_script.push_back({start, code, ext, true});
+		if (only != 1) key_script.push_back({start + second / 20, code, ext, false});
+	};
+	// The script is armed once the System Utilities menu text is on screen;
+	// times are then relative to that moment (t0), matching the hardware test.
+	bool script_armed = false;
+	auto schedule_script = [&](unsigned long long t0) {
+		const double base = static_cast<double>(t0) / second;
+		dump_script.push_back({t0, "before keys"});
+		tap(base + 0.0, 0x23, false);                        // D
+		dump_script.push_back({t0 + 1 * second, "after D"});
+		tap(base + 1.0, 0x76, false);                        // Escape
+		dump_script.push_back({t0 + 2 * second, "after Escape"});
+		tap(base + 2.0, 0x23, false);                        // D
+		tap(base + 3.0, 0x5a, false);                        // Return
+		dump_script.push_back({t0 + 4 * second, "after D, Return"});
+		tap(base + 4.0, 0x76, false);                        // Escape
+		dump_script.push_back({t0 + 5 * second, "after Escape (2)"});
+		tap(base + 5.0, 0x72, true);                         // Down arrow
+		dump_script.push_back({t0 + 6 * second, "after Down"});
+		tap(base + 6.0, 0x12, false, true);                  // hold Shift ...
+		tap(base + 6.2, 0x23, false);                        // ... D (shifted)
+		tap(base + 6.4, 0x12, false, false);                 // release Shift
+		dump_script.push_back({t0 + 7 * second, "after Shift+D"});
+	};
+	std::size_t key_index = 0;
+	std::size_t dump_index = 0;
+	unsigned keyboard_trace_count = 0;
+	bool key_toggle = false;
+	auto read_screen = [&]() {
+		const bool wide = (top.video_mode & 0x2) != 0;
+		const bool page2 = (top.video_mode & 0x4) != 0;
+		static const unsigned group[3] = {0, 40, 80};
+		std::vector<std::string> rows;
+		for (unsigned row = 0; row < 24; ++row) {
+			const unsigned base = 0x38000 + 0x400 + ((row & 7) << 7) + group[row >> 3];
+			const unsigned columns = wide ? 80 : 40;
+			std::string text;
+			for (unsigned col = 0; col < columns; ++col) {
+				const unsigned byte_addr = base + (wide ? (col >> 1) : col);
+				const unsigned word = ((byte_addr >> 12) << 11) |
+				                      ((((byte_addr >> 10) ^ (byte_addr >> 11)) & 1) << 10) |
+				                      (byte_addr & 0x3ff);
+				const bool lane = wide ? (((col & 1) != 0) != page2) : page2;
+				top.probe_addr = word;
+				top.eval();
+				const unsigned value = lane ? (top.probe_word >> 8) : (top.probe_word & 0xff);
+				const char ch = static_cast<char>(value & 0x7f);
+				text.push_back((ch >= 0x20 && ch < 0x7f) ? ch : '.');
+			}
+			while (!text.empty() && text.back() == ' ') text.pop_back();
+			rows.push_back(text);
+		}
+		return rows;
+	};
+	auto dump_screen = [&](const char *label) {
+		std::printf("screen (%s) vm=%X:\n", label, top.video_mode);
+		const std::vector<std::string> rows = read_screen();
+		for (unsigned row = 0; row < rows.size(); ++row)
+			if (!rows[row].empty()) std::printf("%2u|%s\n", row, rows[row].c_str());
+	};
+
 	const unsigned long long half_cycles = argc > 1
 		? std::strtoull(argv[1], nullptr, 0) : 30000000ULL;
 	for (unsigned long long half_cycle = 0; half_cycle < half_cycles; ++half_cycle) {
+		if (!top.clk) {
+			// Inputs change on the low phase so the next rising edge samples them.
+			const unsigned long long clock_cycles = half_cycle / 2;
+			if (key_test && !script_armed && clock_cycles > 0 &&
+			    clock_cycles % (second / 4) == 0) {
+				for (const std::string &row : read_screen()) {
+					if (row.find("Device handling") != std::string::npos) {
+						script_armed = true;
+						schedule_script(clock_cycles + second);
+						std::printf("menu detected at %.2f s\n",
+						            static_cast<double>(clock_cycles) / second);
+						break;
+					}
+				}
+			}
+			if (key_index < key_script.size() &&
+			    clock_cycles >= key_script[key_index].cycle) {
+				const KeyEvent &event = key_script[key_index++];
+				key_toggle = !key_toggle;
+				top.ps2_key = (key_toggle ? 0x400 : 0) | (event.pressed ? 0x200 : 0) |
+				              (event.ext ? 0x100 : 0) | event.code;
+			}
+			if (dump_index < dump_script.size() &&
+			    clock_cycles >= dump_script[dump_index].cycle)
+				dump_screen(dump_script[dump_index++].label);
+		}
 		prepare_storage();
 		top.clk ^= 1;
 		top.eval();
 		finish_storage();
 		if (top.clk && top.cpu_enable) {
 			++enable_count;
+			if (script_armed && keyboard_trace_count < 120 && top.cpu_rwn &&
+			    (top.cpu_addr == 0xc000 || top.cpu_addr == 0xc008 ||
+			     top.cpu_addr == 0xc010)) {
+				std::printf("kbd read t=%.3f pc=%04X addr=%04X data=%02X\n",
+				            static_cast<double>(half_cycle / 2) / second, top.pc,
+				            top.cpu_addr, top.cpu_din);
+				++keyboard_trace_count;
+			}
 			if (!top.cpu_rwn && top.cpu_addr < 0x100)
 				zero_page_values[top.cpu_addr] = top.cpu_dout;
 			if (top.cpu_rwn && top.cpu_addr == 0xc0ec) {
@@ -223,9 +335,8 @@ int main(int argc, char **argv) {
 				++sync_count;
 			}
 		}
-		if (reached_system_failure || reached_interpreter || loader_io_error ||
-		    boot_block_error ||
-		    disk_hard_error) break;
+		if (reached_system_failure || (reached_interpreter && !key_test) ||
+		    loader_io_error || boot_block_error || disk_hard_error) break;
 	}
 
 	std::printf("boot syncs=%u cycles=%u last=%04X env=%02X zp=%02X bank=%02X vm=%X disk=%u\n",
@@ -311,6 +422,11 @@ int main(int argc, char **argv) {
 		else
 			std::fprintf(stderr,
 			             "FAIL: SOS did not finish loading and enter the interpreter\n");
+		return 1;
+	}
+	if (key_test && (!script_armed || dump_index < dump_script.size())) {
+		std::fprintf(stderr, "FAIL: keyboard script did not complete (%zu/%zu dumps)\n",
+		             dump_index, dump_script.size());
 		return 1;
 	}
 	if (disk_test && reached_system_failure) {
