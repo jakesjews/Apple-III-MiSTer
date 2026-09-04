@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdlib>
 #include <cstdio>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -35,13 +36,30 @@ int main(int argc, char **argv) {
 	const bool disk_test = argc > 2;
 	bool buffered_disk = false;
 	bool key_test = false;
+	bool raw_dsk = false;
 	for (int i = 3; i < argc; ++i) {
 		if (std::string(argv[i]) == "--buffered") buffered_disk = true;
 		if (std::string(argv[i]) == "--keytest") key_test = true;
+		// Feed the sector image through the SD interface unconverted and let
+		// the core's dsk_nibblizer do the work, as it does on hardware.
+		if (std::string(argv[i]) == "--rawdsk") { raw_dsk = true; buffered_disk = true; }
 	}
 	if (disk_test) {
 		std::string error;
-		if (!apple3_disk_image::load(argv[2], disk_image, error)) {
+		if (raw_dsk) {
+			std::ifstream input(argv[2], std::ios::binary);
+			if (!input) {
+				std::fprintf(stderr, "FAIL: cannot open %s\n", argv[2]);
+				return 1;
+			}
+			disk_image.assign((std::istreambuf_iterator<char>(input)),
+			                  std::istreambuf_iterator<char>());
+			if (disk_image.size() != apple3_disk_image::kDskBytes) {
+				std::fprintf(stderr, "FAIL: --rawdsk needs a 143360-byte image\n");
+				return 1;
+			}
+		}
+		else if (!apple3_disk_image::load(argv[2], disk_image, error)) {
 			std::fprintf(stderr, "FAIL: %s\n", error.c_str());
 			return 1;
 		}
@@ -53,6 +71,8 @@ int main(int argc, char **argv) {
 	top.direct_track1_dout = 0;
 	top.image_change = 0;
 	top.image_mount = disk_test;
+	top.image_dsk_mode = raw_dsk;
+	top.image_prodos = 0;
 	top.sd_ack = 0;
 	top.sd_buff_addr = 0;
 	top.sd_buff_dout = 0;

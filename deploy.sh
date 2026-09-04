@@ -15,15 +15,20 @@ if [[ ! -f "$RBF" ]]; then
 	exit 1
 fi
 
+IMAGE_NAME=""
 if [[ -n "$NIB" ]]; then
 	if [[ ! -f "$NIB" ]]; then
-		print -u2 "NIB not found: $NIB"
+		print -u2 "disk image not found: $NIB"
 		exit 1
 	fi
-	if [[ $(stat -f %z "$NIB") -ne 232960 ]]; then
-		print -u2 "NIB must be exactly 232960 bytes: $NIB"
-		exit 1
-	fi
+	case $(stat -f %z "$NIB") in
+		232960) IMAGE_NAME=system.nib ;;
+		143360) IMAGE_NAME=system.dsk ;;
+		*)
+			print -u2 "disk image must be 232960 bytes (NIB) or 143360 bytes (DSK/DO/PO): $NIB"
+			exit 1
+			;;
+	esac
 fi
 
 # Use the development host's date: many MiSTer installations boot without a
@@ -36,12 +41,17 @@ sshpass -p "$PW" ssh -o StrictHostKeyChecking=no "$HOST" \
 	"cp /media/fat/Apple-III.rbf /media/fat/_Computer/Apple-III_${STAMP}.rbf"
 if [[ -n "$NIB" ]]; then
 	sshpass -p "$PW" scp -o StrictHostKeyChecking=no "$NIB" \
-		"$HOST:/media/fat/games/Apple-III/system.nib"
+		"$HOST:/media/fat/games/Apple-III/$IMAGE_NAME"
+	# The MGL names the image, so generate it for whichever format was given.
+	# Paths follow the MiSTer rules: rbf relative to the SD root without the
+	# extension or date stamp, file relative to the core's games folder.
+	sed "s|<file \(.*\)path=\"[^\"]*\"|<file \1path=\"$IMAGE_NAME\"|" \
+		sim/Apple-III-Hardware-Test.mgl > /tmp/apple3-launch.mgl
 	sshpass -p "$PW" scp -o StrictHostKeyChecking=no \
-		sim/Apple-III-Hardware-Test.mgl "$HOST:/media/fat/Apple-III-Hardware-Test.mgl"
+		/tmp/apple3-launch.mgl "$HOST:/media/fat/Apple-III-Hardware-Test.mgl"
 	sshpass -p "$PW" ssh -o StrictHostKeyChecking=no "$HOST" \
 		"echo 'load_core /media/fat/Apple-III-Hardware-Test.mgl' > /dev/MiSTer_cmd"
-	print "Deployed Apple-III_${STAMP}.rbf and launched $NIB"
+	print "Deployed Apple-III_${STAMP}.rbf and launched $NIB as $IMAGE_NAME"
 else
 	sshpass -p "$PW" ssh -o StrictHostKeyChecking=no "$HOST" \
 		"echo 'load_core /media/fat/Apple-III.rbf' > /dev/MiSTer_cmd"

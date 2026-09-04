@@ -9,6 +9,8 @@ module core_tb (
 	input  logic [7:0] direct_track1_dout,
 	input  logic image_change,
 	input  logic image_mount,
+	input  logic image_dsk_mode,
+	input  logic image_prodos,
 	output logic [31:0] sd_lba,
 	output logic sd_rd,
 	output logic sd_wr,
@@ -57,7 +59,8 @@ module core_tb (
 	floppy_track buffered_image (
 		.clk, .reset, .sd_lba, .sd_rd, .sd_wr, .sd_ack,
 		.sd_buff_addr, .sd_buff_dout, .sd_buff_din, .sd_buff_wr,
-		.change(image_change), .mount(image_mount), .track(track1),
+		.change(image_change), .mount(image_mount),
+		.dsk_mode(image_dsk_mode), .prodos(image_prodos), .track(track1),
 		.ready(buffered_ready), .active(disk1_active_internal), .ram_addr(track1_addr),
 		.ram_do(buffered_track1_dout), .ram_di(track1_din),
 		.ram_we(track1_we), .busy(buffered_busy)

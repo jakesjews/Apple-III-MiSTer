@@ -10,6 +10,7 @@ set_global_assignment -name VHDL_FILE rtl/disk/dpram.vhd
 
 set_global_assignment -name VERILOG_FILE rtl/disk/drive_ii.v
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/disk/floppy_track.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/disk/dsk_nibblizer.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_timing.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_mmu.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_ram.sv

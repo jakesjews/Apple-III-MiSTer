@@ -42,13 +42,14 @@ module emu
 	localparam CONF_STR = {
 		"Apple-III;;",
 		"-;",
-		"S0,NIB,Mount Drive 1;",
-		"S1,NIB,Mount Drive 2;",
+		"S0,NIBDSKDO PO ,Mount Drive 1;",
+		"S1,NIBDSKDO PO ,Mount Drive 2;",
 		"F2,BIN,Load Boot ROM;",
 		"-;",
 		"O2,Aspect ratio,4:3,16:9;",
 		"O35,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 		"O67,Write Protect,None,Drive 1,Drive 2,Both;",
+		"O8,Sector order,DOS,ProDOS;",
 		"-;",
 		"R0,Reset;",
 		"J,Button 1,Button 2;",
@@ -200,6 +201,10 @@ module emu
 	logic [1:0] disk_mount = 2'b00;
 	logic [1:0] disk_change = 2'b00;
 	logic [1:0] disk_readonly = 2'b00;
+	// A 143,360-byte image is a DSK/DO/PO sector image and is nibblized in the
+	// core; 232,960 bytes is an already-nibblized NIB.
+	logic [1:0] disk_sector_image = 2'b00;
+	wire  disk_is_sector_image = (img_size == 64'd143360);
 
 	always_ff @(posedge clk_14m) begin
 		// A pulse guarantees a fresh rising edge for every insertion/removal.
@@ -207,15 +212,18 @@ module emu
 		if (img_mounted[0]) begin
 			disk_mount[0] <= (img_size != 0);
 			disk_readonly[0] <= img_readonly;
+			disk_sector_image[0] <= disk_is_sector_image;
 		end
 		if (img_mounted[1]) begin
 			disk_mount[1] <= (img_size != 0);
 			disk_readonly[1] <= img_readonly;
+			disk_sector_image[1] <= disk_is_sector_image;
 		end
 	end
 
 	wire [1:0] disk_ready;
-	wire [1:0] disk_write_protect = disk_readonly | status[7:6];
+	wire [1:0] disk_write_protect = disk_readonly | status[7:6] |
+	                                disk_sector_image;
 	wire disk_activity;
 	wire disk1_active;
 	wire disk2_active;
@@ -240,6 +248,7 @@ module emu
 		.sd_ack(sd_ack[0]), .sd_buff_addr(sd_buff_addr[8:0]),
 		.sd_buff_dout(sd_buff_dout), .sd_buff_din(sd_buff_din[0]),
 		.sd_buff_wr(sd_buff_wr), .change(disk_change[0]),
+		.dsk_mode(disk_sector_image[0]), .prodos(status[8]),
 		.mount(disk_mount[0]), .track(track1), .ready(disk_ready[0]),
 		.active(disk1_active), .ram_addr(track1_addr), .ram_do(track1_dout),
 		.ram_di(track1_din), .ram_we(track1_we), .busy(track1_busy)
@@ -252,6 +261,7 @@ module emu
 		.sd_ack(sd_ack[1]), .sd_buff_addr(sd_buff_addr[8:0]),
 		.sd_buff_dout(sd_buff_dout), .sd_buff_din(sd_buff_din[1]),
 		.sd_buff_wr(sd_buff_wr), .change(disk_change[1]),
+		.dsk_mode(disk_sector_image[1]), .prodos(status[8]),
 		.mount(disk_mount[1]), .track(track2), .ready(disk_ready[1]),
 		.active(disk2_active), .ram_addr(track2_addr), .ram_do(track2_dout),
 		.ram_di(track2_din), .ram_we(track2_we), .busy(track2_busy)

@@ -14,6 +14,7 @@ xxd -p -c 1 research/roms/apple3.rom > sim/gen/apple3.rom.hex
 sources=(
 	sim/coretest/core_tb.sv sim/gen/t65.v sim/gen/via6522.v
 	sim/coretest/dpram_model.sv rtl/disk/floppy_track.sv
+	rtl/disk/dsk_nibblizer.sv
 	rtl/disk/drive_ii.v rtl/apple3_mmu.sv rtl/apple3_timing.sv
 	rtl/apple3_ram.sv rtl/apple3_rom.sv rtl/apple3_extaddr.sv
 	rtl/apple3_keyboard.sv rtl/apple3_io.sv rtl/apple3_rtc.sv

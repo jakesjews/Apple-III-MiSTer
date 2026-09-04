@@ -34,3 +34,7 @@ vvp sim/obj_dir/rtc_acia_tb
 iverilog -g2012 -Wall -s disk_tb -o sim/obj_dir/disk_tb \
 	rtl/disk/drive_ii.v rtl/apple3_disk.sv sim/disk_tb.sv
 vvp sim/obj_dir/disk_tb
+
+iverilog -g2012 -Wall -s nib_tb -o sim/obj_dir/nib_tb \
+	rtl/disk/dsk_nibblizer.sv sim/nib_tb.sv
+vvp sim/obj_dir/nib_tb

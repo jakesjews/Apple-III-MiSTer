@@ -37,6 +37,7 @@ established.
 - Only drives 1 and 2 are exposed; the original controller could select four.
 - Copy-protected software requiring flux-level media cannot be represented by the
   currently supported sector/track formats.
+- Mounted sector images (`DSK`/`DO`/`PO`) are read only; use a `NIB` for writing.
 - The optional third-party 512 KiB memory expansion is not enabled. The RTL MMU
   remains parameterized for 128/256/512 KiB configurations.
 
@@ -62,20 +63,30 @@ at runtime from the MiSTer menu.
 
 ## Disk images
 
-MiSTer's host currently enables its transparent `DSK`/`DO`/`PO`-to-`NIB`
-translation only for cores named Apple II or TK2000. Apple III therefore
-advertises the native 232,960-byte `NIB` format instead of silently treating a
-140 KiB sector image as nibble data. A small converter using the same 6-and-2
-layout as the integration test is included:
+Both the 232,960-byte `NIB` format and 143,360-byte `DSK`/`DO`/`PO` sector
+images can be mounted directly. MiSTer's own host-side sector-to-nibble
+translation is gated on the core being named Apple II or TK2000, so the core
+nibblizes sector images itself: `rtl/disk/dsk_nibblizer.sv` converts a track at
+a time as it is loaded, reproducing the 6-and-2 field layout and the
+address-field volume key that SOS's synchronized-track check reads from tracks
+9 to 16. `sim/nib_tb.sv` checks it byte-for-byte against the reference
+implementation in `sim/coretest/dsk2nib.h`.
+
+Sector images are mounted read only, because writing back would require
+de-nibblization. `NIB` images stay writable.
+
+Images are auto-detected by size, but the sector order cannot be: MiSTer does
+not tell the core which extension matched. `.dsk` and `.do` files are almost
+always DOS 3.3 order, which is the default; set **Sector order** to ProDOS in
+the menu for `.po` images and for the occasional ProDOS-order `.dsk`.
+
+An offline converter using the same layout is still included if a `NIB` is
+wanted, for example to make a writable copy:
 
 ```sh
 c++ -std=c++17 -O2 tools/dsk2nib.cpp -o /tmp/apple3-dsk2nib
 /tmp/apple3-dsk2nib system.dsk system.nib
 ```
-
-For Apple III system disks, the converter also reconstructs the address-field
-volume key used by SOS's synchronized-track check. Use `.do` for DOS-order
-sector images and `.po` for ProDOS-order images.
 
 For an automated MGL boot, follow the MiSTer MGL conventions exactly. The `rbf`
 path is relative to the SD root with both the extension and the date stamp
@@ -109,6 +120,7 @@ configured for the local Quartus 17 CrossOver bottle:
 ./sim/run_core_boot.sh 30000000
 ./sim/run_core_boot.sh 2000000000 /path/to/system.dsk
 ./sim/run_core_boot.sh 2000000000 /path/to/system.nib --buffered
+./sim/run_core_boot.sh 2000000000 /path/to/system.dsk --rawdsk
 ./sim/run_core_boot.sh 1400000000 /path/to/sysutils.dsk --buffered --keytest
 ./build.sh map
 ./build.sh compile
