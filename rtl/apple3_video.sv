@@ -60,6 +60,7 @@ module apple3_video (
 	logic [7:0] p1, p2, p3, p4;
 	logic [27:0] packed_140;
 	logic graphics_palette;
+	logic apple2_hires;
 
 	function automatic [10:0] text_line_base(input logic [4:0] row);
 		logic [10:0] group_offset;
@@ -132,6 +133,7 @@ module apple3_video (
 		logic [2:0] char_i;
 		logic [2:0] char_k;
 
+		apple2_hires = video_mode[3] && !video_mode[1] && !video_mode[0];
 		next_y = (v_count == 9'd261) ? 9'd0 : v_count + 1'b1;
 		line_request = (h_count >= 10'd600) && (h_count < 10'd680);
 		character_request = character_write && (v_count == 9'd261) &&
@@ -165,7 +167,15 @@ module apple3_video (
 			else begin
 				gfx_line = {2'b00, (text_line_base(next_y[7:3]) - 11'h400)} +
 				           {next_y[2:0], 10'b0000000000};
-				gfx_page = video_mode[2] ? 15'h4000 : 15'h0000;
+				// Page 2 sits at $4000/$6000 for the Apple /// native graphics
+				// modes, but the Apple ][-compatible 280-pixel monochrome mode
+				// keeps the Apple II location: its page 2 is CPU $4000, which
+				// is physical $2000.  Confirmed against the Confidence
+				// Program's "Apple ][ Hires page 2" test and MAME's
+				// apple3_v.cpp, which selects hgr_map (base $2000) for VM2 in
+				// that mode and hgr_map+$2000 in every other graphics mode.
+				gfx_page = video_mode[2] ?
+				           (apple2_hires ? 15'h2000 : 15'h4000) : 15'h0000;
 				physical = {4'h0, gfx_page} + {6'b000000, gfx_line} +
 				           ((request_index >= 7'd40) ? 19'h02000 : 19'h00000) +
 				           ((request_index >= 7'd40) ?

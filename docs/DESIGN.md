@@ -97,6 +97,12 @@ Sources (abbreviations used below):
 * Text pages are in the S-bank at $0400/$0800; graphics pages are in physical bank 0
   (CPU $2000-$3FFF/$4000-$5FFF for page 1, $6000-$7FFF/$8000-$9FFF for page 2).
   Page 2 swaps the roles of the two halves in text modes. [SRM ch.6]
+* Exception: the Apple ][-compatible 280x192 monochrome mode ({VM3,VM1,VM0}=100)
+  keeps the Apple II page-2 address. Its page 2 is CPU $4000, i.e. physical
+  $2000, not the $4000 used by the native graphics modes. Verified with the
+  Confidence Program's "Apple ][ Hires (280 x 192), Page 2" test, which renders
+  a fragmented image when page 2 is taken from $4000; MAME's `apple3_v.cpp`
+  makes the same distinction. [MAME, Confidence Program]
 * Character generator = 1 KB RAM (128 chars × 8 rows), bit 7 of a font row = flash
   attribute. Screen byte bit 7 clear = inverse (or flashing when the font row's bit 7
   is set). Loaded by hardware from the text-page screen holes ($x78-$x7F of text rows
