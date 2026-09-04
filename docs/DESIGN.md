@@ -1,0 +1,156 @@
+# Apple /// MiSTer core — hardware model and design notes
+
+This document records the hardware facts the RTL implements and where each fact
+comes from, so the implementation can be audited against primary sources.
+
+Sources (abbreviations used below):
+
+* **[SRM]** Apple /// Level 2 Service Reference Manual (1982), theory of operation
+  chapters 2-12 (`research/docs/service_manual`).
+* **[PROM]** Decoded logic-PROM equations of the main logic board (Patrick Schaefer,
+  bitsavers `A3PROMs`): 342-0046 timing logic, 342-0043 status, 342-0045 I/O logic,
+  342-0055 video mux, 342-0032 video mode control, 342-0030 scan decode,
+  342-0061/-0063 RAS/CAS decode, 342-0056 CASB65.
+* **[SOS]** SOS 1.3 kernel/loader/disk driver source, console driver 1.31 source.
+* **[ROM]** Boot ROM source (ca65 transcription of the ROM listing).
+* **[MAME]** MAME `apple3` driver (Nathan Woods / R. Belmont).
+* **[JEP]** John Jeppson, Softalk 1982/1983 articles.
+* **[DH]** diskhero (2022 game, verified on real hardware).
+* **[MEMO]** Apple internal memo "Funny Mode and SOS", July 1981, appendix 2.
+
+## Clocks and CPU speed
+
+* Master clock 14.318 MHz. One video "state" = 14 clocks (65 states per line,
+  912 clocks per line: the 65th state is 16 clocks). 262 lines per frame. [SRM ch.5]
+* Each state has two 2 MHz slots. Slot B (second half) is always available to the
+  CPU (`C1M` high). Slot A is the video/refresh slot; the CPU may use it in 2 MHz
+  mode when nothing else needs the RAM. From the timing PROM [PROM 342-0046]:
+
+  ```
+  PHASEN = C1M·IOSTOPD
+         + !DSPLY·!FSPACE·SEL2M
+         + !RAMEN·!FSPACE·SEL2M
+         + C1M·!FSPACE
+         + C1M·!C07X·!SEL2M
+  ```
+  `SEL2M` = env bit 7 clear (2 MHz selected), `FSPACE` = access to the VIAs, the
+  ACIA or the clock chip ($C07x), `RAMEN` = the access goes to RAM, `DSPLY` = the
+  video or the DRAM refresh needs this slot, `IOSTOPD` = FSPACE sampled at the C1M
+  rising edge (a wait state for VIA/ACIA/RTC accesses).
+* `DSPLY` = (screen enabled AND active display window) OR refresh. Refresh states
+  come from the scan-decode ROM [PROM 342-0030], `RRFSH`: 4 consecutive states per
+  half-line where `H[4:2] == V[2:0]`, plus extra states during VBL. This reproduces
+  the measured 1.905 MHz average with the screen off [MAME comment] and ~1.5 MHz
+  with the screen on.
+* SOS switches to 1 MHz (env bit 7) around disk transfers. [SOS]
+
+## Memory
+
+* RAM is N×32 KB banks (N = 4/8/16 for 128/256/512 KB). The system bank ("S") is
+  the highest bank. CPU $0000-$1FFF = S-bank offset $0000-$1FFF, CPU $A000-$FFFF =
+  S-bank offset $2000-$7FFF, CPU $2000-$9FFF = window into bank register bank.
+  [SRM ch.2, JEP, MAME]
+* Bank register = E-VIA port A bits 3..0 ($FFEF). Selecting the S-bank's own number
+  (N-1) selects bank 2 instead (verified from the RAS/CAS PROM decode for the 256 KB
+  board: bank 7 decodes identically to bank 2; MAME implements the same rule).
+  Higher values wrap modulo N.
+* Zero page register = D-VIA port B ($FFD0). Any CPU access with A[15:8]=$00 is
+  redirected to page ZP; with env bit 2 clear, page $01 is redirected to ZP^1
+  (alternate stack). [SRM ch.2, JEP, MAME]
+* Environment register = D-VIA port A ($FFDF): bit0 ROM enable, bit1 ROM bank
+  (1 = stock ROM), bit2 primary stack, bit3 write-protect $C000-$FFFF RAM, bit4
+  reset/NMI enable, bit5 screen enable, bit6 I/O enable ($C000-$CFFF), bit7 1 MHz.
+* $C500-$C7FF is always RAM; $FFC0-$FFCF is always RAM; $FFD0-$FFEF are the VIAs
+  only while E-VIA PA6 is not driven low (native mode) [MEMO, MAME]; ROM is 4 KB at
+  $F000-$FFFF when enabled. Writes to $F000-$FFFF always go to the underlying RAM
+  (subject to write-protect).
+* Every RAM read returns two bytes: the byte at A and its "sister" at A^$0C00 (text
+  area) — the video uses both in 80-column/560/140 modes; for the CPU the sister
+  byte of a zero-page pointer fetch is the X byte. [SRM ch.2, JEP]
+* Extended addressing: when ZP is in $18-$1F (status PROM `S399`: translated zero
+  page in $1800-$1FFF) and the CPU reads a zero-page location (not an opcode fetch),
+  the X byte at (ZP^$0C):offset is latched. If bit 7 is set, every following access
+  ≥ $0100 of the same instruction (until SYNC) is redirected: X=$80+n → linear
+  address n·32K + A (bank n at $0000-$7FFF, bank n+1 at $8000-$FFFF); X=$8F → the
+  normal map with bank 0 in the window and RAM under the VIAs. The redirected
+  accesses bypass I/O, ROM and write protection. [JEP, MAME, PROM 342-0043]
+
+## Video
+
+* Modes selected by VM0..VM3, set/cleared through $C050-$C057 (same addresses as
+  the Apple II soft switches but different meaning). {VM3,VM1,VM0}: 000/001 =
+  40-column text (VM0 = colour: fg nibble = bits 7-4, bg = bits 3-0 of the sister
+  byte), 010/011 = 80-column text, 100 = 280×192 mono, 101 = 280×192 fg/bg colour,
+  110 = 560×192 mono, 111 = 140×192 16 colours. VM2 = page 2. [SRM ch.6, PROM
+  342-0032, MAME, DH]
+* Text pages are in the S-bank at $0400/$0800; graphics pages are in physical bank 0
+  (CPU $2000-$3FFF/$4000-$5FFF for page 1, $6000-$7FFF/$8000-$9FFF for page 2).
+  Page 2 swaps the roles of the two halves in text modes. [SRM ch.6]
+* Character generator = 1 KB RAM (128 chars × 8 rows), bit 7 of a font row = flash
+  attribute. Screen byte bit 7 clear = inverse (or flashing when the font row's bit 7
+  is set). Loaded by hardware from the text-page screen holes ($x78-$x7F of text rows
+  0-7) while $C0DB is enabled: font row = {V[4:3], H[2]}, code from the $08xx hole
+  byte, bitmap from the $04xx hole byte. [MAME, DH buildfont.s, SOS console driver]
+* Smooth scroll: $C0D8/$C0D9 disable/enable; offset = disk stepper phase latch bits
+  0-2 ($C0E0-$C0E5). The offset is added modulo 8 to the row-within-cell used for
+  fetching graphics rows and character rows. [SRM ch.2, PROM 342-0055, MAME]
+* Screen enable (env bit 5) blanks the output and frees the video RAM slot.
+* Blanking: HBL for the 25 non-display states, VBL for 70 lines. E-VIA PB6 = composite
+  blanking (1 = blanking), CB1/CB2 = VBL (1 = in vertical blanking). [SOS kernel VIDEO
+  routine counts BL pulses with T2; SOS interrupt table "E.CB2 VBL+, E.CB1 VBL-"]
+
+## I/O ($C000-$C0FF, only with env bit 6)
+
+| Address | Function |
+|---|---|
+| $C000-7 | keyboard ASCII (bit 7 = strobe) |
+| $C008-F | keyboard flags: b0 any-key-down, b1 shift, b2 /control, b3 /alpha-lock, b4 /open-apple, b5 /solid-apple, b6 1, b7 key code bit 7 (keypad/special) |
+| $C010-1F | clear strobe |
+| $C020-2F | deselect $C800 expansion ROM |
+| $C030-3F | speaker toggle |
+| $C040-4D | bell: 1 kHz for 0.1 s |
+| $C04E/F | character RAM disable/enable (unused here) |
+| $C050-57 | VM0..VM3 clear/set |
+| $C058/9 | A/D select 0 |
+| $C05A/B | A/D select 2 |
+| $C05C/D | A/D ramp charge / start timeout |
+| $C05E/F | A/D select 1 |
+| $C060-3 / $C068-B | joystick switches 0-3 (bit 7) |
+| $C064/5, $C06C/D | slot IRQ status (bit 7, negative logic) |
+| $C066/E | A/D timeout (bit 7 = 1 while ramping) |
+| $C070-7F | MM58167 RTC, register selected by the zero page register |
+| $C090-CF | slots 1-4 device select (unpopulated) |
+| $C0D0-7 | drive select A0/A1, internal enable, side 2 |
+| $C0D8/9 | smooth scroll off/on |
+| $C0DA/B | character download off/on |
+| $C0DC-F | ENSEL/ENSIO (Silentype serial port, not implemented) |
+| $C0E0-EF | Disk II style controller (phases, motor, int/ext, Q6, Q7) |
+| $C0F0-3 | 6551 ACIA |
+
+Drive selection [SOS disk3 driver]: .D1 = $C0EA (internal I/O select) + $C0D4;
+.D2 = $C0EB + A1=0,A0=1; .D3 = $C0EB + A1=1,A0=0; .D4 = $C0EB + A1=1,A0=1.
+
+A/D channel codes (A/D2,A/D1,A/D0) from the emulation-mode monitor PREAD routine:
+001 = port A X, 010 = port A Y, 011 = port B X, 100 = port B Y.
+
+## VIAs
+
+D-VIA ($FFD0): PA = environment register, PB = zero page register (also RTC
+register select), CA1 = slot IRQ (OR of slots, active low), CA2 = joystick switch 1
+(margin switch), CB1/CB2 = Silentype serial port.
+
+E-VIA ($FFE0): PA3..0 = bank register (outputs), PA4/PA5 = slot 1/2 IRQ inputs, PA6 =
+solid Apple key input / native-mode output (when configured as an output and driven
+low the VIAs disappear from $FFD0-$FFEF — Apple II emulation mode), PA7 = IRQ line
+status (0 = interrupt pending). PB5..0 = 6-bit sound DAC, PB6 = composite blanking
+input, PB7 = slot NMI input. CA1 = RTC interrupt, CA2 = keyboard data-ready strobe,
+CB1 = CB2 = VBL.
+
+## Keyboard
+
+10×8 matrix scanned by an AY-3600-style encoder with Apple's mask ROM; shift and
+control are direct inputs to the encoder; alpha lock and the two Apple keys are direct
+switch inputs to $C008. Codes per [SRM ch.8] table (upper case letters, control codes,
+keypad/arrows with bit 7 set). Any key held for 0.5 s repeats at 10 cps; with the
+solid Apple key held, 30 cps. Ctrl+Reset = hardware reset, Reset alone = NMI, both
+gated by env bit 4. [SRM ch.8, MAME]
