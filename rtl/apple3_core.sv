@@ -95,7 +95,7 @@ module apple3_core #(
 
 	logic [18:0] ram_byte_addr;
 	logic [17:0] ram_word_addr;
-	logic        ram_lane, ram_read, ram_write_allowed;
+	logic        ram_lane, ram_select, ram_read, ram_write_allowed;
 	logic [15:0] ram_q;
 	logic [7:0]  ram_cpu_data, sister_data;
 	logic [17:0] video_ram_addr;
@@ -192,7 +192,7 @@ module apple3_core #(
 
 	apple3_timing timing (
 		.clk_14m, .reset(machine_reset), .slow_mode(environment[7]),
-		.screen_enable(environment[5]), .peripheral_cycle,
+		.screen_enable(environment[5]), .peripheral_cycle, .ram_cycle(ram_select),
 		.cpu_enable, .via_rising, .via_falling, .q3(clk_2m), .pixel_enable,
 		.hblank(timing_hblank), .vblank(timing_vblank), .display_slot,
 		.refresh_slot, .h_count, .v_count, .h_state, .state_dot, .frame_tick
@@ -201,7 +201,7 @@ module apple3_core #(
 	apple3_mmu #(.RAM_BANKS(RAM_BANKS)) mmu (
 		.cpu_addr, .cpu_read(cpu_rwn), .environment, .zero_page,
 		.bank_register, .native_mode, .extended_active, .extended_bank,
-		.ram_byte_addr, .ram_word_addr, .ram_lane, .ram_read,
+		.ram_byte_addr, .ram_word_addr, .ram_lane, .ram_select, .ram_read,
 		.ram_write_allowed, .rom_read, .rom_addr, .io_select,
 		.via_d_select, .via_e_select
 	);

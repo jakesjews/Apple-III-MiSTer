@@ -61,6 +61,16 @@ module apple3_video (
 	logic [27:0] packed_140;
 	logic graphics_palette;
 	logic apple2_hires;
+	logic [3:0] fetch_mode, pixel_mode;
+
+	// In emulation VM0/VM1/VM3 are TEXT/MIXED/HIRES, not the native
+	// three-bit mode number. Mixed graphics ends at scan line 160.
+	function automatic [3:0] display_mode(input logic [8:0] y);
+		if (native_mode) display_mode = {1'b0, video_mode[3], video_mode[1:0]};
+		else if (video_mode[0] || (video_mode[1] && y >= 9'd160))
+			display_mode = 4'd0;
+		else display_mode = video_mode[3] ? 4'd4 : 4'd8;
+	endfunction
 
 	function automatic [10:0] text_line_base(input logic [4:0] row);
 		logic [10:0] group_offset;
@@ -132,9 +142,12 @@ module apple3_video (
 		logic [6:0] char_slot;
 		logic [2:0] char_i;
 		logic [2:0] char_k;
+		logic [2:0] graphics_row;
 
-		apple2_hires = video_mode[3] && !video_mode[1] && !video_mode[0];
 		next_y = (v_count == 9'd261) ? 9'd0 : v_count + 1'b1;
+		fetch_mode = display_mode(next_y);
+		apple2_hires = (fetch_mode == 4'd4);
+		graphics_row = next_y[2:0] + (smooth_enable ? smooth_offset : 3'd0);
 		line_request = (h_count >= 10'd600) && (h_count < 10'd680);
 		character_request = character_write && (v_count == 9'd261) &&
 		                    (h_count >= 10'd700) && (h_count < 10'd764);
@@ -157,7 +170,7 @@ module apple3_video (
 			                           {12'b000000000000, char_k}};
 		end
 		else if (line_request && (next_y < 9'd192)) begin
-			if (!video_mode[3]) begin
+			if (!fetch_mode[2]) begin
 				text_base = text_line_base(next_y[7:3]);
 				physical = {4'hf, 4'b0000, text_base} +
 				           ((request_index >= 7'd40) ? 19'h00400 : 19'h00000) +
@@ -166,7 +179,7 @@ module apple3_video (
 			end
 			else begin
 				gfx_line = {2'b00, (text_line_base(next_y[7:3]) - 11'h400)} +
-				           {next_y[2:0], 10'b0000000000};
+				           {graphics_row, 10'b0000000000};
 				// Page 2 sits at $4000/$6000 for the Apple /// native graphics
 				// modes, but the Apple ][-compatible 280-pixel monochrome mode
 				// keeps the Apple II location: its page 2 is CPU $4000, which
@@ -245,15 +258,16 @@ module apple3_video (
 		byte_position = h_state[5:0];
 		colour_position = h_state[5:1];
 		colour_buffer_index = {colour_position, 1'b0};
-		within_28 = {h_state[0], state_dot};
+		within_28 = (h_state[0] ? 5'd14 : 5'd0) + {1'b0, state_dot};
+		pixel_mode = display_mode(v_count);
 		glyph_row = v_count[2:0] + (smooth_enable ? smooth_offset : 3'd0);
 		glyph_column = state_dot[3:1];
 		p1 = 8'h00; p2 = 8'h00; p3 = 8'h00; p4 = 8'h00;
 		packed_140 = 28'h0000000;
 
 		if (!hblank && !vblank && screen_enable) begin
-			case ({video_mode[3], video_mode[1], video_mode[0]})
-				3'b000, 3'b001: begin
+			case (pixel_mode)
+				4'd0, 4'd1: begin
 					// 40-column text: the other half of the sister pair carries colour.
 					char_code = video_mode[2] ? line_buffer_high[h_state] :
 					                                  line_buffer_low[h_state];
@@ -271,7 +285,7 @@ module apple3_video (
 					end
 				end
 
-				3'b010, 3'b011: begin
+				4'd2, 4'd3: begin
 					// 80-column text: page select exchanges the two 40-byte halves.
 					char_position = {h_state[5:0], 1'b0} + (state_dot >= 4'd7);
 					pair_index = char_position[6:1];
@@ -286,13 +300,13 @@ module apple3_video (
 					colour_index = pixel_on ? 4'hc : 4'h0;
 				end
 
-				3'b100: begin
+				4'd4: begin
 					bitmap_byte = line_buffer_low[byte_position];
 					bit_index = state_dot[3:1];
 					colour_index = bitmap_byte[bit_index] ? 4'hf : 4'h0;
 				end
 
-				3'b101: begin
+				4'd5: begin
 					bitmap_byte = line_buffer_low[byte_position];
 					colour_byte = line_buffer_high[byte_position];
 					bit_index = state_dot[3:1];
@@ -300,7 +314,7 @@ module apple3_video (
 					graphics_palette = 1'b1;
 				end
 
-				3'b110: begin
+				4'd6: begin
 					if (state_dot < 4'd7) begin
 						bitmap_byte = line_buffer_low[byte_position];
 						bit_index = state_dot[2:0];
@@ -310,6 +324,15 @@ module apple3_video (
 						bit_index = state_dot[2:0] + 1'b1;
 					end
 					colour_index = bitmap_byte[bit_index] ? 4'hf : 4'h0;
+				end
+
+				4'd8: begin
+					// Apple II 40x48 lores uses the text pages: one nibble for
+					// each four-scan-line half of a character cell.
+					colour_byte = video_mode[2] ? line_buffer_high[byte_position] :
+					                                      line_buffer_low[byte_position];
+					colour_index = glyph_row[2] ? colour_byte[7:4] : colour_byte[3:0];
+					graphics_palette = 1'b1;
 				end
 
 				default: begin

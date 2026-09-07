@@ -1,7 +1,9 @@
 # Apple /// MiSTer core — hardware model and design notes
 
-This document records the hardware facts the RTL implements and where each fact
-comes from, so the implementation can be audited against primary sources.
+This document records the hardware model, its sources, and implementation limits.
+The [accuracy audit](ACCURACY_AUDIT_2026-09-04.md) and
+[fix report](ACCURACY_FIXES_2026-09-07.md) distinguish verified behavior from
+remaining coverage gaps.
 
 Sources (abbreviations used below):
 
@@ -20,6 +22,7 @@ Sources (abbreviations used below):
 * **[JEP]** John Jeppson, Softalk 1982/1983 articles.
 * **[DH]** diskhero (2022 game, verified on real hardware).
 * **[MEMO]** Apple internal memo "Funny Mode and SOS", July 1981, appendix 2.
+* **[RTC]** National Semiconductor [AN-353, MM58167B Real Time Clock Design Guide](https://bitsavers.org/components/national/_appNotes/AN-0353.pdf), especially pp. 8, 16–17 and figure 23.
 
 ## Clocks and CPU speed
 
@@ -32,7 +35,9 @@ Sources (abbreviations used below):
   while reproducing the physical once-per-line stretch. [SRM ch.5, schematics]
 * Each state has two 2 MHz slots. Slot B (second half) is always available to the
   CPU (`C1M` high). Slot A is the video/refresh slot; the CPU may use it in 2 MHz
-  mode when nothing else needs the RAM. From the timing PROM [PROM 342-0046]:
+  mode when nothing else needs RAM, or when the CPU access does not select RAM.
+  RAM selection remains asserted for write-protected RAM writes. From the timing
+  PROM [PROM 342-0046]:
 
   ```
   PHASEN = C1M·IOSTOPD
@@ -45,11 +50,14 @@ Sources (abbreviations used below):
   ACIA or the clock chip ($C07x), `RAMEN` = the access goes to RAM, `DSPLY` = the
   video or the DRAM refresh needs this slot, `IOSTOPD` = FSPACE sampled at the C1M
   rising edge (a wait state for VIA/ACIA/RTC accesses).
+  The current RTL uses one B-slot for peripheral accesses; the motherboard's
+  delayed IOSTOP/ready waveform still needs separate implementation/verification.
 * `DSPLY` = (screen enabled AND active display window) OR refresh. Refresh states
   come from the scan-decode ROM [PROM 342-0030], `RRFSH`: 4 consecutive states per
-  half-line where `H[4:2] == V[2:0]`, plus extra states during VBL. This reproduces
-  the measured 1.905 MHz average with the screen off [MAME comment] and ~1.5 MHz
-  with the screen on.
+  half-line where `H[4:2] == V[2:0]` during display, with additions and exclusions
+  during VBL. The hardware vertical counter runs 256..511 then 250..255.
+  All 16,768 ordinary states per frame match the binary scan PROM; the extended
+  HPE state's refresh decode is outside that comparison.
 * SOS switches to 1 MHz (env bit 7) around disk transfers. [SOS]
 
 ## Memory
@@ -94,6 +102,12 @@ Sources (abbreviations used below):
   byte), 010/011 = 80-column text, 100 = 280×192 mono, 101 = 280×192 fg/bg colour,
   110 = 560×192 mono, 111 = 140×192 16 colours. VM2 = page 2. [SRM ch.6, PROM
   342-0032, MAME, DH]
+* With native mode disabled, VM0/VM1/VM3 mean TEXT/MIXED/HIRES. TEXT overrides
+  HIRES; otherwise HIRES selects 280-pixel monochrome and its absence selects
+  40×48 lores from text-page nibbles. MIXED replaces scan lines 160–191 with
+  40-column text. RGB hires remains monochrome, as documented by Apple TA48103.
+* 140-mode packs four seven-bit memory fragments into seven four-bit pixels,
+  each four master dots wide. The second state starts at dot 14 of the group.
 * Text pages are in the S-bank at $0400/$0800; graphics pages are in physical bank 0
   (CPU $2000-$3FFF/$4000-$5FFF for page 1, $6000-$7FFF/$8000-$9FFF for page 2).
   Page 2 swaps the roles of the two halves in text modes. [SRM ch.6]
@@ -108,6 +122,9 @@ Sources (abbreviations used below):
   is set). Loaded by hardware from the text-page screen holes ($x78-$x7F of text rows
   0-7) while $C0DB is enabled: font row = {V[4:3], H[2]}, code from the $08xx hole
   byte, bitmap from the $04xx hole byte. [MAME, DH buildfont.s, SOS console driver]
+  The RTL prefetches display lines during HBL and batches character downloads at
+  line 261. Mid-frame writes and character-download timing are not yet equivalent
+  to the motherboard's distributed fetches.
 * Smooth scroll: $C0D8/$C0D9 disable/enable; offset = disk stepper phase latch bits
   0-2 ($C0E0-$C0E5). The offset is added modulo 8 to the row-within-cell used for
   fetching graphics rows and character rows. [SRM ch.2, PROM 342-0055, MAME]
@@ -156,6 +173,8 @@ previous track; the read head pauses and exposes an empty latch until `busy`
 clears. The buffered boot integration test models the same 512-byte HPS
 handshake and cache RAM latency. It exercises the stock ROM's 32-cycle nibble
 loops and the SOS disk driver's longer loader path. [ROM, SOS, PROM 341-0028]
+Write protection gates each drive's track-cache write strobe, independently of
+the readable protection status. Protected media cannot change the cached track.
 
 A/D channel codes (A/D2,A/D1,A/D0) from Service Reference Manual table 9 and
 the SOS 1.3 joystick driver: 001 = port B X, 010 = port B Y, 011 = port A X,
@@ -182,3 +201,22 @@ switch inputs to $C008. Codes per [SRM ch.8] table (upper case letters, control 
 keypad/arrows with bit 7 set). Any key held for 0.5 s repeats at 10 cps; with the
 solid Apple key held, 30 cps. Ctrl+Reset = hardware reset, Reset alone = NMI, both
 gated by env bit 4. [SRM ch.8, MAME]
+
+The PS/2 adapter tracks the two instances of each modifier independently and
+keeps an ordinary-key bitmap for ANY-key-down. Validity is separate from the
+encoded byte, so Control-Shift-2 emits a strobed NUL. Duplicate host make events
+do not restart repeat; after releasing the newest key, another held key can repeat.
+
+## Real-time clock
+
+The MM58167 model has separate counter, comparison, interrupt and rollover-status
+registers. GO clears fractions and seconds, rounding up at 40 seconds and carrying
+through the calendar. The 10 Hz interrupt includes whole-second rollover. A
+counter read arms a sticky rollover detector with a 150 us update window each
+millisecond; reading status returns and clears that result. [RTC]
+
+FPGA configuration initializes clock state. Machine reset suppresses bus access
+but preserves time, comparison RAM and interrupt settings while the clock runs.
+MiSTer host-clock toggle updates seed the counters. The explicit counter/RAM
+reset commands remain available. This models battery retention across machine
+reset, not across FPGA reconfiguration or loss of MiSTer power.

@@ -21,6 +21,7 @@ module apple3_mmu #(
 	output logic [18:0] ram_byte_addr,
 	output logic [17:0] ram_word_addr,
 	output logic        ram_lane,
+	output logic        ram_select,
 	output logic        ram_read,
 	output logic        ram_write_allowed,
 	output logic        rom_read,
@@ -123,6 +124,9 @@ module apple3_mmu #(
 		                   translated_addr[10] ^ translated_addr[11],
 		                   translated_addr[9:0]};
 		ram_lane        = translated_addr[11];
+		// RAMEN is independent of write protection (WRAMEN). The clock PROM
+		// still reserves RAM slots for writes whose write strobe is inhibited.
+		ram_select      = 1'b1;
 
 		rom_addr          = {environment[1], cpu_addr[11:0]};
 		rom_read          = 1'b0;
@@ -140,6 +144,7 @@ module apple3_mmu #(
 		end
 		else begin
 			if (io_window && !always_ram_window) begin
+				ram_select        = 1'b0;
 				ram_read          = 1'b0;
 				ram_write_allowed = 1'b0;
 				io_select         = (cpu_addr < 16'hc100);
@@ -149,6 +154,7 @@ module apple3_mmu #(
 			// Apple II emulation ("funny") mode when E-VIA PA6 is driven low.
 			if (native_mode && (cpu_addr >= 16'hffd0) &&
 			    (cpu_addr < 16'hffe0)) begin
+				ram_select        = 1'b0;
 				ram_read          = 1'b0;
 				ram_write_allowed = 1'b0;
 				rom_read          = 1'b0;
@@ -156,6 +162,7 @@ module apple3_mmu #(
 			end
 			else if (native_mode && (cpu_addr >= 16'hffe0) &&
 			         (cpu_addr < 16'hfff0)) begin
+				ram_select        = 1'b0;
 				ram_read          = 1'b0;
 				ram_write_allowed = 1'b0;
 				rom_read          = 1'b0;
@@ -164,6 +171,7 @@ module apple3_mmu #(
 			else if (cpu_read && environment[0] &&
 			         (cpu_addr >= 16'hf000) &&
 			         !((cpu_addr >= 16'hffc0) && (cpu_addr < 16'hffd0))) begin
+				ram_select = 1'b0;
 				ram_read = 1'b0;
 				rom_read = 1'b1;
 			end

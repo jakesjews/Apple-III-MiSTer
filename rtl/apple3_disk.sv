@@ -60,6 +60,12 @@ module apple3_disk (
 	logic [7:0] drive1_data;
 	logic [7:0] drive2_data;
 	logic [23:0] spindown_count;
+	logic drive1_write, drive2_write;
+
+	// The physical drive inhibits write/erase current when protected. Keep
+	// the sequencer running, but never let its writes reach either track cache.
+	assign track1_we = drive1_write && !write_protect[0];
+	assign track2_we = drive2_write && !write_protect[1];
 
 	always_comb begin
 		read_disk = select && (addr == 8'hec);
@@ -143,7 +149,7 @@ module apple3_disk (
 		.WRITE_REG(write_register),
 		.TRACK_ZERO_STEP(d1_track_zero_step), .TRACK(track1),
 		.TRACK_ADDR(track1_addr), .TRACK_DI(track1_din), .TRACK_DO(track1_dout),
-		.TRACK_WE(track1_we), .TRACK_BUSY(track1_busy)
+		.TRACK_WE(drive1_write), .TRACK_BUSY(track1_busy)
 	);
 
 	drive_ii drive2 (
@@ -154,7 +160,7 @@ module apple3_disk (
 		.WRITE_REG(write_register),
 		.TRACK_ZERO_STEP(d2_track_zero_step), .TRACK(track2),
 		.TRACK_ADDR(track2_addr), .TRACK_DI(track2_din), .TRACK_DO(track2_dout),
-		.TRACK_WE(track2_we), .TRACK_BUSY(track2_busy)
+		.TRACK_WE(drive2_write), .TRACK_BUSY(track2_busy)
 	);
 
 endmodule

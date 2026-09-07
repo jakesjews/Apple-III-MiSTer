@@ -3,6 +3,7 @@
 module timing_tb;
 	logic clk_14m = 0, reset = 1;
 	logic slow_mode = 0, screen_enable = 0, peripheral_cycle = 0;
+	logic ram_cycle = 1;
 	wire cpu_enable, via_rising, via_falling, q3, pixel_enable;
 	wire hblank, vblank, display_slot, refresh_slot, frame_tick;
 	wire [9:0] h_count;
@@ -60,6 +61,18 @@ module timing_tb;
 		count_line(cpu_count, rise_count, fall_count, refresh_count);
 		if (cpu_count >= 122 || cpu_count <= 65)
 			$fatal(1, "display arbitration cpu slots=%0d", cpu_count);
+
+		ram_cycle = 0;
+		count_line(cpu_count, rise_count, fall_count, refresh_count);
+		if (cpu_count != 130) $fatal(1, "non-RAM cycles lost slots during display/refresh: %0d", cpu_count);
+		peripheral_cycle = 1;
+		count_line(cpu_count, rise_count, fall_count, refresh_count);
+		if (cpu_count != 65) $fatal(1, "non-RAM peripheral cycle was doubled: %0d", cpu_count);
+		peripheral_cycle = 0;
+		slow_mode = 1;
+		count_line(cpu_count, rise_count, fall_count, refresh_count);
+		if (cpu_count != 65) $fatal(1, "slow non-RAM cycle was doubled: %0d", cpu_count);
+		slow_mode = 0;
 
 		// One complete line is exactly 912 master clocks.  Check the special
 		// final state explicitly rather than relying only on slot totals.

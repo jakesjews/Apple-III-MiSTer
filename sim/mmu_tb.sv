@@ -7,7 +7,7 @@ module mmu_tb;
 	logic native_mode, extended_active;
 	wire [18:0] ram_byte_addr;
 	wire [17:0] ram_word_addr;
-	wire ram_lane, ram_read, ram_write_allowed, rom_read, io_select;
+	wire ram_lane, ram_select, ram_read, ram_write_allowed, rom_read, io_select;
 	wire via_d_select, via_e_select;
 	wire [12:0] rom_addr;
 	integer checks = 0;
@@ -37,6 +37,11 @@ module mmu_tb;
 			$fatal(1);
 		end
 	end
+	endtask
+
+	task automatic expect_ram_select(input logic value);
+		#1; checks++;
+		if (ram_select !== value) $fatal(1, "RAMEN @%x read=%b protected=%b got=%b", cpu_addr,cpu_read,environment[3],ram_select);
 	endtask
 
 	initial begin
@@ -85,29 +90,29 @@ module mmu_tb;
 		extended_bank = 8'h8f;
 		expect_addr(16'h2345, 19'h00345);
 		expect_addr(16'hc123, 19'h7c123);
-		expect_decode(1,0,0,0,0,0);
+		expect_decode(1,0,0,0,0,0); expect_ram_select(1);
 
 		// I/O, always-RAM hole, ROM, VIA priority, and write protection.
 		extended_active = 1'b0;
 		cpu_read = 1'b1;
-		cpu_addr = 16'hc010; expect_decode(0,0,0,1,0,0);
-		cpu_addr = 16'hc500; expect_decode(1,0,0,0,0,0);
-		cpu_addr = 16'hf123; expect_decode(0,0,1,0,0,0);
-		cpu_addr = 16'hffc5; expect_decode(1,0,0,0,0,0);
-		cpu_addr = 16'hffd0; expect_decode(0,0,0,0,1,0);
-		cpu_addr = 16'hffef; expect_decode(0,0,0,0,0,1);
+		cpu_addr = 16'hc010; expect_decode(0,0,0,1,0,0); expect_ram_select(0);
+		cpu_addr = 16'hc500; expect_decode(1,0,0,0,0,0); expect_ram_select(1);
+		cpu_addr = 16'hf123; expect_decode(0,0,1,0,0,0); expect_ram_select(0);
+		cpu_addr = 16'hffc5; expect_decode(1,0,0,0,0,0); expect_ram_select(1);
+		cpu_addr = 16'hffd0; expect_decode(0,0,0,0,1,0); expect_ram_select(0);
+		cpu_addr = 16'hffef; expect_decode(0,0,0,0,0,1); expect_ram_select(0);
 
 		cpu_read = 1'b0;
-		cpu_addr = 16'hf123; expect_decode(0,0,0,0,0,0);
+		cpu_addr = 16'hf123; expect_decode(0,0,0,0,0,0); expect_ram_select(1);
 		environment[3] = 1'b0;
-		expect_decode(0,1,0,0,0,0);
+		expect_decode(0,1,0,0,0,0); expect_ram_select(1);
 
 		// In funny mode, the VIA holes reveal the selected ROM/RAM overlay.
 		cpu_read = 1'b1;
 		native_mode = 1'b0;
-		cpu_addr = 16'hffd0; expect_decode(0,0,1,0,0,0);
+		cpu_addr = 16'hffd0; expect_decode(0,0,1,0,0,0); expect_ram_select(0);
 		environment[0] = 1'b0;
-		expect_decode(1,0,0,0,0,0);
+		expect_decode(1,0,0,0,0,0); expect_ram_select(1);
 
 		// Sister bytes share a word and occupy opposite lanes.
 		cpu_addr = 16'h0400; #1;

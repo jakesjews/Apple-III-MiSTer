@@ -11,6 +11,7 @@ module apple3_timing (
 	input  logic        slow_mode,
 	input  logic        screen_enable,
 	input  logic        peripheral_cycle,
+	input  logic        ram_cycle,
 
 	output logic        cpu_enable,
 	output logic        via_rising,
@@ -31,18 +32,56 @@ module apple3_timing (
 	logic       fast_a_slot;
 	logic [2:0] q_divider;
 
+	// RRFSH output of Apple's 342-0030 scan-decode PROM. Kept as logic so
+	// the independently supplied binary PROM can verify the complete frame.
+	function automatic logic scan_refresh(
+		input logic [3:0] horizontal,
+		input logic [4:0] vertical,
+		input logic VBL
+	);
+		logic H2, H3, H4, H5, VA, VB, VC, V0, V1;
+		begin
+			{H5, H4, H3, H2} = horizontal;
+			{V1, V0, VC, VB, VA} = vertical;
+			scan_refresh = (!H2 && !H3 && !H4 && !VA && !VB && !VC) ||
+			               (H2 && !H3 && !H4 && VA && !VB && !VC) ||
+			               (!H2 && H3 && !H4 && !VA && VB && !VC) ||
+			               (H2 && H3 && !H4 && VA && VB && !VC) ||
+			               (!H2 && !H3 && H4 && !VA && !VB && VC) ||
+			               (H2 && !H3 && H4 && VA && !VB && VC && !VBL) ||
+			               (!H2 && H3 && H4 && !VA && VB && VC) ||
+			               (H2 && H3 && H4 && VA && VB && VC) ||
+			               (!H3 && !H4 && !H5 && VA && !VB && !VC && !V0 && !V1 && VBL) ||
+			               (H2 && !H3 && H4 && VA && !VB && VC && !V1) ||
+			               (H2 && H3 && H4 && H5 && VA && !VB && !VC && V0 && !V1 && VBL) ||
+			               (!H2 && !H4 && !H5 && !VA && VB && !VC && V0 && !V1 && VBL) ||
+			               (!H3 && !H4 && !H5 && VA && VB && !VC && V0 && !V1 && VBL) ||
+			               (H2 && !H4 && !H5 && VA && VB && !VC && V0 && !V1 && VBL) ||
+			               (H2 && H3 && H5 && VA && VB && !VC && !V0 && V1 && VBL) ||
+			               (!H2 && !H3 && !H5 && !VA && !VB && VC && !V0 && V1 && VBL) ||
+			               (!H3 && !H4 && !H5 && VA && !VB && VC && !V0 && V1 && VBL) ||
+			               (H2 && !H3 && !H5 && VA && !VB && VC && !V0 && V1 && VBL) ||
+			               (H2 && !H3 && H4 && VA && !VB && VC && !V0) ||
+			               (H2 && !H3 && H4 && VA && !VB && VC && V0) ||
+			               (H2 && H4 && H5 && VA && !VB && VC && V0 && V1 && VBL) ||
+			               (!H2 && !H3 && !H4 && !H5 && VB && VC && V0 && V1 && VBL) ||
+			               (!H3 && !H4 && !H5 && VA && VB && VC && V0 && V1 && VBL);
+		end
+	endfunction
+
 	always_comb begin
 		hblank       = (h_count >= 10'd560);
 		vblank       = (v_count >= 9'd192);
 		pixel_enable = 1'b1;
 
-		// Four consecutive refresh states in each 32-state half-line.  The
-		// otherwise special state 64 is not one of the decoded refresh groups.
-		refresh_slot = (h_state < 7'd64) &&
-		               (h_state[4:2] == v_count[2:0]);
+		// The scan PROM adds refresh slots and suppresses others during VBL.
+		// Its vertical counter wraps from 511 to 250 for the final six lines.
+		refresh_slot = (h_state < 7'd64) && scan_refresh(h_state[5:2],
+		               (v_count < 9'd256) ? v_count[4:0] : v_count[4:0] - 5'd6,
+		               vblank);
 		display_slot = screen_enable && !vblank && (h_state < 7'd40);
 		fast_a_slot  = !slow_mode && !peripheral_cycle &&
-		               !display_slot && !refresh_slot;
+		               (!ram_cycle || (!display_slot && !refresh_slot));
 
 		// Dot 6 is the optional A slot and dot 13 is the guaranteed B slot.
 		// Peripheral accesses run on the 1 MHz slot and are never doubled.

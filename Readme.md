@@ -117,6 +117,7 @@ configured for the local Quartus 17 CrossOver bottle:
 
 ```sh
 ./sim/run_tests.sh
+bash sim/accuracy/run.sh
 ./sim/run_core_boot.sh 30000000
 ./sim/run_core_boot.sh 2000000000 /path/to/system.dsk
 ./sim/run_core_boot.sh 2000000000 /path/to/system.nib --buffered
@@ -127,8 +128,10 @@ configured for the local Quartus 17 CrossOver bottle:
 ./deploy.sh output_files/Apple-III.rbf /path/to/system.nib
 ```
 
-The first command runs focused Icarus Verilog testbenches for the MMU, timing,
-memory, video, keyboard, I/O, clock/ACIA, and floppy controller. The second uses
+The regression command runs focused Icarus Verilog testbenches for the MMU,
+timing, memory, video, keyboard, I/O, clock/ACIA, and floppy controller. The
+[accuracy suite](sim/accuracy/README.md) checks documentation-backed boundaries
+and compares timing against original PROM dumps. `run_core_boot.sh` uses
 Verilator, the T65 CPU, the stock ROM, and the integrated machine to verify that
 reset, memory sizing, reconfiguration, and the disk boot path execute together.
 With a disk-image argument it also converts sector media to NIB in memory,
@@ -166,6 +169,11 @@ sources include:
 
 The research inventory and source-specific notes live under `research/` in the
 development checkout and are excluded from release artifacts.
+
+The [accuracy audit](docs/ACCURACY_AUDIT_2026-09-04.md) records the baseline's
+13 reproduced defects and remaining coverage gaps. The
+[fix report](docs/ACCURACY_FIXES_2026-09-07.md) records their corrections and
+validation. These checks do not establish complete motherboard equivalence.
 
 ## License
 
