@@ -18,6 +18,7 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_rom.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_extaddr.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_keyboard.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_rtc.sv
+set_global_assignment -name VERILOG_FILE rtl/acia/gen_uart.v
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_acia.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_io.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_disk.sv

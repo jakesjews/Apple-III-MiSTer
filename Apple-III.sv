@@ -34,13 +34,10 @@ module emu
 	assign HDMI_FREEZE = 1'b0;
 	assign HDMI_BLACKOUT = 1'b0;
 	assign HDMI_BOB_DEINT = 1'b0;
-	assign UART_RTS = 1'b0;
-	assign UART_TXD = 1'b1;
-	assign UART_DTR = 1'b0;
 
 	`include "build_id.v"
 	localparam CONF_STR = {
-		"Apple-III;;",
+		"Apple-III;UART19200:9600:4800:2400:1200:600:300:150:110:75:50;",
 		"-;",
 		"S0,NIBDSKDO PO ,Mount Drive 1;",
 		"S1,NIBDSKDO PO ,Mount Drive 2;",
@@ -50,6 +47,7 @@ module emu
 		"O35,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 		"O67,Write Protect,None,Drive 1,Drive 2,Both;",
 		"O8,Sector order,DOS,ProDOS;",
+		"O9,Serial CTS,Always ready,Host RTS;",
 		"-;",
 		"R0,Reset;",
 		"J,Button 1,Button 2;",
@@ -283,6 +281,10 @@ module emu
 		.ROM_INIT_HIGH_FILE("rtl/rom/apple3-high.mif")
 	) machine (
 		.clk_14m(clk_14m), .reset(core_reset), .ps2_key(ps2_key),
+		// An unopened HPS UART deasserts RTS. The stock ROM requires CTS
+		// ready during its ACIA test, as with the unplugged motherboard port.
+		.serial_rx(UART_RXD), .serial_cts_n(status[9] && UART_CTS), .serial_dsr_n(UART_DSR),
+		.serial_tx(UART_TXD), .serial_rts_n(UART_RTS), .serial_dtr_n(UART_DTR),
 		.host_rtc(host_rtc), .joy_a_x(joy_a_x), .joy_a_y(joy_a_y),
 		.joy_b_x(joy_b_x), .joy_b_y(joy_b_y), .joy_buttons(joy_buttons),
 		.rom_we(rom_write), .rom_host_addr(ioctl_addr[12:0]),

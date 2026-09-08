@@ -1,6 +1,12 @@
-module core_tb (
+module core_tb #(parameter ROM_FILE = "sim/gen/apple3.rom.hex") (
 	input  logic clk,
 	input  logic reset,
+	input  logic serial_rx,
+	input  logic serial_cts_n,
+	input  logic serial_dsr_n,
+	output wire serial_tx,
+	output wire serial_rts_n,
+	output wire serial_dtr_n,
 	input  logic [10:0] ps2_key,
 	input  logic [17:0] probe_addr,
 	output logic [15:0] probe_word,
@@ -72,10 +78,12 @@ module core_tb (
 	wire core_disk_ready = disk_present && (!buffered_disk || buffered_ready);
 
 	apple3_core #(
-		.ROM_INIT_FILE("sim/gen/apple3.rom.hex"),
+		.ROM_INIT_FILE(ROM_FILE),
 		.ROM_INIT_START(4096)
 	) dut (
 		.clk_14m(clk), .reset, .ps2_key(ps2_key), .host_rtc(65'd0),
+		.serial_rx, .serial_cts_n, .serial_dsr_n,
+		.serial_tx, .serial_rts_n, .serial_dtr_n,
 		.joy_a_x(8'h80), .joy_a_y(8'h80), .joy_b_x(8'h80), .joy_b_y(8'h80),
 		.joy_buttons(4'h0), .rom_we(1'b0), .rom_host_addr(13'd0),
 		.rom_host_data(8'd0), .disk_ready({1'b0, core_disk_ready}),

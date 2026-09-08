@@ -220,3 +220,24 @@ but preserves time, comparison RAM and interrupt settings while the clock runs.
 MiSTer host-clock toggle updates seed the counters. The explicit counter/RAM
 reset commands remain available. This models battery retention across machine
 reset, not across FPGA reconfiguration or loss of MiSTer power.
+
+## 6551 serial integration
+
+The serial ACIA uses the pinned gyurco UART implementation described in
+[`rtl/acia/README.md`](../rtl/acia/README.md), with documented local accuracy
+corrections. `apple3_acia.sv` adapts bus side-effect strobes, generates a nominal
+1.8432 MHz clock enable, and synchronizes external inputs. TX/RX, RTS/CTS and
+DTR/DSR connect to MiSTer's HPS UART. DCD is asserted because the HPS connection
+has no separate carrier signal. The original motherboard's grounded RxC input
+is represented by an inactive external receive-clock enable.
+
+OSD status bit 9 selects CTS: the default holds it ready, while `Host RTS`
+uses the HPS handshake input. An unopened HPS UART deasserts RTS; directly
+using that idle state fails the stock ROM's ACIA self-test. The default models
+the ready CTS level of an unplugged Apple III port with its receiver pull-up.
+Host-controlled flow requires the UART to be open with RTS asserted at boot.
+
+The `$00` command reset is intentional: the original Apple III ROM requires it
+and fails its ACIA test with the SY6551 table's `$02` reset variant. Programmed
+reset preserves control/parity fields and unread receive data. Tests operate at
+the CPU bus and serial pins, including a T65 IRQ-driven diagnostic ROM.

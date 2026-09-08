@@ -18,6 +18,13 @@ module apple3_core #(
 	input  logic [7:0]  joy_b_y,
 	input  logic [3:0]  joy_buttons,
 
+	input  logic        serial_rx,
+	input  logic        serial_cts_n,
+	input  logic        serial_dsr_n,
+	output wire         serial_tx,
+	output wire         serial_rts_n,
+	output wire         serial_dtr_n,
+
 	input  logic        rom_we,
 	input  logic [12:0] rom_host_addr,
 	input  logic [7:0]  rom_host_data,
@@ -129,8 +136,6 @@ module apple3_core #(
 	logic rtc_read, rtc_write, rtc_irq;
 	logic [4:0] rtc_addr;
 	logic disk_strobe, acia_read, acia_write, acia_irq;
-	logic [7:0] acia_tx_data;
-	logic acia_tx_strobe;
 
 	logic [3:0] motor_phase;
 	logic side_two;
@@ -279,8 +284,10 @@ module apple3_core #(
 	apple3_acia acia (
 		.clk(clk_14m), .reset(machine_reset), .read_strobe(acia_read),
 		.write_strobe(acia_write), .addr(cpu_addr[1:0]), .data_in(cpu_dout),
-		.rx_strobe(1'b0), .rx_data(8'h00), .data_out(acia_data),
-		.tx_data(acia_tx_data), .tx_strobe(acia_tx_strobe), .irq(acia_irq)
+		.rx(serial_rx), .cts_n(serial_cts_n), .dsr_n(serial_dsr_n),
+		// MiSTer's HPS UART has no separate carrier input; the link is local.
+		.dcd_n(1'b0), .data_out(acia_data), .tx(serial_tx),
+		.rts_n(serial_rts_n), .dtr_n(serial_dtr_n), .irq(acia_irq)
 	);
 
 	apple3_disk disk (

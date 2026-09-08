@@ -9,21 +9,10 @@ module rtc_acia_tb;
 	wire [7:0] rtc_data;
 	wire rtc_irq;
 
-	logic acia_read = 0, acia_write = 0, rx_strobe = 0;
-	logic [1:0] acia_addr = 0;
-	logic [7:0] rx_data = 0;
-	wire [7:0] acia_data, tx_data;
-	wire tx_strobe, acia_irq;
-
 	apple3_rtc #(.CLOCKS_PER_MS(4)) rtc (
 		.clk, .reset, .host_rtc, .read_strobe(rtc_read),
 		.write_strobe(rtc_write), .addr(rtc_addr), .data_in,
 		.data_out(rtc_data), .irq(rtc_irq)
-	);
-	apple3_acia acia (
-		.clk, .reset, .read_strobe(acia_read), .write_strobe(acia_write),
-		.addr(acia_addr), .data_in, .rx_strobe, .rx_data,
-		.data_out(acia_data), .tx_data, .tx_strobe, .irq(acia_irq)
 	);
 	always #5 clk = ~clk;
 
@@ -45,19 +34,7 @@ module rtc_acia_tb;
 		rtc_addr = 5'h01; #1;
 		if (rtc_data !== 8'h01) $fatal(1, "RTC ten milliseconds=%02x", rtc_data);
 
-		acia_addr = 1; #1;
-		if (acia_data[4] !== 1'b1) $fatal(1, "ACIA transmitter not empty");
-		rx_data = 8'ha7; rx_strobe = 1; @(posedge clk); #1; rx_strobe = 0;
-		acia_addr = 1; #1;
-		if (!acia_data[3] || !acia_irq) $fatal(1, "ACIA receive status");
-		acia_addr = 0; #1;
-		if (acia_data != 8'ha7) $fatal(1, "ACIA receive data");
-		acia_read = 1; @(posedge clk); #1; acia_read = 0;
-		if (acia_irq) $fatal(1, "ACIA receive clear");
-		data_in = 8'h5a; acia_write = 1; @(posedge clk); #1; acia_write = 0;
-		if (!tx_strobe || tx_data != 8'h5a) $fatal(1, "ACIA transmit");
-
-		$display("PASS apple3_rtc and apple3_acia");
+		$display("PASS apple3_rtc");
 		$finish;
 	end
 endmodule

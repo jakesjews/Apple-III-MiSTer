@@ -26,12 +26,15 @@ established.
   joystick switches and analog inputs, speaker toggle, bell, and six-bit audio.
 - Internal Disk III plus one external drive through the Disk II-compatible
   controller path. MiSTer mounts `NIB` images with write protection.
-- A minimal 6551-compatible register model sufficient for the startup path.
+- An imported 6551 ACIA with serial TX/RX, baud generation, parity, framing,
+  interrupts and handshakes, connected to MiSTer's HPS UART.
 
 ## Current limitations
 
 - Slots 1-4 and their peripheral cards are not implemented.
-- The RS-232 ACIA is not connected to MiSTer's UART and is not yet cycle-complete.
+- The serial connection uses MiSTer's HPS UART; carrier detect is asserted
+  because that interface has no separate DCD input. Sub-bit 6551 timing and
+  modem/echo/break transitions during a frame still need physical-chip comparison.
 - The Silentype serial/printer functions shared with joystick port A are not
   implemented.
 - Only drives 1 and 2 are exposed; the original controller could select four.
@@ -110,6 +113,22 @@ to the System Utilities menu on hardware. Passing a NIB as the second argument
 to `deploy.sh` installs it as `system.nib`, copies the MGL, and launches the
 hardware test automatically.
 
+## Serial port
+
+The Apple III serial port now connects to MiSTer's HPS UART (`/dev/ttyS1`).
+Set the Apple III software and the host endpoint to the same baud rate and frame
+format. MiSTer's UART menu offers common baud rates; the ACIA itself implements
+all 15 internal divider settings. **Serial CTS** defaults to **Always ready** so
+the stock ROM boots when no host has opened the UART. Select **Host RTS** for
+hardware flow control; the host must assert RTS before booting in that mode.
+RTS/CTS and DTR/DSR retain active-low chip semantics. The independent motherboard
+`ENSIO` soft switch controls the simple serial/joystick interface, not this ACIA.
+
+See [6551 provenance and behavior](rtl/acia/README.md) and the
+[serial test instructions](sim/serial/README.md). Selecting the MiSTer console
+UART mode starts a host login console; custom bridges can open `/dev/ttyS1`
+directly with the console/PPP/MIDI services disabled.
+
 ## Build and test
 
 Quartus Prime 17.0.x is required, following MiSTer conventions. `build.sh` is
@@ -177,5 +196,5 @@ validation. These checks do not establish complete motherboard equivalence.
 
 ## License
 
-See [LICENSE](LICENSE). Imported T65, VIA, MiSTer framework, and floppy support
+See [LICENSE](LICENSE). Imported T65, VIA, 6551, MiSTer framework, and floppy support
 retain their respective source notices.

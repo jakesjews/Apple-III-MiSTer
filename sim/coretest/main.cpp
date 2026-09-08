@@ -64,6 +64,9 @@ int main(int argc, char **argv) {
 			return 1;
 		}
 	}
+	top.serial_rx = 1;
+	top.serial_cts_n = 0;
+	top.serial_dsr_n = 0;
 	top.clk = 0;
 	top.reset = 1;
 	top.disk_present = disk_test;

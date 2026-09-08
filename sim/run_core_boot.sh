@@ -18,7 +18,7 @@ sources=(
 	rtl/disk/drive_ii.v rtl/apple3_mmu.sv rtl/apple3_timing.sv
 	rtl/apple3_ram.sv rtl/apple3_rom.sv rtl/apple3_extaddr.sv
 	rtl/apple3_keyboard.sv rtl/apple3_io.sv rtl/apple3_rtc.sv
-	rtl/apple3_acia.sv rtl/apple3_disk.sv rtl/apple3_video.sv
+	rtl/acia/gen_uart.v rtl/apple3_acia.sv rtl/apple3_disk.sv rtl/apple3_video.sv
 	rtl/apple3_core.sv sim/coretest/main.cpp
 )
 
