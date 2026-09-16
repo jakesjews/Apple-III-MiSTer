@@ -10,20 +10,16 @@ module core_tb #(parameter ROM_FILE = "sim/gen/apple3.rom.hex") (
 	input  logic [10:0] ps2_key,
 	input  logic [17:0] probe_addr,
 	output logic [15:0] probe_word,
-	input  logic disk_present,
-	input  logic buffered_disk,
-	input  logic [7:0] direct_track1_dout,
-	input  logic image_change,
-	input  logic image_mount,
-	input  logic image_dsk_mode,
-	input  logic image_prodos,
-	output logic [31:0] sd_lba,
-	output logic sd_rd,
-	output logic sd_wr,
-	input  logic sd_ack,
-	input  logic [8:0] sd_buff_addr,
+	input logic [1:0] image_change,
+	input logic [63:0] image_size,
+	input logic image_readonly,
+	output wire [31:0] sd_lba [2],
+	output wire [5:0] sd_blk_cnt [2],
+	output wire [1:0] sd_rd, sd_wr,
+	input logic [1:0] sd_ack,
+	input  logic [13:0] sd_buff_addr,
 	input  logic [7:0] sd_buff_dout,
-	output logic [7:0] sd_buff_din,
+	output wire [7:0] sd_buff_din [2],
 	input  logic sd_buff_wr,
 	output logic [15:0] cpu_addr,
 	output logic [15:0] pc,
@@ -51,31 +47,25 @@ module core_tb #(parameter ROM_FILE = "sim/gen/apple3.rom.hex") (
 	output logic [12:0] track1_addr
 );
 
-	logic [5:0] track2;
-	logic [12:0] track2_addr;
-	logic [7:0] track1_din, track2_din;
-	logic track1_we, track2_we;
-	logic [7:0] buffered_track1_dout;
-	logic buffered_ready, buffered_busy;
-	logic [7:0] video_r, video_g, video_b;
-	logic hblank, hsync, vsync;
-	logic signed [15:0] audio;
-	logic disk1_active_internal;
-
-	floppy_track buffered_image (
-		.clk, .reset, .sd_lba, .sd_rd, .sd_wr, .sd_ack,
-		.sd_buff_addr, .sd_buff_dout, .sd_buff_din, .sd_buff_wr,
-		.change(image_change), .mount(image_mount),
-		.dsk_mode(image_dsk_mode), .prodos(image_prodos), .track(track1),
-		.ready(buffered_ready), .active(disk1_active_internal), .ram_addr(track1_addr),
-		.ram_do(buffered_track1_dout), .ram_di(track1_din),
-		.ram_we(track1_we), .busy(buffered_busy)
-	);
-
-	wire [7:0] core_track1_dout = buffered_disk ? buffered_track1_dout :
-	                                                 direct_track1_dout;
-	wire core_track1_busy = buffered_disk ? buffered_busy : 1'b0;
-	wire core_disk_ready = disk_present && (!buffered_disk || buffered_ready);
+	wire [7:0] video_r, video_g, video_b;
+	wire hblank, hsync, vsync;
+	wire signed [15:0] audio;
+	wire [1:0] disk_active, disk_motors, disk_ready, disk_wp, disk_flux;
+	wire [3:0] disk_phases;
+	wire disk_write_mode, disk_write_bit, disk_write_strobe;
+	for (genvar i = 0; i < 2; i++) begin : drives
+		apple3_woz_drive woz (
+			.clk, .reset, .change(image_change[i]), .enabled(1'b1),
+			.image_size, .image_readonly, .protect(1'b0),
+			.active(disk_active[i]), .motor_on(disk_motors[i]), .phases(disk_phases),
+			.write_mode(disk_write_mode), .write_bit(disk_write_bit), .write_strobe(disk_write_strobe),
+			.flux(disk_flux[i]), .ready(disk_ready[i]), .write_protect(disk_wp[i]),
+			.sd_lba(sd_lba[i]), .sd_blk_cnt(sd_blk_cnt[i]), .sd_rd(sd_rd[i]), .sd_wr(sd_wr[i]), .sd_ack(sd_ack[i]),
+			.sd_buff_addr, .sd_buff_dout, .sd_buff_din(sd_buff_din[i]), .sd_buff_wr
+		);
+	end
+	assign track1 = drives[0].woz.track_id[7:2];
+	assign track1_addr = drives[0].woz.bit_addr[12:0];
 
 	apple3_core #(
 		.ROM_INIT_FILE(ROM_FILE),
@@ -86,15 +76,14 @@ module core_tb #(parameter ROM_FILE = "sim/gen/apple3.rom.hex") (
 		.serial_tx, .serial_rts_n, .serial_dtr_n,
 		.joy_a_x(8'h80), .joy_a_y(8'h80), .joy_b_x(8'h80), .joy_b_y(8'h80),
 		.joy_buttons(4'h0), .rom_we(1'b0), .rom_host_addr(13'd0),
-		.rom_host_data(8'd0), .disk_ready({1'b0, core_disk_ready}),
-		.disk_write_protect(2'b11),
-		.track1, .track1_addr, .track1_din, .track1_dout(core_track1_dout),
-		.track1_we, .track1_busy(core_track1_busy), .track2, .track2_addr,
-		.track2_din, .track2_dout(8'h00), .track2_we, .track2_busy(1'b0),
+		.rom_host_data(8'd0), .disk_ready(disk_ready),
+		.disk_write_protect(disk_wp),
+		.disk_flux, .disk_media_change(image_change), .disk_motors,
+		.disk_phases, .disk_write_mode, .disk_write_bit, .disk_write_strobe,
 		.video_r, .video_g, .video_b, .video_hblank(hblank),
 		.video_vblank(vblank), .video_hsync(hsync), .video_vsync(vsync),
-		.audio, .disk_activity, .disk1_active(disk1_active_internal),
-		.disk2_active(),
+		.audio, .disk_activity, .disk1_active(disk_active[0]),
+		.disk2_active(disk_active[1]),
 		.debug_pc(pc), .debug_cpu_addr(cpu_addr),
 		.debug_environment(environment), .debug_zero_page(zero_page),
 		.debug_bank(bank), .debug_video_mode(video_mode),

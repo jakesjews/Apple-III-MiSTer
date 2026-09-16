@@ -163,17 +163,39 @@ Sources (abbreviations used below):
 Drive selection [SOS disk3 driver]: .D1 = $C0EA (internal I/O select) + $C0D4;
 .D2 = $C0EB + A1=0,A0=1; .D3 = $C0EB + A1=1,A0=0; .D4 = $C0EB + A1=1,A0=1.
 
-The MiSTer drive backend stores one pre-nibblized 6-and-2 byte every 64 Q3
-cycles. Q6L data is cleared on the completed CPU read strobe, after the CPU has
-sampled it. Using the strobe is important at the HPE boundary: inferring the
-read from an address level at a later Q3 edge can clear a newly arrived byte.
-While the HPS fills the 13-block track cache, its old contents belong to the
-previous track; the read head pauses and exposes an empty latch until `busy`
-clears. The buffered boot integration test models the same 512-byte HPS
-handshake and cache RAM latency. It exercises the stock ROM's 32-cycle nibble
-loops and the SOS disk driver's longer loader path. [ROM, SOS, PROM 341-0028]
-Write protection gates each drive's track-cache write strobe, independently of
-the readable protection status. Protected media cannot change the cached track.
+The disk conditioner executes logic equivalent to all 256 entries of the
+341-0028 P6 PROM on Q3*. Its 74LS323 model clears, holds, shifts or loads as
+directed by P6; a CPU read has no independent clearing action. A flux event is
+held until the next sequencer clock. [SRM 12.3, schematic sheet 7, PROM 341-0028]
+
+WOZ uses a native block-backed track cache and physical drive model imported
+from Apple-II_MiSTer (see `rtl/disk/woz/README.md`). Quarter tracks select TMAP
+entries, WOZ INFO controls the bit-cell period in 125 ns units, and
+unavailable cached data does not produce stale flux. WOZ1 uses the standard 4 us bit cell. The native drive model
+continues rotating while data loads. Its weak-bit and analog behavior remains
+an approximation; variable-length/flux-track seeks do not establish exact
+cross-track angular equivalence.
+
+The controller models the documented roughly two-thirds-second motor-off
+grace period. The native disk-change latch suppresses read pulses after a
+media change until a selected phase-1 edge; Apple II mode bypasses it.
+[SRM 12.4, analog schematic 050-0031-C, 1980 disk-switch rework notice]
+
+Disk III spindle enables are independent of I/O selection: SOS may leave both
+internal and external motors running while the phase/read/write bus selects one.
+Apple II emulation restores the conventional mutually exclusive drive enables.
+[Disk analog schematic 050-0031-C; SOS DISK3 UNITSEL, SPINNING and SELECT]
+
+Main's shared Apple-family backend detects containers and sector order, validates
+WOZ CRC/chunk/track bounds, and converts sector/NIB images into in-memory WOZ.
+The FPGA reads the WOZ track directory into its cache using the existing MiSTer
+block protocol. It contains no sector-to-GCR converter. Main preserves native
+WOZ bits and metadata, bounds writes to allocated track blocks, and clears the
+CRC before the first write. Converted media and block images are read-only for
+Apple III. WOZ1, FLUX and unmapped tracks are protected in the drive as well.
+See `docs/MAIN_STORAGE.md` for the mount assignments and companion Main build.
+`sim/disk` tests P6, cache transfers and physical timing; the Main repository's
+`tests/apple3` tests formats, transport, write policy and file persistence.
 
 A/D channel codes (A/D2,A/D1,A/D0) from Service Reference Manual table 9 and
 the SOS 1.3 joystick driver: 001 = port B X, 010 = port B Y, 011 = port A X,

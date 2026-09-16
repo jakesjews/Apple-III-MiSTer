@@ -1,5 +1,4 @@
 #include "Vcore_tb.h"
-#include "dsk2nib.h"
 #include "verilated.h"
 #include <array>
 #include <cstdlib>
@@ -32,36 +31,25 @@ struct DiskReadEntry {
 int main(int argc, char **argv) {
 	Verilated::commandArgs(argc, argv);
 	Vcore_tb top;
-	std::vector<uint8_t> disk_image;
+	std::vector<uint8_t> disk_image[2];
+	std::string drive2;
 	const bool disk_test = argc > 2;
-	bool buffered_disk = false;
-	bool key_test = false;
-	bool raw_dsk = false;
+	bool key_test = false, warm_reset = false;
+	unsigned sd_delay = 0;
 	for (int i = 3; i < argc; ++i) {
-		if (std::string(argv[i]) == "--buffered") buffered_disk = true;
-		if (std::string(argv[i]) == "--keytest") key_test = true;
-		// Feed the sector image through the SD interface unconverted and let
-		// the core's dsk_nibblizer do the work, as it does on hardware.
-		if (std::string(argv[i]) == "--rawdsk") { raw_dsk = true; buffered_disk = true; }
+		std::string option = argv[i];
+		if (option.rfind("--sd-delay=", 0) == 0) sd_delay = std::strtoul(argv[i] + 11, nullptr, 10);
+		if (option.rfind("--drive2=", 0) == 0) drive2 = option.substr(9);
+		if (option == "--keytest") key_test = true;
+		if (option == "--warm-reset") warm_reset = true;
 	}
-	if (disk_test) {
-		std::string error;
-		if (raw_dsk) {
-			std::ifstream input(argv[2], std::ios::binary);
-			if (!input) {
-				std::fprintf(stderr, "FAIL: cannot open %s\n", argv[2]);
-				return 1;
-			}
-			disk_image.assign((std::istreambuf_iterator<char>(input)),
-			                  std::istreambuf_iterator<char>());
-			if (disk_image.size() != apple3_disk_image::kDskBytes) {
-				std::fprintf(stderr, "FAIL: --rawdsk needs a 143360-byte image\n");
-				return 1;
-			}
-		}
-		else if (!apple3_disk_image::load(argv[2], disk_image, error)) {
-			std::fprintf(stderr, "FAIL: %s\n", error.c_str());
-			return 1;
+	for (unsigned drive = 0; drive < 2; ++drive) {
+		if (!disk_test || (drive == 1 && drive2.empty())) continue;
+		const char *path = drive ? drive2.c_str() : argv[2];
+		std::ifstream input(path, std::ios::binary);
+		disk_image[drive].assign(std::istreambuf_iterator<char>(input), {});
+		if (disk_image[drive].size() < 12 || std::string(disk_image[drive].begin(),disk_image[drive].begin()+3) != "WOZ") {
+			std::fprintf(stderr,"FAIL: supply native WOZ or an image converted by Main: %s\n", path); return 1;
 		}
 	}
 	top.serial_rx = 1;
@@ -69,66 +57,48 @@ int main(int argc, char **argv) {
 	top.serial_dsr_n = 0;
 	top.clk = 0;
 	top.reset = 1;
-	top.disk_present = disk_test;
-	top.buffered_disk = buffered_disk;
-	top.direct_track1_dout = 0;
 	top.image_change = 0;
-	top.image_mount = disk_test;
-	top.image_dsk_mode = raw_dsk;
-	top.image_prodos = 0;
+	top.image_readonly = 1;
+	top.image_size = 0;
 	top.sd_ack = 0;
 	top.sd_buff_addr = 0;
 	top.sd_buff_dout = 0;
 	top.sd_buff_wr = 0;
 	top.ps2_key = 0;
 	top.probe_addr = 0;
-	uint8_t track_q = 0;
-	uint8_t next_track_q = 0;
-	std::size_t sd_byte = 0;
-	bool sd_finishing = false;
-	bool sd_transfer_read = false;
-	unsigned sd_block_reads = 0;
-
+	std::size_t sd_byte = 0, sd_transfer_bytes = 512, sd_start = 0;
+	unsigned sd_disk = 0, sd_tick = 0, sd_wait_cycles = 0, sd_block_reads = 0;
+	bool sd_finishing = false, sd_transfer_read = false;
 	auto prepare_storage = [&]() {
 		if (top.clk) return;
 		top.sd_buff_wr = 0;
-		if (buffered_disk) {
-			if (sd_finishing) {
-				top.sd_ack = 0;
-				sd_finishing = false;
-				sd_transfer_read = false;
-			}
-			if (!top.sd_ack && (top.sd_rd || top.sd_wr)) {
-				top.sd_ack = 1;
-				sd_transfer_read = top.sd_rd;
-				sd_byte = 0;
-				if (top.sd_rd) ++sd_block_reads;
-			}
-			if (top.sd_ack) {
-				const std::size_t offset = static_cast<std::size_t>(top.sd_lba) * 512 +
-				                           sd_byte;
-				top.sd_buff_addr = sd_byte;
-				top.sd_buff_dout = offset < disk_image.size() ? disk_image[offset] : 0xff;
-				top.sd_buff_wr = sd_transfer_read;
-			}
+		if (sd_finishing) { top.sd_ack = 0; sd_finishing = false; return; }
+		if (!top.sd_ack && (top.sd_rd || top.sd_wr)) {
+			if (sd_wait_cycles++ < sd_delay) return;
+			sd_wait_cycles = 0;
+			unsigned requests = top.sd_rd | top.sd_wr;
+			sd_disk = (requests & 1) ? 0 : 1;
+			top.sd_ack = 1 << sd_disk;
+			sd_transfer_read = top.sd_rd & (1 << sd_disk);
+			sd_byte = 0; sd_tick = 0;
+			sd_transfer_bytes = (top.sd_blk_cnt[sd_disk] + 1) * 512;
+			sd_start = static_cast<std::size_t>(top.sd_lba[sd_disk]) * 512;
+			if (sd_transfer_read) ++sd_block_reads;
 		}
-		else if (disk_test) {
-			const std::size_t offset = static_cast<std::size_t>(top.track1) *
-			                           apple3_disk_image::kTrackBytes + top.track1_addr;
-			next_track_q = offset < disk_image.size() ? disk_image[offset] : 0xff;
-			top.direct_track1_dout = track_q;
+		if (top.sd_ack) {
+			const auto &data = disk_image[sd_disk];
+			top.sd_buff_addr = sd_byte;
+			top.sd_buff_dout = sd_start + sd_byte < data.size() ? data[sd_start+sd_byte] : 0;
+			top.sd_buff_wr = sd_transfer_read && sd_tick == 3;
 		}
 	};
-
 	auto finish_storage = [&]() {
-		if (!top.clk) return;
-		if (buffered_disk && top.sd_ack && top.sd_buff_wr) {
-			if (sd_byte == 511) sd_finishing = true;
-			else ++sd_byte;
-		}
-		else if (!buffered_disk) {
-			track_q = next_track_q;
-		}
+		if (!top.clk || !top.sd_ack) return;
+		if (++sd_tick < 4) return;
+		sd_tick = 0;
+		if (!sd_transfer_read && sd_start + sd_byte < disk_image[sd_disk].size())
+			disk_image[sd_disk][sd_start+sd_byte] = top.sd_buff_din[sd_disk];
+		if (++sd_byte == sd_transfer_bytes) sd_finishing = true;
 	};
 
 	for (int i = 0; i < 128; ++i) {
@@ -138,17 +108,20 @@ int main(int argc, char **argv) {
 		finish_storage();
 	}
 	top.reset = 0;
-	if (buffered_disk) {
-		// Match an image-mounted notification followed by the stable toggle
-		// used by the MiSTer track cache.
-		top.image_change = 1;
-		for (int i = 0; i < 4; ++i) {
-			prepare_storage();
-			top.clk ^= 1;
-			top.eval();
-			finish_storage();
-		}
+	for (unsigned drive = 0; drive < 2; ++drive) {
+		if (disk_image[drive].empty()) continue;
+		top.image_size = disk_image[drive].size(); top.image_change = 1 << drive;
+		for (int i = 0; i < 8; ++i) { prepare_storage(); top.clk ^= 1; top.eval(); finish_storage(); }
 		top.image_change = 0;
+		for (int i = 0; i < 8; ++i) { prepare_storage(); top.clk ^= 1; top.eval(); finish_storage(); }
+	}
+
+	if (warm_reset) {
+		// MGL-style reset after both mounts, including an in-flight transfer.
+		for (unsigned i = 0; i < 8000000; ++i) { prepare_storage(); top.clk ^= 1; top.eval(); finish_storage(); }
+		top.reset = 1;
+		for (unsigned i = 0; i < 2863640; ++i) { prepare_storage(); top.clk ^= 1; top.eval(); finish_storage(); }
+		top.reset = 0;
 	}
 
 	std::array<unsigned, 16> first_pcs{};
@@ -375,7 +348,7 @@ int main(int argc, char **argv) {
 		std::printf("disk image=%s buffered=%u sd_reads=%u bootstrap_A000=%u boot_block_error=%u ext_fetch_ok=%u loader_return=%u "
 		            "loader_jump=%u interpreter=%u final_track=%u loader_io_error=%04X "
 		            "sysfail=%u code=%02X\n",
-		            argv[2], buffered_disk, sd_block_reads, reached_disk_bootstrap,
+		            argv[2], 1u, sd_block_reads, reached_disk_bootstrap,
 		            boot_block_error,
 		            passed_extended_fetch_regression,
 		            reached_loader_return, reached_loader_jump, reached_interpreter,

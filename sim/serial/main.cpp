@@ -10,8 +10,8 @@ int main(int argc, char **argv) {
     Vcore_tb top;
     top.clk=0; top.reset=1; top.serial_rx=1;
     top.serial_cts_n=0; top.serial_dsr_n=0;
-    top.disk_present=0; top.buffered_disk=0; top.image_mount=0;
-    top.image_change=0; top.ps2_key=0; top.probe_addr=(7<<14)|2;
+    top.image_change=0; top.image_size=0; top.image_readonly=1;
+    top.ps2_key=0; top.probe_addr=(7<<14)|2;
     std::ifstream romfile("sim/serial/obj_dir/echo.rom",std::ios::binary);
     std::vector<unsigned char> rom((std::istreambuf_iterator<char>(romfile)),{});
     if(rom.size()!=4096) return 2;

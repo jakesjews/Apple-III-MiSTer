@@ -39,14 +39,13 @@ module emu
 	localparam CONF_STR = {
 		"Apple-III;UART19200:9600:4800:2400:1200:600:300:150:110:75:50;",
 		"-;",
-		"S0,NIBDSKDO PO ,Mount Drive 1;",
-		"S1,NIBDSKDO PO ,Mount Drive 2;",
+		"S0,WOZDSKDO PO NIB2MG,Mount Drive 1;",
+		"S1,WOZDSKDO PO NIB2MG,Mount Drive 2;",
 		"F2,ROMBIN,Load Boot ROM;",
 		"-;",
 		"O2,Aspect ratio,4:3,16:9;",
 		"O35,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 		"O67,Write Protect,None,Drive 1,Drive 2,Both;",
-		"O8,Sector order,DOS,ProDOS;",
 		"O9,Serial CTS,Always ready,Host RTS;",
 		"-;",
 		"R0,Reset;",
@@ -105,8 +104,6 @@ module emu
 
 	tri [35:0] ext_bus;
 	assign ext_bus[32] = 1'b0;
-	assign sd_blk_cnt[0] = 6'd0;
-	assign sd_blk_cnt[1] = 6'd0;
 
 	// F12 is the Apple /// RESET key (Ctrl+F12 = reset, F12 alone = NMI), so
 	// the framework menu moves to the MiSTer convention of Win+F12.
@@ -207,74 +204,12 @@ module emu
 	wire core_reset = RESET || status[0] || hps_buttons[1] || !pll_locked ||
 	                  rom_download || !rom_loaded;
 
-	logic [1:0] disk_mount = 2'b00;
-	logic [1:0] disk_change = 2'b00;
-	logic [1:0] disk_readonly = 2'b00;
-	// A 143,360-byte image is a DSK/DO/PO sector image and is nibblized in the
-	// core; 232,960 bytes is an already-nibblized NIB.
-	logic [1:0] disk_sector_image = 2'b00;
-	wire  disk_is_sector_image = (img_size == 64'd143360);
-
-	always_ff @(posedge clk_14m) begin
-		// A pulse guarantees a fresh rising edge for every insertion/removal.
-		disk_change <= img_mounted;
-		if (img_mounted[0]) begin
-			disk_mount[0] <= (img_size != 0);
-			disk_readonly[0] <= img_readonly;
-			disk_sector_image[0] <= disk_is_sector_image;
-		end
-		if (img_mounted[1]) begin
-			disk_mount[1] <= (img_size != 0);
-			disk_readonly[1] <= img_readonly;
-			disk_sector_image[1] <= disk_is_sector_image;
-		end
-	end
-
-	wire [1:0] disk_ready;
-	wire [1:0] disk_write_protect = disk_readonly | status[7:6] |
-	                                disk_sector_image;
-	wire disk_activity;
-	wire disk1_active;
-	wire disk2_active;
-
-	wire [5:0] track1;
-	wire [12:0] track1_addr;
-	wire [7:0] track1_din;
-	wire [7:0] track1_dout;
-	wire track1_we;
-	wire track1_busy;
-	wire [5:0] track2;
-	wire [12:0] track2_addr;
-	wire [7:0] track2_din;
-	wire [7:0] track2_dout;
-	wire track2_we;
-	wire track2_busy;
-
-	floppy_track drive1_image
-	(
-		.clk(clk_14m), .reset(core_reset),
-		.sd_lba(sd_lba[0]), .sd_rd(sd_rd[0]), .sd_wr(sd_wr[0]),
-		.sd_ack(sd_ack[0]), .sd_buff_addr(sd_buff_addr[8:0]),
-		.sd_buff_dout(sd_buff_dout), .sd_buff_din(sd_buff_din[0]),
-		.sd_buff_wr(sd_buff_wr), .change(disk_change[0]),
-		.dsk_mode(disk_sector_image[0]), .prodos(status[8]),
-		.mount(disk_mount[0]), .track(track1), .ready(disk_ready[0]),
-		.active(disk1_active), .ram_addr(track1_addr), .ram_do(track1_dout),
-		.ram_di(track1_din), .ram_we(track1_we), .busy(track1_busy)
-	);
-
-	floppy_track drive2_image
-	(
-		.clk(clk_14m), .reset(core_reset),
-		.sd_lba(sd_lba[1]), .sd_rd(sd_rd[1]), .sd_wr(sd_wr[1]),
-		.sd_ack(sd_ack[1]), .sd_buff_addr(sd_buff_addr[8:0]),
-		.sd_buff_dout(sd_buff_dout), .sd_buff_din(sd_buff_din[1]),
-		.sd_buff_wr(sd_buff_wr), .change(disk_change[1]),
-		.dsk_mode(disk_sector_image[1]), .prodos(status[8]),
-		.mount(disk_mount[1]), .track(track2), .ready(disk_ready[1]),
-		.active(disk2_active), .ram_addr(track2_addr), .ram_do(track2_dout),
-		.ram_di(track2_din), .ram_we(track2_we), .busy(track2_busy)
-	);
+	// Main is the only image-format backend: all floppy mounts arrive as
+	// native or converted WOZ. Converted sources are always write-protected.
+	wire [1:0] disk_ready, disk_write_protect, disk_flux, disk_motors;
+	wire [3:0] disk_phases;
+	wire disk_write_mode, disk_write_bit, disk_write_strobe;
+	wire disk_activity, disk1_active, disk2_active;
 
 	wire [7:0] core_r;
 	wire [7:0] core_g;
@@ -284,6 +219,22 @@ module emu
 	wire core_hsync;
 	wire core_vsync;
 	wire signed [15:0] core_audio;
+
+	genvar drive;
+	generate for (drive = 0; drive < 2; drive = drive + 1) begin : woz_drives
+		apple3_woz_drive woz (
+			.clk(clk_14m), .reset(core_reset), .change(img_mounted[drive]),
+			.enabled(1'b1), .image_size(img_size), .image_readonly(img_readonly),
+			.protect(status[6+drive]), .active(drive == 0 ? disk1_active : disk2_active),
+			.motor_on(disk_motors[drive]),
+			.phases(disk_phases), .write_mode(disk_write_mode), .write_bit(disk_write_bit),
+			.write_strobe(disk_write_strobe), .flux(disk_flux[drive]), .ready(disk_ready[drive]),
+			.write_protect(disk_write_protect[drive]), .sd_lba(sd_lba[drive]),
+			.sd_blk_cnt(sd_blk_cnt[drive]), .sd_rd(sd_rd[drive]), .sd_wr(sd_wr[drive]),
+			.sd_ack(sd_ack[drive]), .sd_buff_addr, .sd_buff_dout,
+			.sd_buff_din(sd_buff_din[drive]), .sd_buff_wr
+		);
+	end endgenerate
 
 	apple3_core machine (
 		.clk_14m(clk_14m), .reset(core_reset), .ps2_key(ps2_key),
@@ -296,11 +247,8 @@ module emu
 		.rom_we(rom_write), .rom_host_addr(ioctl_addr[12:0]),
 		.rom_host_data(ioctl_dout), .disk_ready(disk_ready),
 		.disk_write_protect(disk_write_protect),
-		.track1(track1), .track1_addr(track1_addr), .track1_din(track1_din),
-		.track1_dout(track1_dout), .track1_we(track1_we),
-		.track1_busy(track1_busy), .track2(track2), .track2_addr(track2_addr),
-		.track2_din(track2_din), .track2_dout(track2_dout),
-		.track2_we(track2_we), .track2_busy(track2_busy),
+		.disk_flux, .disk_media_change(img_mounted), .disk_motors,
+		.disk_phases, .disk_write_mode, .disk_write_bit, .disk_write_strobe,
 		.video_r(core_r), .video_g(core_g), .video_b(core_b),
 		.video_hblank(core_hblank), .video_vblank(core_vblank),
 		.video_hsync(core_hsync), .video_vsync(core_vsync),

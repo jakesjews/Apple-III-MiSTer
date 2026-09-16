@@ -1,10 +1,8 @@
 // Apple /// integrated floppy controller.
 //
-// The shift/stepper portion reuses the proven MiSTer Disk II drive model, but
-// the surrounding latch decode is Apple /// specific.  In native mode $C0Dx
-// selects internal/external drives and side, while $C0Ex controls phases,
-// motor, internal/external I/O, Q6, and Q7.  SOS 1.3's DISK3 driver and the
-// 341-0028 state-machine PROM are used alongside the service schematics.
+// The Apple /// latch decode surrounds a 341-0028 P6 sequencer. Native WOZ
+// drives supply flux pulses; Main handles all image formats and file writes.
+// SOS DISK3, the original PROM and service schematics define the interface.
 
 module apple3_disk (
 	input  logic        clk_14m,
@@ -18,6 +16,12 @@ module apple3_disk (
 	input  logic [7:0]  data_in,
 	input  logic [1:0]  disk_ready,
 	input  logic [1:0]  write_protect,
+	input  logic [1:0]  bitstream_flux,
+	input  logic [1:0]  media_change,
+	input  logic        native_mode,
+	output wire         write_mode,
+	output wire         write_bit,
+	output wire         write_strobe,
 	output logic [7:0]  data_out,
 
 	output logic [3:0]  motor_phase,
@@ -27,22 +31,8 @@ module apple3_disk (
 	output logic        d1_motor_on,
 	output logic        d2_motor_on,
 	output logic        d1_io_active,
-	output logic        d2_io_active,
-	output logic        d1_track_zero_step,
-	output logic        d2_track_zero_step,
+	output logic        d2_io_active
 
-	output logic [5:0]  track1,
-	output logic [12:0] track1_addr,
-	output logic [7:0]  track1_din,
-	input  logic [7:0]  track1_dout,
-	output logic        track1_we,
-	input  logic        track1_busy,
-	output logic [5:0]  track2,
-	output logic [12:0] track2_addr,
-	output logic [7:0]  track2_din,
-	input  logic [7:0]  track2_dout,
-	output logic        track2_we,
-	input  logic        track2_busy
 );
 
 	logic [1:0] external_drive;
@@ -55,42 +45,55 @@ module apple3_disk (
 	logic       selected_internal;
 	logic       selected_external;
 	logic       read_disk;
-	logic       read_strobe;
-	logic       write_register;
-	logic [7:0] drive1_data;
-	logic [7:0] drive2_data;
 	logic [23:0] spindown_count;
-	logic drive1_write, drive2_write;
+	reg [1:0] disk_changed;
+	reg phase1_d;
+	wire [1:0] drive_active = {d2_active, d1_active};
+	wire selected_flux = |(bitstream_flux & drive_active &
+	                         (native_mode ? ~disk_changed : 2'b11));
+	wire selected_wp = selected_external ? write_protect[1] :
+	                   selected_internal ? write_protect[0] : 1'b1;
+	wire [7:0] sequencer_data;
+	reg [7:0] last_write;
+	always @(posedge clk_14m) begin
+		if (reset) last_write <= 0;
+		else if (cycle_strobe && select && !cpu_read) last_write <= data_in;
+	end
+	assign write_mode = q7;
+	apple3_disk_sequencer sequencer (
+		.clk(clk_14m), .reset, .q3(clk_2m), .q6, .q7,
+		.flux(selected_flux), .write_protect(selected_wp),
+		.data_in(last_write), .data_out(sequencer_data), .write_bit, .write_strobe
+	);
+	// Rev-D analog card: insertion/removal inhibits RD DATA until a phase-1
+	// edge acknowledges the change. Apple II mode bypasses this latch.
+	always @(posedge clk_14m) begin
+		phase1_d <= motor_phase[1];
+		if (reset) begin
+			phase1_d <= 0;
+			disk_changed <= 0;
+		end else begin
+			if (!phase1_d && motor_phase[1]) disk_changed <= disk_changed & ~drive_active;
+			if (|media_change) disk_changed <= disk_changed | media_change;
+		end
+	end
 
-	// The physical drive inhibits write/erase current when protected. Keep
-	// the sequencer running, but never let its writes reach either track cache.
-	assign track1_we = drive1_write && !write_protect[0];
-	assign track2_we = drive2_write && !write_protect[1];
 
 	always_comb begin
 		read_disk = select && (addr == 8'hec);
-		read_strobe = cycle_strobe && cpu_read && read_disk;
-		write_register = select && !cpu_read && q7 &&
-		                 ((addr == 8'hed) || (addr == 8'hef));
-
-		selected_internal = !external_io && internal_enable;
-		// The implemented external connector is D2.  D3/D4 selection remains
-		// faithfully latched and simply produces no ready drive.
-		selected_external = external_io && (external_drive == 2'b01);
-		d1_active = motor_real_on && selected_internal;
-		d2_active = motor_real_on && selected_external;
-		d1_motor_on = motor_on && selected_internal;
-		d2_motor_on = motor_on && selected_external;
+		// Disk III selects spindle power independently from its I/O bus.
+		// SOS deliberately leaves D1 spinning while accessing an external drive.
+		d1_motor_on = motor_real_on && (native_mode ? internal_enable : !external_io);
+		d2_motor_on = motor_real_on && (native_mode ? external_drive == 2'b01 : external_io);
+		selected_internal = !external_io && d1_motor_on;
+		selected_external = external_io && d2_motor_on;
+		d1_active = selected_internal;
+		d2_active = selected_external;
 		d1_io_active = read_disk && d1_active && disk_ready[0];
 		d2_io_active = read_disk && d2_active && disk_ready[1];
 
 		if (addr[0]) data_out = 8'hff;
-		else if (q6) begin
-			if (selected_external) data_out = {write_protect[1], 7'h00};
-			else data_out = {write_protect[0], 7'h00};
-		end
-		else if (selected_external) data_out = drive2_data;
-		else data_out = drive1_data;
+		else data_out = sequencer_data;
 	end
 
 	always_ff @(posedge clk_14m) begin
@@ -112,7 +115,7 @@ module apple3_disk (
 				spindown_count <= 24'd0;
 			end
 			else if (motor_real_on) begin
-				if (spindown_count == 0) spindown_count <= 24'd14318180;
+				if (spindown_count == 0) spindown_count <= 24'd9545454;
 				else if (spindown_count == 1) begin
 					spindown_count <= 24'd0;
 					motor_real_on <= 1'b0;
@@ -140,27 +143,5 @@ module apple3_disk (
 			end
 		end
 	end
-
-	drive_ii drive1 (
-		.CLK_14M(clk_14m), .CLK_2M(clk_2m), .PHASE_ZERO(phase_zero),
-		.RESET(reset), .DISK_READY(disk_ready[0]), .D_IN(data_in),
-		.D_OUT(drive1_data), .DISK_ACTIVE(d1_active), .MOTOR_PHASE(motor_phase),
-		.WRITE_MODE(q7), .READ_DISK(read_disk), .READ_STROBE(read_strobe),
-		.WRITE_REG(write_register),
-		.TRACK_ZERO_STEP(d1_track_zero_step), .TRACK(track1),
-		.TRACK_ADDR(track1_addr), .TRACK_DI(track1_din), .TRACK_DO(track1_dout),
-		.TRACK_WE(drive1_write), .TRACK_BUSY(track1_busy)
-	);
-
-	drive_ii drive2 (
-		.CLK_14M(clk_14m), .CLK_2M(clk_2m), .PHASE_ZERO(phase_zero),
-		.RESET(reset), .DISK_READY(disk_ready[1]), .D_IN(data_in),
-		.D_OUT(drive2_data), .DISK_ACTIVE(d2_active), .MOTOR_PHASE(motor_phase),
-		.WRITE_MODE(q7), .READ_DISK(read_disk), .READ_STROBE(read_strobe),
-		.WRITE_REG(write_register),
-		.TRACK_ZERO_STEP(d2_track_zero_step), .TRACK(track2),
-		.TRACK_ADDR(track2_addr), .TRACK_DI(track2_din), .TRACK_DO(track2_dout),
-		.TRACK_WE(drive2_write), .TRACK_BUSY(track2_busy)
-	);
 
 endmodule

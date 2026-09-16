@@ -1,0 +1,104 @@
+Apple III / Main storage validation, 2026-09-16
+
+Shared Main backend
+PASS shared 5.25 codec: DOS/PO/2MG equivalence, sync bits, round-trip and NIB preservation
+PASS native WOZ: full bursts, CRC, partial EOF, metadata guards, persistence and write protection
+PASS II/IIgs write-back and codec compatibility, native archive/permission/FLUX protection
+PASS Apple-family slot assignments, read-only block payloads, invalid containers and legacy compatibility
+
+Core unit and disk tests
+PASS apple3_mmu (42 checks)
+PASS apple3_timing
+PASS apple3 storage and extended addressing
+PASS apple3_video
+PASS apple3_keyboard
+PASS apple3_io
+PASS apple3_rtc
+PASS apple3_disk: P6 status, native/Apple II drive selection, independent motors and disk change
+PASS 40 serial word/parity/stop formats and queued TX spacing
+PASS 6551 errors, resets, handshake and interrupt semantics (1077 checks)
+PASS all 15 internal baud divisors at 14.318182 MHz (105 bit periods), external clock disconnected
+PASS WOZ bit timing: 125ns units, default and full 8-bit range
+PASS P6: all 256 truth-table entries and 50000 sequencer cycles against original PROM, all 256 written bytes
+PASS WOZ1: block delivery, exact track data, quarter tracks, reset, rejection, writes=0
+PASS WOZ2: block delivery, exact track data, quarter tracks, reset, rejection, writes=13
+PASS WOZ2: block delivery, exact track data, quarter tracks, reset, rejection, writes=40
+PASS drive: WOZ 4us/3.5us/31.875us cells, fractional timing, cache gating, write protection and bit writes
+
+Accuracy
+PASS: 140-mode seven equal-width pixels across the 14-dot boundary
+PASS: graphics mode 00000008 scroll changes fetched row
+PASS: graphics mode 00000009 scroll changes fetched row
+PASS: graphics mode 0000000a scroll changes fetched row
+PASS: graphics mode 0000000b scroll changes fetched row
+PASS: 49152 exact graphics fetch addresses and byte lanes
+PASS: Apple II TEXT overrides HIRES in emulation mode
+PASS: Apple II TEXT fetch overrides HIRES
+PASS: Apple II lores upper nibble-row and page select
+PASS: Apple II lores lower nibble-row and page select
+PASS: Apple II lores upper nibble-row and page select
+PASS: Apple II lores lower nibble-row and page select
+PASS: mixed line 159 still fetches graphics
+PASS: mixed line 160 fetches text
+PASS: mixed bottom region renders 40-column text
+PASS: mixed line 159 still fetches graphics
+PASS: mixed line 160 fetches text
+PASS: mixed bottom region renders 40-column text
+PASS: Control-Shift-2 emits a strobed NUL
+PASS: releasing left Shift preserves held right Shift
+PASS: releasing B while A is held preserves any-key-down
+PASS: all ordinary keys released clears AK
+PASS: right Control survives left Control release
+PASS: right Alt survives left Alt release
+PASS: right GUI survives left GUI release
+PASS: modifier-only presses do not assert encoder AK
+PASS: Print Screen extended Shift prefix is not a held key
+PASS: NUL key release is recognized after modifier release
+PASS: host typematic duplicate does not retrigger the hardware encoder
+PASS: repeat returns to A after the newer B is released
+PASS: no repeat remains after the last key is released
+PASS Disk III: independent drive write-protect sense with both motors running
+PASS: GO clears seconds
+PASS: GO rounds seconds >=40 into the next minute
+PASS: 10 Hz interrupt also fires at whole-second rollover
+PASS: rollover status warns about reads spanning a counter update
+PASS: machine reset preserves battery-backed time
+PASS: machine reset preserves comparator RAM
+PASS: machine reset preserves interrupt control
+PASS: clock advances while machine reset is held
+PASS: GO at 39 seconds clears seconds
+PASS: GO below 40 seconds keeps the minute
+PASS: GO clears fractional seconds
+PASS: GO at 40 seconds carries through minute 59
+PASS: GO carries through midnight
+PASS: GO carries through week rollover
+PASS: GO carries through month rollover
+PASS: GO carries through year rollover
+PASS: counter snapshot outside the update window is safe
+PASS: counter read inside the update window flags rollover
+PASS: status read clears the rollover latch
+PASS: rollover remains latched after the update window ends
+PASS: rollover remains clear until another counter read
+PASS: one second produces ten 10 Hz and one 1 Hz interrupts (10,1)
+Accuracy test groups failing: 0
+
+T65 serial
+PASS real T65 IRQ-driven serial echo: 256/256 byte values plus 64 queued across CTS stall, 447 IRQ entries, zero receive errors
+
+Dual-drive WOZ2, 5 ms host delay
+milestones bank_exit=1 reconfigure=1 disk_boot=1 bank_changes=94
+disk image=/tmp/apple3-main-sos.woz buffered=1 sd_reads=142 bootstrap_A000=1 boot_block_error=0 ext_fetch_ok=1 loader_return=1 loader_jump=1 interpreter=1 final_track=0 loader_io_error=0000 sysfail=0 code=00
+disk paths find_good=116 find_error=0 read_error=0 retry=0 recalibrate=0 hard_error=0 zp98=0A zp99=00 zp9A=00 zpD4=00 zpD5=0A zpD6=30 zpD7=04 zpD8=00
+
+Dual-drive WOZ1
+milestones bank_exit=1 reconfigure=1 disk_boot=1 bank_changes=93
+disk image=/tmp/apple3-main-woz1.woz buffered=1 sd_reads=210 bootstrap_A000=1 boot_block_error=0 ext_fetch_ok=1 loader_return=1 loader_jump=1 interpreter=1 final_track=0 loader_io_error=0000 sysfail=0 code=00
+disk paths find_good=116 find_error=0 read_error=0 retry=0 recalibrate=0 hard_error=0 zp98=0A zp99=00 zp9A=00 zpD4=00 zpD5=0A zpD6=21 zpD7=04 zpD8=00
+
+Independent format check: 35 x 50,304 valid track bits from Main match the independently converted SOS image.
+WOZ1 to WOZ2 allocation padding is not part of the valid track bitstream.
+
+Dual-drive warm reset after mount, 5 ms host latency
+milestones bank_exit=1 reconfigure=1 disk_boot=1 bank_changes=94
+disk image=/tmp/apple3-main-sos.woz buffered=1 sd_reads=150 bootstrap_A000=1 boot_block_error=0 ext_fetch_ok=1 loader_return=1 loader_jump=1 interpreter=1 final_track=0 loader_io_error=0000 sysfail=0 code=00
+disk paths find_good=116 find_error=0 read_error=0 retry=0 recalibrate=0 hard_error=0 zp98=0A zp99=00 zp9A=00 zpD4=00 zpD5=0A zpD6=30 zpD7=04 zpD8=00

@@ -1,0 +1,43 @@
+Paired Main and FPGA build
+
+Fitter Status : Successful - Wed Sep 16 16:44:16 2026
+Quartus Prime Version : 17.0.2 Build 602 07/19/2017 SJ Lite Edition
+Revision Name : Apple-III
+Top-level Entity Name : sys_top
+Family : Cyclone V
+Device : 5CSEBA6U23I7
+Timing Models : Final
+Logic utilization (in ALMs) : 17,099 / 41,910 ( 41 % )
+Total registers : 25477
+Total pins : 145 / 314 ( 46 % )
+Total virtual pins : 0
+Total block memory bits : 3,264,001 / 5,662,720 ( 58 % )
+Total RAM Blocks : 417 / 553 ( 75 % )
+Total DSP Blocks : 33 / 112 ( 29 % )
+Total HSSI RX PCSs : 0
+Total HSSI PMA RX Deserializers : 0
+Total HSSI TX PCSs : 0
+Total HSSI PMA TX Serializers : 0
+Total PLLs : 3 / 6 ( 50 % )
+Total DLLs : 0 / 4 ( 0 % )
+
+Timing groups: 38
+Minimum slack: 0.225 ns; all TNS = 0
+Quartus processors: 6
+RBF SHA256: 553f8b06bbb485686f0324d204df58c93414a597c90acd67ac74379b0786d820
+Main SHA256: 2d544ff98870f13a53d5d137300768567e6305c5be86c8ae7ddd4702a6894543
+Main upstream base: f80abdc79e76bfc63799d028f2337c4d762b5e50
+Main source changes: support/main/apple3-storage.patch
+The exported patch applies to the recorded upstream base and passes the shared storage tests.
+
+Installed on MiSTer:
+/media/fat/_Computer/Apple-III_20260916_woz.rbf
+/media/fat/MiSTer_AppleIII_WOZ
+
+MiSTer.ini addition:
+
+[Apple-III]
+main=MiSTer_AppleIII_WOZ
+
+Physical validation: dual-drive SOS boot, native WOZ2 volume rename, persisted after fresh reload.
+Temporary media, MGLs, screenshots and debug/video settings removed; returned to Menu and stock Main; Zaparoo stopped.

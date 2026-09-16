@@ -32,12 +32,8 @@ iverilog -g2012 -Wall -s rtc_acia_tb -o sim/obj_dir/rtc_acia_tb \
 vvp sim/obj_dir/rtc_acia_tb
 
 iverilog -g2012 -Wall -s disk_tb -o sim/obj_dir/disk_tb \
-	rtl/disk/drive_ii.v rtl/apple3_disk.sv sim/disk_tb.sv
+	rtl/disk/apple3_p6.sv rtl/disk/apple3_disk_sequencer.sv rtl/apple3_disk.sv sim/disk_tb.sv
 vvp sim/obj_dir/disk_tb
-
-iverilog -g2012 -Wall -s nib_tb -o sim/obj_dir/nib_tb \
-	rtl/disk/dsk_nibblizer.sv sim/nib_tb.sv
-vvp sim/obj_dir/nib_tb
 
 iverilog -g2012 -Wall -s acia_tb -o sim/obj_dir/acia_tb \
 	rtl/acia/gen_uart.v rtl/apple3_acia.sv sim/acia_tb.sv
@@ -46,3 +42,5 @@ vvp sim/obj_dir/acia_tb
 iverilog -g2012 -Wall -s acia_baud_tb -o sim/obj_dir/acia_baud_tb \
 	rtl/acia/gen_uart.v rtl/apple3_acia.sv sim/acia_baud_tb.sv
 vvp sim/obj_dir/acia_baud_tb
+
+./sim/disk/run.sh

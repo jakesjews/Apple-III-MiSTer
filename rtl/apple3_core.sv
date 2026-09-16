@@ -29,18 +29,11 @@ module apple3_core #(
 
 	input  logic [1:0]  disk_ready,
 	input  logic [1:0]  disk_write_protect,
-	output logic [5:0]  track1,
-	output logic [12:0] track1_addr,
-	output logic [7:0]  track1_din,
-	input  logic [7:0]  track1_dout,
-	output logic        track1_we,
-	input  logic        track1_busy,
-	output logic [5:0]  track2,
-	output logic [12:0] track2_addr,
-	output logic [7:0]  track2_din,
-	input  logic [7:0]  track2_dout,
-	output logic        track2_we,
-	input  logic        track2_busy,
+	input  logic [1:0]  disk_flux,
+	input  logic [1:0]  disk_media_change,
+	output wire [3:0]   disk_phases,
+	output wire        disk_write_mode, disk_write_bit, disk_write_strobe,
+	output wire [1:0] disk_motors,
 
 	output logic [7:0]  video_r,
 	output logic [7:0]  video_g,
@@ -139,7 +132,6 @@ module apple3_core #(
 	logic side_two;
 	logic d1_active, d2_active, d1_motor_on, d2_motor_on;
 	logic d1_io_active, d2_io_active;
-	logic d1_track_zero_step, d2_track_zero_step;
 	logic clk_2m;
 	logic phase_zero;
 	logic [5:0] dac_value;
@@ -287,17 +279,19 @@ module apple3_core #(
 		.rts_n(serial_rts_n), .dtr_n(serial_dtr_n), .irq(acia_irq)
 	);
 
+	assign disk_phases = motor_phase;
 	apple3_disk disk (
 		.clk_14m, .clk_2m, .phase_zero, .reset(machine_reset),
 		.select(io_select && ((cpu_addr[7:4] == 4'hd) ||
 		                     (cpu_addr[7:4] == 4'he))),
 		.cycle_strobe(disk_strobe), .cpu_read(cpu_rwn), .addr(cpu_addr[7:0]),
 		.data_in(cpu_dout), .disk_ready, .write_protect(disk_write_protect),
+		.bitstream_flux(disk_flux),
+		.media_change(disk_media_change), .native_mode,
+		.write_mode(disk_write_mode), .write_bit(disk_write_bit),
+		.write_strobe(disk_write_strobe),
 		.data_out(disk_data), .motor_phase, .side_two, .d1_active, .d2_active,
-		.d1_motor_on, .d2_motor_on, .d1_io_active, .d2_io_active,
-		.d1_track_zero_step, .d2_track_zero_step,
-		.track1, .track1_addr, .track1_din, .track1_dout, .track1_we, .track1_busy,
-		.track2, .track2_addr, .track2_din, .track2_dout, .track2_we, .track2_busy
+		.d1_motor_on, .d2_motor_on, .d1_io_active, .d2_io_active
 	);
 
 	apple3_video video (
@@ -310,6 +304,7 @@ module apple3_core #(
 	);
 
 	assign disk_activity = d1_active || d2_active;
+	assign disk_motors = {d2_motor_on, d1_motor_on};
 	assign disk1_active = d1_active;
 	assign disk2_active = d2_active;
 	assign debug_pc = cpu_regs[63:48];

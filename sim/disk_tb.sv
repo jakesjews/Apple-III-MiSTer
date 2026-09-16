@@ -8,14 +8,10 @@ module disk_tb;
 	wire [7:0] data_out;
 	wire [3:0] motor_phase;
 	wire side_two, d1_active, d2_active, d1_motor_on, d2_motor_on;
-	wire d1_io_active, d2_io_active, d1_track_zero_step, d2_track_zero_step;
-	wire [5:0] track1, track2;
-	wire [12:0] track1_addr, track2_addr;
-	wire [7:0] track1_din, track2_din;
-	logic [7:0] track1_dout = 8'ha5, track2_dout = 8'h5a;
-	wire track1_we, track2_we;
-	logic track1_busy = 0, track2_busy = 0;
-
+	wire d1_io_active, d2_io_active;
+	logic [1:0] bitstream_flux=0, media_change=0;
+	logic native_mode=1;
+	wire write_mode,write_bit,write_strobe;
 	apple3_disk dut (.*);
 	always #5 clk_14m = ~clk_14m;
 	always #35 clk_2m = ~clk_2m;
@@ -39,25 +35,41 @@ module disk_tb;
 		// SOS D2 sequence: external I/O, external address 01.
 		touch(8'hd1); touch(8'hd2); touch(8'heb);
 		if (!d2_active || d1_active) $fatal(1, "D2 selection");
-		// The WOZ state machine presents one nibble byte every 32 CPU clocks.
+		// The external I/O selection must not stop the internal spindle.
+		if (!d1_motor_on || !d2_motor_on) $fatal(1, "independent Disk III motors");
 		repeat (500) @(posedge clk_14m);
 		touch(8'hed); // Q6 set: write-protect sense
 		addr = 8'hec; #1;
-		if (data_out !== 8'h80) $fatal(1, "D2 write protect=%02x", data_out);
-		touch(8'hec); // Q6 clear and consume the current read latch
-		repeat (500) @(posedge clk_14m);
-		addr = 8'hec; #1;
-		if (data_out !== 8'h5a) $fatal(1, "D2 data=%02x", data_out);
-		touch(8'hec);
-		addr = 8'hec; #1;
-		if (data_out !== 8'h00) $fatal(1, "D2 data latch did not clear=%02x", data_out);
+		repeat (100) @(posedge clk_14m);
+		if (!data_out[7]) $fatal(1, "D2 write protect=%02x", data_out);
+		touch(8'hec); // Q6 clear; reads never acknowledge the P6 register
 
 		touch(8'hea); touch(8'hd4);
 		if (!d1_active || d2_active) $fatal(1, "return to D1");
 		touch(8'hd7);
 		if (!side_two) $fatal(1, "side select");
 
-		$display("PASS apple3_disk");
+        // The III's native disk-switch latch hides read pulses until a head
+        // phase acknowledges insertion; Apple II emulation bypasses it.
+        bitstream_flux=2'b01;
+        @(negedge clk_14m);media_change=2'b01;
+        @(negedge clk_14m);media_change=0;
+        #1;if(dut.selected_flux) $fatal(1,"unacknowledged changed disk exposed flux");
+        native_mode=0;#1;
+        if(!dut.selected_flux) $fatal(1,"Apple II mode did not bypass disk-change latch");
+        native_mode=1;
+        touch(8'he2);touch(8'he3);
+        repeat(2) @(negedge clk_14m);
+        if(!dut.selected_flux) $fatal(1,"phase 1 did not acknowledge changed disk");
+        touch(8'hd1);touch(8'hd3);touch(8'heb);
+        if(d1_active || d2_active || dut.selected_flux) $fatal(1,"unpopulated D4 selected a drive");
+
+        // Disk II emulation has its conventional mutually exclusive enables.
+        native_mode=0;touch(8'hea);#1;
+        if (!d1_motor_on || d2_motor_on) $fatal(1,"Apple II drive 1 motor mux");
+        touch(8'heb);#1;
+        if (d1_motor_on || !d2_motor_on) $fatal(1,"Apple II drive 2 motor mux");
+        $display("PASS apple3_disk: P6 status, native/Apple II drive selection, independent motors and disk change");
 		$finish;
 	end
 endmodule
