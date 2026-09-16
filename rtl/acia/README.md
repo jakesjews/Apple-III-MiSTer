@@ -9,18 +9,16 @@ The unrelated MC6850 and AY-31015 wrappers are omitted.
 
 ## Why this implementation
 
-A nine-check bus/pin comparison against the Apple II MiSTer `glb6551`
-(at commit `96980455374321293dcbbb91ff9d08b116571772`) found five failures
-in that older implementation: software reset destroyed the control/parity
-configuration, status reads did not acknowledge receive IRQs, DSR transitions
-did not generate IRQs, and transmit break was absent. The selected upstream
-passed eight checks, with break missing. These checks are a selection screen,
-not an exhaustive accuracy certification.
-
-The newer design also uses one clock with enables, which fits this machine's
-scheduler without introducing baud clocks into the FPGA fabric. Inspection
-found additional gaps in stop-bit handling and parity over short words; the
-pin-level regression covers these before the imported core is integrated.
+A nine-check bus/pin comparison (`sim/serial/compare_candidates.sh`) against
+the Apple II MiSTer core's older `glb6551` (commit
+`96980455374321293dcbbb91ff9d08b116571772`) found five failures there: software
+reset destroyed the control/parity configuration, status reads did not
+acknowledge receive IRQs, DSR transitions did not generate IRQs, and transmit
+break was absent. gyurco's core passed eight of the nine, lacking only break.
+It also uses one clock with enables, which fits this machine's scheduler
+without introducing baud clocks into the FPGA fabric. Inspection found further
+gaps in stop-bit handling and parity over short words; the corrections below
+cover all of these and the pin-level bench in `sim/acia_tb.sv` checks them.
 
 ## Local corrections
 

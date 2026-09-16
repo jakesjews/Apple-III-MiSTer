@@ -1,5 +1,0 @@
-<mistergamedescription>
-	<rbf>_Computer/Apple-III</rbf>
-	<file delay="2" type="s" index="0" path="system.nib"/>
-	<reset delay="1"/>
-</mistergamedescription>

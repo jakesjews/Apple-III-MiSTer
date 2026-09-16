@@ -7,7 +7,6 @@
 
 module apple3_timing (
 	input  logic        clk_14m,
-	input  logic        reset,
 	input  logic        slow_mode,
 	input  logic        screen_enable,
 	input  logic        peripheral_cycle,
@@ -95,44 +94,46 @@ module apple3_timing (
 		q3 = (q_divider < 3'd4);
 	end
 
+	// The timing chain starts at zero when the FPGA is configured and is not
+	// touched by machine reset, so video sync is continuous through a reset
+	// as it is on the motherboard.
+	initial begin
+		h_count   = 10'd0;
+		v_count   = 9'd0;
+		h_state   = 7'd0;
+		state_dot = 4'd0;
+		q_divider = 3'd0;
+	end
+
 	always_ff @(posedge clk_14m) begin
 		frame_tick <= 1'b0;
-		if (reset) begin
-			h_count   <= 10'd0;
-			v_count   <= 9'd0;
-			h_state   <= 7'd0;
-			state_dot <= 4'd0;
-			q_divider <= 3'd0;
+		if (!((h_state == 7'd64) && (state_dot >= 4'd14))) begin
+			if (q_divider == 3'd6) q_divider <= 3'd0;
+			else q_divider <= q_divider + 1'b1;
 		end
-		else begin
-			if (!((h_state == 7'd64) && (state_dot >= 4'd14))) begin
-				if (q_divider == 3'd6) q_divider <= 3'd0;
-				else q_divider <= q_divider + 1'b1;
-			end
 
-			if (((h_state == 7'd64) && (state_dot == 4'd15)) ||
-		         ((h_state != 7'd64) && (state_dot == 4'd13))) begin
-				state_dot <= 4'd0;
-				if (h_state == 7'd64) begin
-					h_state <= 7'd0;
-					h_count <= 10'd0;
-					if (v_count == 9'd261) begin
-						v_count    <= 9'd0;
-						frame_tick <= 1'b1;
-					end
-					else begin
-						v_count <= v_count + 1'b1;
-					end
+		if (((h_state == 7'd64) && (state_dot == 4'd15)) ||
+	         ((h_state != 7'd64) && (state_dot == 4'd13))) begin
+			state_dot <= 4'd0;
+			if (h_state == 7'd64) begin
+				h_state <= 7'd0;
+				h_count <= 10'd0;
+				if (v_count == 9'd261) begin
+					v_count    <= 9'd0;
+					frame_tick <= 1'b1;
 				end
 				else begin
-					h_state <= h_state + 1'b1;
-					h_count <= h_count + 1'b1;
+					v_count <= v_count + 1'b1;
 				end
 			end
 			else begin
-				state_dot <= state_dot + 1'b1;
-				h_count   <= h_count + 1'b1;
+				h_state <= h_state + 1'b1;
+				h_count <= h_count + 1'b1;
 			end
+		end
+		else begin
+			state_dot <= state_dot + 1'b1;
+			h_count   <= h_count + 1'b1;
 		end
 	end
 

@@ -2,7 +2,7 @@
 // Compares RTL to the *binary* 341-0030 scan and 342-0046 timing PROMs.
 // Input pin assignments: bitsavers A3PROMs decoded headers; SRM ch.5 counters.
 module timing_prom_tb;
-  logic clk_14m=0,reset=1,slow_mode=0,screen_enable=1,peripheral_cycle=0;
+  logic clk_14m=0,slow_mode=0,screen_enable=1,peripheral_cycle=0;
   logic ram_cycle=0;
   always #5 clk_14m=~clk_14m;
   wire cpu_enable,via_rising,via_falling,q3,pixel_enable,hblank,vblank;
@@ -22,7 +22,7 @@ module timing_prom_tb;
     if(!$value$plusargs("SCAN=%s",scan_path) || !$value$plusargs("TIMING=%s",timing_path))
       $fatal(1,"supply +SCAN=<hex> +TIMING=<hex>");
     $readmemh(scan_path,scan_prom); $readmemh(timing_path,timing_prom);
-    repeat(3) @(negedge clk_14m); reset=0;
+    repeat(3) @(negedge clk_14m);
     // During display, a fast non-RAM cycle has PHASEN high even in A slot.
     // C1M=0,nC07X=1,RAMEN=0,DSPLY=1,nIOSTOPD=1,C-FXXX=0,
     // nFSPACE=1,R/W=1,RWPROT=0,nSEL2M=0 -> PROM address $0DA.

@@ -1,12 +1,13 @@
-// Two 4 KiB Apple /// boot-ROM banks.  The image is deliberately not part of
-// the repository: build.sh converts a user-supplied 4K/8K ROM to the generated
-// hex file, while MiSTer can also load one through ioctl at run time.
+// Two 4 KiB Apple /// boot-ROM banks.
+//
+// The ROM image is not part of the repository or the bitstream.  On MiSTer the
+// host uploads games/Apple-III/boot.rom (or the OSD "Load Boot ROM" file)
+// through the host write port after the core starts.  Simulation preloads an
+// image with INIT_FILE instead.
 
 module apple3_rom #(
 	parameter INIT_FILE = "",
-	parameter integer INIT_START = 0,
-	parameter INIT_LOW_FILE = "",
-	parameter INIT_HIGH_FILE = ""
+	parameter integer INIT_START = 0
 )(
 	input  logic        clk,
 	input  logic [12:0] addr,
@@ -24,11 +25,11 @@ module apple3_rom #(
 	// Separate physical banks allow one host write to mirror into both banks
 	// without creating a two-write-port memory.  Upper-half writes only replace
 	// the high bank, so both 4 KiB and 8 KiB uploads have the expected layout.
-	apple3_rom_bank #(.INIT_FILE(INIT_LOW_FILE)) low_bank (
+	apple3_rom_bank low_bank (
 		.clk, .addr(addr[11:0]), .q(low_q), .host_addr(host_addr[11:0]),
 		.host_data, .host_we(host_we && !host_addr[12])
 	);
-	apple3_rom_bank #(.INIT_FILE(INIT_HIGH_FILE)) high_bank (
+	apple3_rom_bank high_bank (
 		.clk, .addr(addr[11:0]), .q(high_q), .host_addr(host_addr[11:0]),
 		.host_data, .host_we(host_we)
 	);
@@ -47,8 +48,8 @@ module apple3_rom #(
 		if (host_we) begin
 			mem[host_addr] <= host_data;
 			// The stock ROM is 4 KiB and is selected in either of the two
-			// motherboard ROM banks.  Mirror a 4 KiB MiSTer upload into the
-			// upper bank; for an 8 KiB image the later upper-half writes replace
+			// motherboard ROM banks.  Mirror a 4 KiB upload into the upper
+			// bank; for an 8 KiB image the later upper-half writes replace
 			// that mirror with the image's distinct second bank.
 			if (!host_addr[12]) mem[{1'b1, host_addr[11:0]}] <= host_data;
 		end
@@ -58,9 +59,7 @@ module apple3_rom #(
 endmodule
 
 `ifdef APPLE3_USE_ALTSYNCRAM
-module apple3_rom_bank #(
-	parameter INIT_FILE = ""
-)(
+module apple3_rom_bank (
 	input  logic        clk,
 	input  logic [11:0] addr,
 	output wire  [7:0]  q,
@@ -95,7 +94,7 @@ module apple3_rom_bank #(
 		memory.clock_enable_output_a = "BYPASS",
 		memory.clock_enable_output_b = "BYPASS",
 		memory.indata_reg_b = "CLOCK1",
-		memory.init_file = INIT_FILE,
+		memory.init_file = "UNUSED",
 		memory.intended_device_family = "Cyclone V",
 		memory.lpm_type = "altsyncram",
 		memory.operation_mode = "BIDIR_DUAL_PORT",

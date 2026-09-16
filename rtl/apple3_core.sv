@@ -4,8 +4,6 @@
 module apple3_core #(
 	parameter ROM_INIT_FILE = "",
 	parameter integer ROM_INIT_START = 4096,
-	parameter ROM_INIT_LOW_FILE = "",
-	parameter ROM_INIT_HIGH_FILE = "",
 	parameter integer RAM_BANKS = 8
 ) (
 	input  logic        clk_14m,
@@ -196,7 +194,7 @@ module apple3_core #(
 	);
 
 	apple3_timing timing (
-		.clk_14m, .reset(machine_reset), .slow_mode(environment[7]),
+		.clk_14m, .slow_mode(environment[7]),
 		.screen_enable(environment[5]), .peripheral_cycle, .ram_cycle(ram_select),
 		.cpu_enable, .via_rising, .via_falling, .q3(clk_2m), .pixel_enable,
 		.hblank(timing_hblank), .vblank(timing_vblank), .display_slot,
@@ -218,8 +216,7 @@ module apple3_core #(
 	);
 
 	apple3_rom #(
-		.INIT_FILE(ROM_INIT_FILE), .INIT_START(ROM_INIT_START),
-		.INIT_LOW_FILE(ROM_INIT_LOW_FILE), .INIT_HIGH_FILE(ROM_INIT_HIGH_FILE)
+		.INIT_FILE(ROM_INIT_FILE), .INIT_START(ROM_INIT_START)
 	) rom (
 		.clk(clk_14m), .addr(rom_addr), .q(rom_q), .host_we(rom_we),
 		.host_addr(rom_host_addr), .host_data(rom_host_data)

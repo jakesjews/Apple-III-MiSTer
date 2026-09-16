@@ -47,7 +47,6 @@ sim/work/
 *.ghw
 
 # --- ROMs and disk images (copyrighted, keep local) ---
-rtl/rom/
 *.rom
 *.bin
 *.dsk
@@ -60,9 +59,6 @@ rtl/rom/
 
 # --- Local research material (manuals, ROMs, disk images, reference sources) ---
 research/
-
-# --- MiSTer screenshots fetched by screenshot.sh ---
-shot*.png
 
 # --- Editor / tooling ---
 .vscode/

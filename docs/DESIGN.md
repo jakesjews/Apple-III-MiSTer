@@ -1,20 +1,17 @@
 # Apple /// MiSTer core — hardware model and design notes
 
 This document records the hardware model, its sources, and implementation limits.
-The [accuracy audit](ACCURACY_AUDIT_2026-09-04.md) and
-[fix report](ACCURACY_FIXES_2026-09-07.md) distinguish verified behavior from
-remaining coverage gaps.
 
 Sources (abbreviations used below):
 
-* **[SRM]** Apple /// Level 2 Service Reference Manual (1982), theory of operation
-  chapters 2-12 (`research/docs/service_manual`).
+* **[SRM]** [Apple /// Level 2 Service Reference Manual](https://mirrors.apple2.org.za/ftp.apple.asimov.net/documentation/apple3/service_reference_manual/Apple%20III%20Service%20Reference%20Manual-OCR-1982.pdf)
+  (1982), theory of operation chapters 2-12.
 * **[PROM]** Decoded logic-PROM equations of the main logic board (Patrick Schaefer,
   bitsavers `A3PROMs`): 342-0046 timing logic, 342-0043 status, 342-0045 I/O logic,
   342-0055 video mux, 342-0032 video mode control, 342-0030 scan decode,
   342-0061/-0063 RAS/CAS decode, 342-0056 CASB65.
 * **[SOS]** SOS 1.3 kernel/loader/disk driver source, console driver 1.31 source.
-* **[ROM]** Boot ROM source (ca65 transcription of the ROM listing).
+* **[ROM]** Boot ROM source (Rob Justice's ca65 transcription of the ROM listing).
 * **[EDW]** Stephen A. Edwards, "Reconstructing the Apple II+ on an FPGA"
   (Circuit Cellar 224, 2009), a schematic-derived model of the same Woz clock
   generator and its once-per-line extended cycle.
@@ -59,6 +56,8 @@ Sources (abbreviations used below):
   All 16,768 ordinary states per frame match the binary scan PROM; the extended
   HPE state's refresh decode is outside that comparison.
 * SOS switches to 1 MHz (env bit 7) around disk transfers. [SOS]
+* Machine reset does not stop the timing chain, so video sync continues through
+  a reset. The counters start from zero when the FPGA is configured.
 
 ## Memory
 

@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 
 module timing_tb;
-	logic clk_14m = 0, reset = 1;
+	logic clk_14m = 0;
 	logic slow_mode = 0, screen_enable = 0, peripheral_cycle = 0;
 	logic ram_cycle = 1;
 	wire cpu_enable, via_rising, via_falling, q3, pixel_enable;
@@ -41,7 +41,6 @@ module timing_tb;
 
 	initial begin
 		repeat (2) @(posedge clk_14m);
-		reset = 0;
 		count_line(cpu_count, rise_count, fall_count, refresh_count);
 		if (cpu_count != 122 || rise_count != 65 || fall_count != 65 || refresh_count != 8)
 			$fatal(1, "fast blank line: cpu=%0d rise=%0d fall=%0d refresh=%0d",

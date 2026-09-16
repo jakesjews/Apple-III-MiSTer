@@ -41,7 +41,7 @@ module emu
 		"-;",
 		"S0,NIBDSKDO PO ,Mount Drive 1;",
 		"S1,NIBDSKDO PO ,Mount Drive 2;",
-		"F2,BIN,Load Boot ROM;",
+		"F2,ROMBIN,Load Boot ROM;",
 		"-;",
 		"O2,Aspect ratio,4:3,16:9;",
 		"O35,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
@@ -191,10 +191,21 @@ module emu
 		joystick_0[5], joystick_0[4], joystick_1[4], joystick_1[5]
 	};
 
-	wire rom_write = ioctl_download && ioctl_wr && (ioctl_index == 16'd2) &&
-	                 (ioctl_addr < 27'd8192);
+	// The boot ROM is not part of the bitstream.  MiSTer sends
+	// games/Apple-III/boot.rom with index 0 when the core starts, and the OSD
+	// "Load Boot ROM" entry (F2) can replace it at run time.  The machine is
+	// held in reset, with the picture blanked, until an image has arrived.
+	wire rom_download = ioctl_download &&
+	                    ((ioctl_index == 16'd0) || (ioctl_index[5:0] == 6'd2));
+	wire rom_write = rom_download && ioctl_wr && (ioctl_addr < 27'd8192);
+	logic rom_loaded = 1'b0;
+	logic rom_download_q = 1'b0;
+	always_ff @(posedge clk_14m) begin
+		rom_download_q <= rom_download;
+		if (rom_download_q && !rom_download) rom_loaded <= 1'b1;
+	end
 	wire core_reset = RESET || status[0] || hps_buttons[1] || !pll_locked ||
-	                  (ioctl_download && (ioctl_index == 16'd2));
+	                  rom_download || !rom_loaded;
 
 	logic [1:0] disk_mount = 2'b00;
 	logic [1:0] disk_change = 2'b00;
@@ -274,12 +285,7 @@ module emu
 	wire core_vsync;
 	wire signed [15:0] core_audio;
 
-	apple3_core #(
-		.ROM_INIT_FILE("rtl/rom/apple3.rom.hex"),
-		.ROM_INIT_START(0),
-		.ROM_INIT_LOW_FILE("rtl/rom/apple3-low.mif"),
-		.ROM_INIT_HIGH_FILE("rtl/rom/apple3-high.mif")
-	) machine (
+	apple3_core machine (
 		.clk_14m(clk_14m), .reset(core_reset), .ps2_key(ps2_key),
 		// An unopened HPS UART deasserts RTS. The stock ROM requires CTS
 		// ready during its ACIA test, as with the unplugged motherboard port.
@@ -311,7 +317,7 @@ module emu
 	logic [7:0] core_r_q, core_g_q, core_b_q;
 	logic core_hblank_q, core_vblank_q, core_hsync_q, core_vsync_q;
 	always_ff @(posedge clk_14m) begin
-		{core_r_q, core_g_q, core_b_q} <= {core_r, core_g, core_b};
+		{core_r_q, core_g_q, core_b_q} <= rom_loaded ? {core_r, core_g, core_b} : 24'd0;
 		{core_hblank_q, core_vblank_q, core_hsync_q, core_vsync_q} <=
 			{core_hblank, core_vblank, core_hsync, core_vsync};
 	end
