@@ -79,72 +79,70 @@ machine's one extra key, DELETE, on the host Delete key.
 Serial uses MiSTer's UART. Leave **Serial CTS** at **Always ready** unless
 using host hardware flow control. [Serial details](docs/DEVELOPMENT.md#serial-port).
 
-## Known limitations
+## Todo
 
-- Expansion cards, ProFile hard disks, Silentype and the optional 512 KiB
-  memory expansion are not implemented.
-- Broad software and copy-protection compatibility has not been established.
+Existing partial implementations are noted where they provide a starting point.
 
-## Planned features and accuracy work
+- [x] **Keyboard accuracy and optional III Plus keymap.** Repeat activation
+      ordering, the cursor keys' second contacts and the guest-visible solid
+      Apple state they drive, and an optional Apple /// Plus keymap with its
+      DELETE key.
 
-The following items remain open. Existing partial implementations are noted
-where they provide a starting point.
+- [ ] **Display-fetch and character-download timing.** Replace the current line
+      prefetch and batched character downloads with hardware-equivalent timing.
+      Add tests for writes during active display and around character-download
+      boundaries, extending the static rendering checks.
 
-1. **All four Disk III drives.** Extend the current internal drive and one
-   external drive to expose all four drives, retaining the Disk II-compatible
-   option. Preserve shared disk-phase/fine-scroll behavior and independent
-   mounting, write protection and media-change state.
+- [ ] **All four Disk III drives.** Extend the current internal drive and one
+      external drive to expose all four drives, retaining the Disk II-compatible
+      option. Preserve shared disk-phase/fine-scroll behavior and independent
+      mounting, write protection and media-change state.
 
-2. **Reusable slots 1–4.** Implement slot I/O, ROM selection/deselection and
-   per-slot interrupt routing. Add coprocessor bus ownership when the first
-   card needs it.
+- [ ] **Native joystick accuracy.** Complete the existing conversion and switch
+      model with accurate charge/start/timeout behavior. Test different polling
+      and timer methods, and provide a host mapping for the latching switch.
 
-3. **One virtual block-storage interface.** Use a single interface in place of
-   separate historical storage-card projects, with compatible SOS driver and
-   firmware support. Main already has read-only block-image assignments, but
-   the core has no block controller. Add block reads/writes, status, capacity
-   and error handling, and a known working SOS configuration. Keep optional
-   direct hard-disk boot separate from stock boot behavior.
+- [ ] **One virtual block-storage interface.** Use a single interface in place of
+      separate historical storage-card projects, with compatible SOS driver and
+      firmware support. Main already has read-only block-image assignments, but
+      the core has no block controller. Add block reads/writes, status, capacity
+      and error handling, and a known working SOS configuration. Keep optional
+      direct hard-disk boot separate from stock boot behavior.
 
-4. **Video source modes.** Add monochrome-composite and color-composite modes
-   alongside the existing RGB output. Include Apple II artifact color, native
-   III composite behavior and the dedicated monochrome signal's grayscale
-   behavior.
+- [ ] **Video source modes.** Add monochrome-composite and color-composite modes
+      alongside the existing RGB output. Include Apple II artifact color, native
+      III composite behavior and the dedicated monochrome signal's grayscale
+      behavior.
 
-5. **Native joystick accuracy.** Complete the existing conversion and switch
-   model with accurate charge/start/timeout behavior. Test different polling
-   and timer methods, and provide a host mapping for the latching switch.
+- [ ] **III Plus model with authentic interlace.** Reuse the existing clock and
+      keyboard work. Implement field timing and display-memory behavior rather
+      than simply doubling lines.
 
-6. **Peripheral wait-state and boundary timing.** Implement and test delayed
-   IOSTOP/ready behavior, and complete extended-horizontal-state timing beyond
-   the existing scan counters and Q3 hold.
+- [ ] **Reusable slots 1–4.** Implement slot I/O, ROM selection/deselection and
+      per-slot interrupt routing. Add coprocessor bus ownership when the first
+      card needs it.
 
-7. **Display-fetch and character-download timing.** Replace the current line
-   prefetch and batched character downloads with hardware-equivalent timing.
-   Add tests for writes during active display and around character-download
-   boundaries, extending the static rendering checks.
+- [ ] **Peripheral wait-state and boundary timing.** Implement and test delayed
+      IOSTOP/ready behavior, and complete extended-horizontal-state timing beyond
+      the existing scan counters and Q3 hold.
 
-8. **Apple II Mouse Interface card.** Use host mouse input and validate against
-   an existing native mouse-driver configuration.
+- [ ] **Apple II Mouse Interface card.** Use host mouse input and validate against
+      an existing native mouse-driver configuration.
 
-9. **External memory and optional 512 KiB RAM.** Build on the parameterized
-   RAM/MMU support with an external-memory backend and a usable 512 KiB option.
-   Preserve paired-byte reads and guest-visible memory timing, and budget for
-   future card RAM and disk buffers.
+- [ ] **External memory and optional 512 KiB RAM.** Build on the parameterized
+      RAM/MMU support with an external-memory backend and a usable 512 KiB option.
+      Preserve paired-byte reads and guest-visible memory timing, and budget for
+      future card RAM and disk buffers.
 
-10. **PCPI Appli-Card.** Add it as the first CP/M option and validate its disk
-    services against the chosen storage configuration.
+- [ ] **PCPI Appli-Card.** Add it as the first CP/M option and validate its disk
+      services against the chosen storage configuration.
 
-11. **III Plus model with authentic interlace.** Reuse the existing clock and
-    keyboard work. Implement field timing and display-memory behavior rather
-    than simply doubling lines.
+- [ ] **Microsoft SoftCard III.** Add it as a second CP/M option, including the
+      required bus integration and storage-driver configuration.
 
-12. **Microsoft SoftCard III.** Add it as a second CP/M option, including the
-    required bus integration and storage-driver configuration.
+- [ ] **Titan III+II.** Add support for this expansion.
 
-13. **Titan III+II.** Add support for this expansion.
-
-14. **Titan III+IIe.** Add support for this expansion.
+- [ ] **Titan III+IIe.** Add support for this expansion.
 
 [Development](docs/DEVELOPMENT.md) · [Hardware design](docs/DESIGN.md) ·
 [Disk validation](docs/DISK_FIDELITY_2026-09-16.md) · [License](LICENSE)
