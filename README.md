@@ -1,4 +1,4 @@
-# Apple /// for MiSTer
+# [Apple ///](https://en.wikipedia.org/wiki/Apple_III) for MiSTer
 
 __Warning: This core is vibe coded.__
 
