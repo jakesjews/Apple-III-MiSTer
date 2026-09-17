@@ -152,6 +152,18 @@ module rtc_accuracy_tb;
 		rd(5'h14, sampled);
 		check(sampled == 0, "rollover remains clear until another counter read");
 
+		// Hold the status address across the update-window edge. Changing the
+		// address at the edge can hide a stale intermediate in the read mux.
+		wait (dut.millisecond_divider == 300);
+		rd(2, sampled);
+		addr = 5'h14;
+		#1;
+		check(data_out == 0, "held status address is clear before the update window");
+		wait (dut.millisecond_divider == 999);
+		@(negedge clk);
+		check(data_out == 1, "held status address sees the update window on its first clock");
+		rd(5'h14, sampled);
+
 		wr(5'h15, 0);
 		wr(5'h11, 8'h06);
 		rd(5'h10, sampled);

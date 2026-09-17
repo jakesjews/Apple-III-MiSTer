@@ -67,6 +67,8 @@ module apple3_rtc #(
 				compare_match = 1'b0;
 		end
 
+		// The status read mux must use this clock's window value.
+		rollover_window = (millisecond_divider < ROLLOVER_CLOCKS) || (millisecond_divider == CLOCKS_PER_MS - 14'd1);
 		case (addr)
 			5'h00, 5'h01, 5'h02, 5'h03, 5'h04, 5'h05, 5'h06, 5'h07: data_out = counter[addr[2:0]];
 			5'h08, 5'h09, 5'h0a, 5'h0b, 5'h0c, 5'h0d, 5'h0e, 5'h0f: data_out = compare[addr[2:0]];
@@ -77,7 +79,6 @@ module apple3_rtc #(
 		endcase
 		irq              = |irq_status;
 		go_command       = !reset && write_strobe && (addr == 5'h15);
-		rollover_window  = (millisecond_divider < ROLLOVER_CLOCKS) || (millisecond_divider == CLOCKS_PER_MS - 14'd1);
 		millisecond_tick = (millisecond_divider == CLOCKS_PER_MS - 14'd1);
 	end
 

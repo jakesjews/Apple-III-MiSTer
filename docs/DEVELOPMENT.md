@@ -150,12 +150,15 @@ disconnected-port warnings and declaration-initializer warnings (FPGA power-up
 values). Known unused HPS ports and project debug outputs have file/message
 waivers; missing required connections still warn. Width, multiple-driver,
 unused-signal, combinational-order and reset checks remain enabled.
+Reviewed FPGA initialization, bounded-width expressions and unused interface
+signals have documented file/message waivers in `lint/exclusions.vlt`. These
+match the known diagnostics rather than disabling those rules for project RTL.
 
 Lint uses the existing behavioral RAM/ROM branches and a port-only PLL stub,
 so it does not validate Intel primitives, PLL behavior or timing. No ROM image,
 Quartus build or MiSTer connection is needed. Generated files remain ignored.
 
-Warnings are fatal: existing RTL warnings currently make `make lint` fail.
+Warnings are fatal: any diagnostic outside the reviewed waivers fails `make lint`.
 The lint command does not change RTL. This setup was validated with
 Verilator 5.052 and GHDL 6.0.0.
 
