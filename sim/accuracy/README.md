@@ -17,7 +17,7 @@ nonzero if any group failed.
 | Test | What it checks |
 |---|---|
 | `video_accuracy_tb.sv` | Equal 140-mode pixel widths; 49,152 graphics address and byte-lane checks across rows, scroll offsets, planes and pages; the Apple II TEXT, lores and mixed-region boundaries. |
-| `keyboard_accuracy_tb.sv` | Strobed NUL; independent left and right modifiers; held-key tracking, release ordering, host typematic suppression and repeat fallback. |
+| `keyboard_accuracy_tb.sv` | Strobed NUL; independent left and right modifiers; held-key tracking, release ordering, host typematic suppression and repeat fallback; repeat activation ordering around the solid Apple line, the cursor keys' second contacts and the Apple /// Plus DELETE code. |
 | `disk_protection_tb.sv` | Each drive writes its track cache when writable and emits no writes when protected; the other drive is untouched. |
 | `rtc_accuracy_tb.sv` | GO rounds seconds correctly; the 10 Hz interrupt includes whole-second boundaries; rollover status behaves as the data sheet describes; machine reset preserves the clock. |
 | `timing_prom_tb.sv` | 134,144 A-slot PHASEN comparisons across RAM selection, screen enable and CPU speed, and 16,768 refresh reservations, compared with the original timing and scan PROM contents. |

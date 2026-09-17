@@ -3,12 +3,16 @@
 // The translation table follows the Apple service-manual matrix and mask-ROM
 // output table, checked against MAME's independently transcribed key_remap and
 // the Apple-iii-Keyboard-Encoder hardware replacement project.
+//
+// Repeat activation, the cursor keys' second contacts and the Apple /// Plus
+// DELETE key follow SRM ch.8 and the Apple /// Plus device-driver addendum.
 
 module apple3_keyboard (
 	input logic        clk,
 	input logic        reset,
-	input logic [10:0] ps2_key,      // {toggle, pressed, extended, set-2 code}
+	input logic [10:0] ps2_key,       // {toggle, pressed, extended, set-2 code}
 	input logic        clear_strobe,
+	input logic        plus_keymap,   // Apple /// Plus keyboard: separate DELETE key
 
 	output logic [7:0] key_code,
 	output logic       strobe,
@@ -22,6 +26,17 @@ module apple3_keyboard (
 	output logic       data_ready
 );
 
+	// 0.5 s, 10 cps and 30 cps at 14.31818 MHz. [SRM 8.7]
+	localparam logic [23:0] REPEAT_DELAY = 24'd7159090;
+	localparam logic [23:0] REPEAT_SLOW  = 24'd1431818;
+	localparam logic [23:0] REPEAT_FAST  = 24'd477272;
+
+	// PS/2 set-2 codes of the four two-contact cursor keys.
+	localparam logic [8:0] KEY_UP    = 9'h175;
+	localparam logic [8:0] KEY_DOWN  = 9'h172;
+	localparam logic [8:0] KEY_LEFT  = 9'h16b;
+	localparam logic [8:0] KEY_RIGHT = 9'h174;
+
 	logic        old_toggle;
 	logic [ 8:0] held_key;
 	logic [23:0] repeat_count;
@@ -32,14 +47,28 @@ module apple3_keyboard (
 	logic [  8:0] scan_key;
 	logic [1:0] shift_down, control_down, apple_down, alt_down;
 	logic caps_down;
+	logic cursor_stage2, cursor_down;
+	logic repeat_armed, fast_repeat, solid_apple_q;
 
 	assign any_key_down = |keys_down;
 	assign shift        = |shift_down;
 	assign control      = |control_down;
 	assign open_apple   = |apple_down;
-	assign solid_apple  = |alt_down;
 
-	function automatic [8:0] translate_key(input logic [8:0] key, input logic shift_down, input logic control_down);
+	// The cursor keys' second contacts are OR-wired into the Apple2 (solid
+	// Apple) switch line on KB-5, so a firmly held cursor key is indistinguishable
+	// from the key itself at $C008 and on the E VIA's port A. [SRM 8.7]
+	assign solid_apple = |alt_down || cursor_stage2;
+	assign cursor_down = keys_down[KEY_UP] || keys_down[KEY_DOWN] || keys_down[KEY_LEFT] || keys_down[KEY_RIGHT];
+
+	// Up, Down, Left and Right are the two-contact keys; the Backspace host key
+	// shares the left-arrow code but is an ordinary single-contact key.
+	function automatic logic cursor_key(input logic [8:0] key);
+		cursor_key = (key == KEY_UP) || (key == KEY_DOWN) || (key == KEY_LEFT) || (key == KEY_RIGHT);
+	endfunction
+
+	function automatic [8:0] translate_key(input logic [8:0] key, input logic shift_down, input logic control_down,
+										   input logic plus);
 		logic [1:0] mod_bits;
 		begin
 			mod_bits      = {control_down, shift_down};
@@ -129,7 +158,10 @@ module apple3_keyboard (
 				9'h172: translate_key = 9'h18a;  // Down
 				9'h16b: translate_key = 9'h188;  // Left
 				9'h174: translate_key = 9'h195;  // Right
-				9'h171: translate_key = 9'h1ae;  // Delete/keypad period
+				// The Apple /// Plus adds a DELETE key.  Like the other special keys
+				// it carries the special-code flag, so the console driver passes DEL
+				// through whatever keyboard layout is loaded. [/// Plus addendum A]
+				9'h171: translate_key = plus ? 9'h1ff : 9'h1ae;  // Delete / keypad period
 				9'h15a: translate_key = 9'h18d;  // Keypad Enter
 
 				9'h070:  translate_key = 9'h1b0;
@@ -150,9 +182,9 @@ module apple3_keyboard (
 	endfunction
 
 	always_comb begin
-		translated         = translate_key(ps2_key[8:0], shift, control);
+		translated         = translate_key(ps2_key[8:0], shift, control, plus_keymap);
 		event_key          = translated[8];
-		repeat_translation = translate_key(held_key, shift, control);
+		repeat_translation = translate_key(held_key, shift, control, plus_keymap);
 	end
 
 	always_ff @(posedge clk) begin
@@ -173,8 +205,18 @@ module apple3_keyboard (
 			held_key_valid <= 1'b0;
 			scan_key       <= 9'h000;
 			repeat_count   <= 24'd0;
+			cursor_stage2  <= 1'b0;
+			repeat_armed   <= 1'b0;
+			fast_repeat    <= 1'b0;
+			solid_apple_q  <= 1'b0;
 		end else begin
 			if (clear_strobe) strobe <= 1'b0;
+
+			// The solid Apple line only speeds the timers up while it is held,
+			// and its edge is what clocks the high-speed flip-flop. [SRM 8.8]
+			solid_apple_q <= solid_apple;
+			if (!solid_apple) fast_repeat <= 1'b0;
+			if (!cursor_down) cursor_stage2 <= 1'b0;
 
 			if (ps2_key[10] != old_toggle) begin
 				old_toggle <= ps2_key[10];
@@ -201,10 +243,15 @@ module apple3_keyboard (
 							data_ready     <= 1'b1;
 							held_key       <= ps2_key[8:0];
 							held_key_valid <= 1'b1;
-							repeat_count   <= 24'd7159090;  // 0.5 s at 14.31818 MHz
+							repeat_count   <= REPEAT_DELAY;
+							// A solid Apple already down when the key closes never
+							// clocks the high-speed flip-flop, and the key sends a
+							// single character instead of repeating. [SRM 8.7]
+							repeat_armed   <= !solid_apple;
+							fast_repeat    <= 1'b0;
 						end else if (!ps2_key[9] && (ps2_key[8:0] == held_key)) begin
 							held_key_valid <= 1'b0;
-							repeat_count   <= 24'd7159090;
+							repeat_count   <= REPEAT_DELAY;
 						end
 					end
 				endcase
@@ -215,13 +262,27 @@ module apple3_keyboard (
 				if (keys_down[scan_key]) begin
 					held_key       <= scan_key;
 					held_key_valid <= 1'b1;
+					// A cursor key holding its own second contact closed keeps the
+					// high-speed repeat that contact activated for it. [SRM 8.7]
+					repeat_armed   <= !solid_apple || (cursor_stage2 && cursor_key(scan_key));
+					fast_repeat    <= cursor_stage2 && cursor_key(scan_key);
 				end
+			end else if (solid_apple && !solid_apple_q) begin
+				// Pressed after the key to be repeated: the edge starts the
+				// repeat and raises it to 30 cps. [SRM 8.7]
+				repeat_armed <= 1'b1;
+				fast_repeat  <= 1'b1;
+				repeat_count <= REPEAT_FAST;
 			end else if (repeat_count != 0) repeat_count <= repeat_count - 1'b1;
-			else begin
+			else if (repeat_armed) begin
 				key_code     <= repeat_translation[7:0];
 				strobe       <= 1'b1;
 				data_ready   <= 1'b1;
-				repeat_count <= solid_apple ? 24'd477272 : 24'd1431818;
+				repeat_count <= fast_repeat ? REPEAT_FAST : REPEAT_SLOW;
+				// A PS/2 keyboard reports one contact per key, so a cursor key
+				// held to its repeat threshold stands in for the firmer press
+				// that closes the second contact on real hardware.
+				if (cursor_key(held_key)) cursor_stage2 <= 1'b1;
 			end
 		end
 	end

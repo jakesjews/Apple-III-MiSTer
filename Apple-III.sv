@@ -43,6 +43,7 @@ module emu (
 		"O2,Aspect ratio,4:3,16:9;",
 		"O35,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 		"O67,Write Protect,None,Drive 1,Drive 2,Both;",
+		"O8,Keyboard,Apple ///,/// Plus;",
 		"O9,Serial CTS,Always ready,Host RTS;",
 		"-;",
 		"R0,Reset;",
@@ -245,6 +246,9 @@ module emu (
 		.clk_14m           (clk_14m),
 		.reset             (core_reset),
 		.ps2_key           (ps2_key),
+		// The Apple /// Plus keyboard adds a DELETE key; the rest of the
+		// encoder output is the same on both machines.
+		.plus_keymap       (status[8]),
 		// An unopened HPS UART deasserts RTS. The stock ROM requires CTS
 		// ready during its ACIA test, as with the unplugged motherboard port.
 		.serial_rx         (UART_RXD),

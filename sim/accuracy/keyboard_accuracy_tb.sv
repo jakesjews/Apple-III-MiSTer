@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 // SRM ch.8 explicitly assigns NUL to Control-Shift-2.
 module keyboard_accuracy_tb;
-	logic clk = 0, reset = 1, clear_strobe = 0;
+	logic clk = 0, reset = 1, clear_strobe = 0, plus_keymap = 0;
 	always #5 clk = ~clk;
 	logic [10:0] ps2_key = 0;
 	wire  [ 7:0] key_code;
@@ -94,6 +94,64 @@ module keyboard_accuracy_tb;
 		dut.repeat_count = 0;
 		repeat (3) @(negedge clk);
 		check(!strobe && !any_key_down, "no repeat remains after the last key is released");
+
+		// Repeat ordering: the solid Apple line (Apple's Apple2) clocks the high-speed
+		// flip-flop, so it has to close after the key it is to repeat.
+		event_key(1, 9'h011);
+		event_key(1, 9'h01c);
+		clear_strobe = 1;
+		@(negedge clk);
+		clear_strobe     = 0;
+		dut.repeat_count = 1;
+		repeat (6) @(negedge clk);
+		check(!strobe, "solid Apple held before a key sends a single character");
+		event_key(0, 9'h011);
+		event_key(1, 9'h011);
+		repeat (2) @(negedge clk);
+		check(dut.fast_repeat, "solid Apple closed after the key arms the high-speed repeat");
+		clear_strobe = 1;
+		@(negedge clk);
+		clear_strobe     = 0;
+		dut.repeat_count = 1;
+		repeat (2) @(negedge clk);
+		check(strobe && key_code == 8'h41 && dut.repeat_count == 24'd477272, "the armed key then repeats at 30 cps");
+		event_key(0, 9'h011);
+		clear_strobe = 1;
+		@(negedge clk);
+		clear_strobe     = 0;
+		dut.repeat_count = 1;
+		repeat (2) @(negedge clk);
+		check(strobe && dut.repeat_count == 24'd1431818, "releasing solid Apple returns the held key to 10 cps");
+		event_key(0, 9'h01c);
+
+		// The cursor keys are two-contact switches whose second contact is
+		// OR-wired into the solid Apple line, so the guest sees that key too.
+		event_key(1, 9'h174);
+		check(!solid_apple, "a cursor key's first contact leaves the solid Apple line alone");
+		clear_strobe = 1;
+		@(negedge clk);
+		clear_strobe     = 0;
+		dut.repeat_count = 1;
+		repeat (2) @(negedge clk);
+		check(strobe && key_code == 8'h95, "a held cursor key repeats");
+		check(solid_apple, "the held cursor key's second contact drives the solid Apple line");
+		repeat (2) @(negedge clk);
+		check(dut.fast_repeat, "the cursor second contact raises that key to 30 cps");
+		event_key(0, 9'h174);
+		repeat (3) @(negedge clk);
+		check(!solid_apple, "releasing the cursor key opens the second contact");
+
+		// The Apple /// Plus DELETE key is a special key: the layout table never
+		// redefines it, which needs the encoder's special-code flag.
+		clear_strobe = 1;
+		@(negedge clk);
+		clear_strobe = 0;
+		plus_keymap  = 1;
+		event_key(1, 9'h171);
+		check(strobe && key_code == 8'hff, "the /// Plus DELETE key sends a special-flagged DEL");
+		event_key(0, 9'h171);
+		plus_keymap = 0;
+
 		$display("keyboard accuracy: %0d failed checks", failures);
 		if (failures) $fatal(1, "keyboard accuracy discrepancies");
 		$finish;

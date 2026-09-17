@@ -36,6 +36,7 @@ int main(int argc, char **argv) {
 	std::string drive2;
 	const bool disk_test = argc > 2;
 	bool key_test = false, warm_reset = false, to_menu = false, disk_trace = false, trace_all = false;
+	bool plus_keymap = false;  // Apple /// Plus keyboard: separate DELETE key
 	// --keys=down,down,enter,wait5,enter typed once --keys-after=TEXT is on screen.
 	std::string keys, keys_after;
 	bool writable = false;  // mount images read-write, as Main does for writable sources
@@ -56,6 +57,7 @@ int main(int argc, char **argv) {
 		if (option.rfind("--sd-delay=", 0) == 0) sd_delay = std::strtoul(argv[i] + 11, nullptr, 10);
 		if (option.rfind("--drive2=", 0) == 0) drive2 = option.substr(9);
 		if (option == "--keytest") key_test = true;
+		if (option == "--plus-keymap") plus_keymap = true;
 		if (option == "--warm-reset") warm_reset = true;
 		if (option == "--to-menu") to_menu = true;
 		if (option == "--disk-trace") disk_trace = true;
@@ -92,6 +94,7 @@ int main(int argc, char **argv) {
 	top.sd_buff_dout = 0;
 	top.sd_buff_wr = 0;
 	top.ps2_key = 0;
+	top.plus_keymap = plus_keymap;
 	top.probe_addr = 0;
 	top.host_rtc[0] = top.host_rtc[1] = top.host_rtc[2] = 0;
 	if (rtc.size() == 13) {
@@ -307,6 +310,8 @@ int main(int argc, char **argv) {
 						uint8_t code = 0; bool ext = false;
 						if (k == "enter") code = 0x5a; else if (k == "esc") code = 0x76;
 						else if (k == "down") { code = 0x72; ext = true; } else if (k == "up") { code = 0x75; ext = true; }
+						else if (k == "left") { code = 0x6b; ext = true; } else if (k == "right") { code = 0x74; ext = true; }
+						else if (k == "del") { code = 0x71; ext = true; } else if (k == "bs") code = 0x66;
 						else if (k == "space") code = 0x29;
 						if (code) { tap(at, code, ext); at += 0.6; }
 					}
@@ -353,6 +358,14 @@ int main(int argc, char **argv) {
 				std::printf("kbd read t=%.3f pc=%04X addr=%04X data=%02X\n",
 				            static_cast<double>(half_cycle / 2) / second, top.pc,
 				            top.cpu_addr, top.cpu_din);
+				++keyboard_trace_count;
+			}
+			// A --keys script instead traces only the strobed encoder bytes the
+			// guest reads, which is what distinguishes one key code from another.
+			else if (keys_armed && keyboard_trace_count < 120 && top.cpu_rwn &&
+			         top.cpu_addr == 0xc000 && (top.cpu_din & 0x80)) {
+				std::printf("key byte t=%.3f data=%02X\n",
+				            static_cast<double>(half_cycle / 2) / second, top.cpu_din);
 				++keyboard_trace_count;
 			}
 			// --disk-trace: seeks, ROM address-field reads (stock ROM addresses), head

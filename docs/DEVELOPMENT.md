@@ -23,7 +23,8 @@ behaviour to its source.
   Apple II text, lores and hires modes used by the emulation disk.
 - Downloadable character generator, inverse and flashing attributes, page
   selection, screen blanking and smooth vertical scrolling.
-- Both 6522 VIAs, the keyboard encoder with its repeat behaviour, the MM58167
+- Both 6522 VIAs, the keyboard encoder with its two repeat rates, the cursor
+  keys' second contacts and the optional /// Plus DELETE key, the MM58167
   clock, joystick switches and analog inputs, speaker, bell and six-bit audio.
 - The Disk /// controller's P6 sequencer, internal drive and one external drive,
   including native WOZ bitstreams and quarter-track mapping.
@@ -198,10 +199,13 @@ where SOS reads its protection key; `--disk-trace-all` covers every track
 and adds write-mode bursts with their track positions. `--keys=` types a script
 once `--keys-after=TEXT` is on screen, for example
 `--keys=text:d,wait3,text:f,wait3,text:.d1,enter,text:wbfmt,enter,wait3,text:y,wait40,dump`
-to run SOS's Format a Volume (tokens: `enter`, `esc`, `up`, `down`, `space`,
-`text:...`, `waitN` seconds, `dump` the text screen). `--writable` mounts images
+to run SOS's Format a Volume (tokens: `enter`, `esc`, `up`, `down`, `left`,
+`right`, `del`, `bs`, `space`, `text:...`, `waitN` seconds, `dump` the text screen). `--writable` mounts images
 read-write and `--sd-write-delay=N` slows saved blocks. `--keytest` drives System Utilities with
-injected PS/2 keys and decodes the text page after each. See
+injected PS/2 keys and decodes the text page after each, and `--plus-keymap`
+runs the machine with the Apple /// Plus keyboard selected. A `--keys` script
+also prints each strobed encoder byte the guest reads at $C000, which is what
+tells one key code from another when the screen shows the same glyph. See
 [sim/accuracy/README.md](../sim/accuracy/README.md) for the PROM-based timing
 comparison and the 6502 functional test.
 

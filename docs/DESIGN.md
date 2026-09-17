@@ -20,6 +20,8 @@ Sources (abbreviations used below):
 * **[DH]** diskhero (2022 game, verified on real hardware).
 * **[MEMO]** Apple internal memo "Funny Mode and SOS", July 1981, appendix 2.
 * **[RTC]** National Semiconductor [AN-353, MM58167B Real Time Clock Design Guide](https://bitsavers.org/components/national/_appNotes/AN-0353.pdf), especially pp. 8, 16–17 and figure 23.
+* **[PLUS]** Apple /// Plus addendum to the Standard Device Drivers manual (1983),
+  appendix A keyboard codes.
 
 ## Clocks and CPU speed
 
@@ -224,14 +226,38 @@ CB1 = CB2 = VBL.
 10×8 matrix scanned by an AY-3600-style encoder with Apple's mask ROM; shift and
 control are direct inputs to the encoder; alpha lock and the two Apple keys are direct
 switch inputs to $C008. Codes per [SRM ch.8] table (upper case letters, control codes,
-keypad/arrows with bit 7 set). Any key held for 0.5 s repeats at 10 cps; with the
-solid Apple key held, 30 cps. Ctrl+Reset = hardware reset, Reset alone = NMI, both
+keypad/arrows with bit 7 set). Ctrl+Reset = hardware reset, Reset alone = NMI, both
 gated by env bit 4. [SRM ch.8, MAME]
+
+Repeat: a key held for 0.5 s repeats at 10 cps. The solid Apple switch line
+(Apple's Apple2, keyboard connector KB-5; Open Apple is Apple1 on KB-7) clocks
+the high-speed flip-flop and changes the 556 timing, so it has to close after
+the key it speeds up. Pressed while a key is already held it raises that key to
+30 cps; held before the key it never clocks the flip-flop, and the key sends a
+single character instead of repeating. Releasing it returns the held key to 10
+cps. [SRM 8.7-8.8]
+
+The four cursor keys are two-contact switches. The first contact sends the code,
+and a firmer press closes a second contact OR-wired into that same solid Apple
+line on KB-5. That both starts the high-speed repeat and is what the guest sees
+as solid Apple, at $C008 bit 5 and on the E VIA's port A bit 6. A PS/2 keyboard
+reports one contact per key, so a cursor key held to its repeat threshold stands
+in for the firmer press: a tap leaves the solid Apple line alone, and a hold
+gives one 10 cps repeat and then 30 cps, as pressing harder does on the real
+keyboard. The host Backspace key shares the left-arrow code but is an ordinary
+key. [SRM 8.7-8.8]
 
 The PS/2 adapter tracks the two instances of each modifier independently and
 keeps an ordinary-key bitmap for ANY-key-down. Validity is separate from the
 encoded byte, so Control-Shift-2 emits a strobed NUL. Duplicate host make events
 do not restart repeat; after releasing the newest key, another held key can repeat.
+
+OSD status bit 8 selects the Apple /// Plus keyboard, which is the original's 61
+main keys plus a DELETE key; both machines share the same encoder codes and the
+same SOS keyboard layouts. DELETE arrives on the host Delete key, which otherwise
+duplicates keypad period. Its encoder code is $FF: DEL with the special-code flag,
+because the console driver only rewrites codes without that flag, and the layout
+table is documented as never defining DELETE. [PLUS, SOS]
 
 ## Real-time clock
 

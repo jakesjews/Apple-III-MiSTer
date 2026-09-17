@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 
 module keyboard_tb;
-	logic clk = 0, reset = 1, clear_strobe = 0;
+	logic clk = 0, reset = 1, clear_strobe = 0, plus_keymap = 0;
 	logic [10:0] ps2_key = 0;
 	wire  [ 7:0] key_code;
 	wire strobe, any_key_down, shift, control, alpha_lock;
@@ -50,6 +50,18 @@ module keyboard_tb;
 		if (!reset_key) $fatal(1, "reset key make");
 		key_event(8'h07, 0, 0);
 		if (reset_key) $fatal(1, "reset key break");
+
+		key_event(8'h71, 1, 1);  // Delete on the original keyboard: keypad period
+		if (key_code !== 8'hae) $fatal(1, "delete without the /// Plus keymap=%02x", key_code);
+		key_event(8'h71, 1, 0);
+		plus_keymap = 1;
+		key_event(8'h71, 1, 1);  // The /// Plus DELETE key, special-code flag set
+		if (key_code !== 8'hff) $fatal(1, "/// Plus delete=%02x", key_code);
+		key_event(8'h71, 1, 0);
+		key_event(8'h71, 0, 1);  // Keypad period is unchanged by the keymap
+		if (key_code !== 8'hae) $fatal(1, "/// Plus keypad period=%02x", key_code);
+		key_event(8'h71, 0, 0);
+		plus_keymap = 0;
 
 		$display("PASS apple3_keyboard");
 		$finish;
