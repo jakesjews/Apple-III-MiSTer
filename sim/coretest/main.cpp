@@ -34,11 +34,17 @@ int main(int argc, char **argv) {
 	std::vector<uint8_t> disk_image[2];
 	std::string drive2;
 	const bool disk_test = argc > 2;
-	bool key_test = false, warm_reset = false, to_menu = false;
+	bool key_test = false, warm_reset = false, to_menu = false, disk_trace = false;
 	unsigned sd_delay = 0;
 	// MGL-style sequencing: seconds of machine time before each mount, and
 	// between the last mount and the reset that MiSTer issues afterwards.
 	double mount_delay = 0, reset_delay = -1;
+	// --to-menu waits for this text; --expect=TEXT substitutes another title's screen.
+	std::string expect = "Device handling";
+	// Host clocks per transferred byte. 4 is far quicker than the HPS link.
+	unsigned sd_byte_clocks = 4;
+	// Host clock as MiSTer sends it: --rtc=YYMMDDWhhmmss, W = weekday with Sunday = 0.
+	std::string rtc;
 	for (int i = 3; i < argc; ++i) {
 		std::string option = argv[i];
 		if (option.rfind("--sd-delay=", 0) == 0) sd_delay = std::strtoul(argv[i] + 11, nullptr, 10);
@@ -46,6 +52,10 @@ int main(int argc, char **argv) {
 		if (option == "--keytest") key_test = true;
 		if (option == "--warm-reset") warm_reset = true;
 		if (option == "--to-menu") to_menu = true;
+		if (option == "--disk-trace") disk_trace = true;
+		if (option.rfind("--rtc=", 0) == 0) rtc = option.substr(6);
+		if (option.rfind("--expect=", 0) == 0) { expect = option.substr(9); to_menu = true; }
+		if (option.rfind("--sd-byte-clocks=", 0) == 0) sd_byte_clocks = std::strtoul(argv[i] + 17, nullptr, 10);
 		if (option.rfind("--mount-delay=", 0) == 0) mount_delay = std::strtod(argv[i] + 14, nullptr);
 		if (option.rfind("--reset-delay=", 0) == 0) reset_delay = std::strtod(argv[i] + 14, nullptr);
 	}
@@ -72,6 +82,13 @@ int main(int argc, char **argv) {
 	top.sd_buff_wr = 0;
 	top.ps2_key = 0;
 	top.probe_addr = 0;
+	top.host_rtc[0] = top.host_rtc[1] = top.host_rtc[2] = 0;
+	if (rtc.size() == 13) {
+		auto bcd = [&](std::size_t at) { return unsigned(rtc[at] - '0') << 4 | unsigned(rtc[at + 1] - '0'); };
+		top.host_rtc[0] = bcd(11) | bcd(9) << 8 | bcd(7) << 16 | bcd(4) << 24;
+		top.host_rtc[1] = bcd(2) | bcd(0) << 8 | unsigned(rtc[6] - '0') << 16 | 0x40u << 24;
+		top.host_rtc[2] = 1;  // toggle bit: a new time has arrived
+	}
 	std::size_t sd_byte = 0, sd_transfer_bytes = 512, sd_start = 0;
 	unsigned sd_disk = 0, sd_tick = 0, sd_wait_cycles = 0, sd_block_reads = 0;
 	bool sd_finishing = false, sd_transfer_read = false;
@@ -95,12 +112,12 @@ int main(int argc, char **argv) {
 			const auto &data = disk_image[sd_disk];
 			top.sd_buff_addr = sd_byte;
 			top.sd_buff_dout = sd_start + sd_byte < data.size() ? data[sd_start+sd_byte] : 0;
-			top.sd_buff_wr = sd_transfer_read && sd_tick == 3;
+			top.sd_buff_wr = sd_transfer_read && sd_tick == sd_byte_clocks - 1;
 		}
 	};
 	auto finish_storage = [&]() {
 		if (!top.clk || !top.sd_ack) return;
-		if (++sd_tick < 4) return;
+		if (++sd_tick < sd_byte_clocks) return;
 		sd_tick = 0;
 		if (!sd_transfer_read && sd_start + sd_byte < disk_image[sd_disk].size())
 			disk_image[sd_disk][sd_start+sd_byte] = top.sd_buff_din[sd_disk];
@@ -254,7 +271,7 @@ int main(int argc, char **argv) {
 			const unsigned long long clock_cycles = half_cycle / 2;
 			if (to_menu && clock_cycles > 0 && clock_cycles % (second / 4) == 0) {
 				for (const std::string &row : read_screen())
-					if (row.find("Device handling") != std::string::npos) reached_menu = true;
+					if (row.find(expect) != std::string::npos) reached_menu = true;
 			}
 			if (key_test && !script_armed && clock_cycles > 0 &&
 			    clock_cycles % (second / 4) == 0) {
@@ -292,6 +309,24 @@ int main(int argc, char **argv) {
 				            static_cast<double>(half_cycle / 2) / second, top.pc,
 				            top.cpu_addr, top.cpu_din);
 				++keyboard_trace_count;
+			}
+			// --disk-trace: seeks, ROM address-field reads (stock ROM addresses), head
+			// movement and cache validity on tracks 8-17, where SOS reads its key.
+			if (disk_trace && top.track1 >= 8 && top.track1 <= 17) {
+				static unsigned last_q = 999, last_valid = 9;
+				const double ms = static_cast<double>(half_cycle / 2) / 14318.181;
+				if (top.qtrack1 != last_q) { std::printf("tl %10.2f ms  head q=%u\n", ms, top.qtrack1); last_q = top.qtrack1; }
+				if (top.valid1 != last_valid) { std::printf("tl %10.2f ms  flux %s  (track byte %u)\n", ms, top.valid1 ? "ON" : "off", top.track1_addr); last_valid = top.valid1; }
+				static unsigned last_byte = 0;
+				if (top.track1_addr != last_byte && top.track1_addr != last_byte + 1 &&
+				    !(top.track1_addr == 0 && last_byte >= 6280))
+					std::printf("tl %10.2f ms  POSITION JUMP track byte %u -> %u (flux %s)\n", ms, last_byte, top.track1_addr, top.valid1 ? "ON" : "off");
+				last_byte = top.track1_addr;
+				if (top.cpu_sync && top.cpu_addr == 0xF400) std::printf("tl %10.2f ms  SEEK to halftrack %u\n", ms, top.a);
+				if (top.cpu_sync && top.cpu_addr == 0xF1B9) std::printf("tl %10.2f ms  RDADR start\n", ms);
+				if (top.cpu_sync && top.cpu_addr == 0xF1B7) std::printf("tl %10.2f ms  RDADR ERROR\n", ms);
+				if (top.cpu_sync && top.cpu_addr == 0xF214) std::printf("tl %10.2f ms  RDADR ok  trk=%u sec=%u vol=%02X\n", ms,
+				    zero_page_values[0x99], zero_page_values[0x98], zero_page_values[0x9a]);
 			}
 			if (!top.cpu_rwn && top.cpu_addr < 0x100)
 				zero_page_values[top.cpu_addr] = top.cpu_dout;
@@ -453,7 +488,7 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 	if (to_menu && !reached_menu && !reached_system_failure) {
-		std::fprintf(stderr, "FAIL: the System Utilities menu did not appear\n");
+		std::fprintf(stderr, "FAIL: \"%s\" did not appear on screen\n", expect.c_str());
 		return 1;
 	}
 	if (disk_test && reached_system_failure) {

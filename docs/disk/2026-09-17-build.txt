@@ -1,0 +1,30 @@
+Paired Main and FPGA build
+
+Fitter Status : Successful - Thu Sep 17 03:02:52 2026
+Quartus Prime Version : 17.0.2 Build 602 07/19/2017 SJ Lite Edition
+Revision Name : Apple-III
+Top-level Entity Name : sys_top
+Family : Cyclone V
+Device : 5CSEBA6U23I7
+Timing Models : Final
+Logic utilization (in ALMs) : 17,386 / 41,910 ( 41 % )
+Total registers : 25679
+Total pins : 145 / 314 ( 46 % )
+Total virtual pins : 0
+Total block memory bits : 3,264,001 / 5,662,720 ( 58 % )
+Total RAM Blocks : 417 / 553 ( 75 % )
+Total DSP Blocks : 33 / 112 ( 29 % )
+Total HSSI RX PCSs : 0
+Total HSSI PMA RX Deserializers : 0
+Total HSSI TX PCSs : 0
+Total HSSI PMA TX Serializers : 0
+Total PLLs : 3 / 6 ( 50 % )
+Total DLLs : 0 / 4 ( 0 % )
+
+Timing groups: 38
+Minimum slack: 0.246 ns; all TNS = 0
+Quartus processors: 6
+RBF SHA256: 2e943434d73b5c5e0ba83fa227ae9332c7ff631ae4c6aca9c9fbe0d2e847f34f
+Main SHA256: fe1d468116620cf7a6d6e3b21be75f1514aa66e6df54396a3ac703291a56ec6b
+Main upstream base: f80abdc79e76bfc63799d028f2337c4d762b5e50
+Main source changes: support/main/apple3-storage.patch

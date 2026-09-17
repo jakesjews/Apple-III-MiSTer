@@ -187,7 +187,14 @@ going past the interpreter until the System Utilities menu is on screen, and
 fails on any SOS system failure; use it for boot regressions, because a bad
 interpreter entry only shows up after the loader hands over. `--mount-delay=8
 --reset-delay=3` reproduces an MGL start: no disk at power-on, a mount after
-each delay, then a reset. `--keytest` drives System Utilities with
+each delay, then a reset. `--expect="Apple Writer"` waits for another title's
+screen text instead of the Utilities menu. `--sd-byte-clocks=16` slows the host
+transfer to roughly the real HPS link (the default of 4 is far quicker), which
+together with `--sd-delay` shows how much track-load time a protection check
+tolerates. `--rtc=YYMMDDWhhmmss` seeds the host clock as MiSTer does
+(W = weekday, Sunday 0). `--disk-trace` prints a millisecond timeline of seeks,
+ROM address-field reads, head movement and cache validity on tracks 8 to 17,
+where SOS reads its protection key. `--keytest` drives System Utilities with
 injected PS/2 keys and decodes the text page after each. See
 [sim/accuracy/README.md](../sim/accuracy/README.md) for the PROM-based timing
 comparison and the 6502 functional test.

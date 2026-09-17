@@ -74,9 +74,6 @@ using host hardware flow control. [Serial details](docs/DEVELOPMENT.md#serial-po
   memory expansion are not implemented.
 - The Confidence Program's **Machine Configuration** screen hangs.
 - Broad software and copy-protection compatibility has not been established.
-- SOS-protected disks rely on a track-to-track timing check that SD card latency
-  can upset. If one stops at **SYSTEM FAILURE = $06** during boot, reset and try
-  again.
 
 ## Planned features and accuracy work
 

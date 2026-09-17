@@ -26,6 +26,8 @@ The broader register and drive-selection tests remain in `sim/run_tests.sh` and
 menu and fails on a SOS system failure. `--mount-delay=<s>` and
 `--reset-delay=<s>` reproduce an MGL start, where the machine powers on with no
 disk, each image is mounted after the delay, and a reset follows.
+`--expect=TEXT`, `--sd-byte-clocks=N`, `--rtc=YYMMDDWhhmmss` and `--disk-trace`
+are described in [the development guide](../../docs/DEVELOPMENT.md#testing).
 
 The WOZ boot harness uses the same native parser, track RAM and drive used in
 the MiSTer build, with shared, drive-specific transfers of up to 16 KiB. Success requires the

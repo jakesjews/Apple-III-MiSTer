@@ -109,8 +109,49 @@ Main now adds the key only when `SOS.INTERP` is encrypted
   [SOS lists the new directory](disk/sector-image-write-after-reload.png).
 
 `sim/run_core_boot.sh` gained `--to-menu`, `--mount-delay` and `--reset-delay`
-so the boot test covers this path. The Main binary for this follow-up has
-SHA-256 `fe1d468116620cf7a6d6e3b21be75f1514aa66e6df54396a3ac703291a56ec6b`; the RBF is unchanged.
+so the boot test covers this path.
+
+### Protected disks and the drive model
+
+With the key now reserved for protected dumps, those disks showed the opposite
+failure: the Apple Writer III DSK reached its title on 3 of 7 hardware boots
+and stopped at SYSTEM FAILURE $06 on the other 4. Main-side timing logs showed
+SOS reading all eight key tracks at the normal 56 ms cadence and then skipping
+the one-second decrypt, so its synchronization check had failed. Host latency
+was not the cause: a track transfer takes 2.7 ms and Main polls about every
+0.25 ms.
+
+A latency sweep in simulation reproduced it and `--disk-trace` located it in
+the imported WOZ controller. `trk_bit_count` is assembled one byte per lookup
+step and was visible to the drive while incomplete. After an unmapped half
+track it starts from zero, so the track length read 128 bits for two clocks. A
+bit-cell tick in that window made the drive wrap its rotation position to zero,
+and every later sector arrived at the wrong angle. The count is now published
+only when complete. The same controller reloaded a track on every quarter-track
+change, two or three transfers of identical data per one-track step, each
+blanking the flux; it now reuses the TRKS entry already in its track RAM. In
+simulation that raises the tolerated track-load time from about 11 ms to about
+40 ms. SOS's numbers from the trace: a one-track seek reaches its address read
+after 48.2 ms, the key header follows about 6 ms later, sectors pass every
+12.57 ms, and an address read with no flux gives up after 12 ms.
+
+On hardware with the rebuilt core the Apple Writer III DSK reached its title on
+10 of 10 captured boots and the System Demonstration DSK ran on 4 of 4. SOS
+created directories on a DSK in each drive, and the host check again found only
+the five expected sectors changed per image.
+
+### Clock
+
+SOS keeps the two-digit year in the MM58167's day and month compare latches.
+The core seeded the counters from MiSTer's clock but left those latches at
+power-on don't-care, which reads as year 00; Apple Pascal then treated the clock
+as unset and overwrote it with the date stored on the boot disk, so Utilities
+showed 16 Dec 87 counting up from midnight. The host seed now writes the year
+latches and maps the weekday (MiSTer Sunday = 0, chip Sunday = 1). Hardware
+shows the correct date and time, with the year as SOS's two digits.
+
+The paired build for this follow-up passes all 38 timing groups with
++0.246 ns minimum slack. [Build record and hashes](disk/2026-09-17-build.txt).
 
 ## Limits
 
@@ -118,11 +159,6 @@ WOZ1 and FLUX representations are read-only. Writes modify existing allocated
 WOZ2 bitstream tracks; allocating an unmapped track is not supported. The track
 cache is bounded. Main validates a nonzero source CRC and writes zero after a
 modification, as permitted by WOZ's not-calculated convention.
-
-SOS-protected disks depend on the synchronized-track check passing. About one
-hardware boot in five failed that check before the fix above, so a protected
-title should be expected to stop with SYSTEM FAILURE $06 at a similar rate until
-track loads keep exact angular position.
 
 Converted sector/NIB images cannot recover lost mastering timing, weak regions
 or write splices. The imported analog/weak-bit and head-motion models remain

@@ -165,6 +165,16 @@ module woz_floppy_controller #(
     reg  [15:0] trk_start_block_side1;
     reg  [15:0] trk_block_count_side0;
     reg  [15:0] trk_block_count_side1;
+    // 5.25": which TRKS entry the side-0 track RAM holds (FF = none) and its
+    // parameters. A quarter-track step inside one TMAP entry, or a return across
+    // an unmapped half-track, reuses the RAM instead of reloading identical data;
+    // each reload blanked the flux for a whole host transfer, which broke SOS's
+    // synchronized-track check and its address-field reads.
+    reg  [7:0]  ram_entry_side0;
+    reg  [7:0]  pending_entry;
+    reg  [31:0] ram_bit_count_side0;
+    reg  [15:0] ram_start_block_side0;
+    reg  [15:0] ram_block_count_side0;
     // Save state tracking
     reg         save_side;          // Which side is currently being saved
     reg         saving_second_side; // Need to save the other side after current save
@@ -250,7 +260,13 @@ module woz_floppy_controller #(
     // During loading, use the pending track's bit_count IF we're loading the stable_side.
     // If we're loading the other side, keep using selected_bit_count to avoid glitches.
     wire loading_matches_stable = (!IS_35_INCH) || (load_side == stable_side);
-    wire [31:0] loading_bit_count = (trk_bit_count > 0 && loading_matches_stable) ? trk_bit_count : selected_bit_count;
+    // trk_bit_count is assembled one byte per step during S_SEEK_LOOKUP. After an
+    // unmapped track it starts from zero, so for two clocks it read 128 instead
+    // of 50304; a bit-cell tick in that window made the drive wrap its rotation
+    // position to zero, which broke cross-track angular sync (SOS protection
+    // failed on a large share of boots). Publish it only once the lookup is done.
+    wire        trk_bit_count_ready = (state == S_READ_TRACK);
+    wire [31:0] loading_bit_count = (trk_bit_count_ready && trk_bit_count > 0 && loading_matches_stable) ? trk_bit_count : selected_bit_count;
     assign bit_count = woz_valid ? (selected_track_match ? selected_bit_count :
                                     (is_loading ? loading_bit_count : selected_bit_count)) : 32'd0;
 
@@ -466,6 +482,11 @@ module woz_floppy_controller #(
 `endif
             current_track_id_side0 <= 8'hFF;
             current_track_id_side1 <= 8'hFF;
+            ram_entry_side0 <= 8'hFF;
+            pending_entry <= 8'hFF;
+            ram_bit_count_side0 <= 32'd0;
+            ram_start_block_side0 <= 16'd0;
+            ram_block_count_side0 <= 16'd0;
 	            pending_track_id <= 8'h00;
 	            load_side <= 1'b0;
 	            track_load_side <= 1'b0;
@@ -565,6 +586,7 @@ module woz_floppy_controller #(
 	                ready <= 0;
 	                busy <= 1;
 	                woz_valid <= 0;
+	                ram_entry_side0 <= 8'hFF;
 	                dirty_side0 <= 0;
 	                dirty_side1 <= 0;
 	                current_track_id_side0 <= 8'hFF;
@@ -612,6 +634,7 @@ module woz_floppy_controller #(
 	            // Unmount: drop validity immediately.
 	            if (!img_mounted && prev_mounted) begin
 	                woz_valid <= 1'b0;
+	                ram_entry_side0 <= 8'hFF;
 	                ready <= 1'b0;
 	                busy <= 1'b0;
 	                dirty_side0 <= 1'b0;
@@ -990,6 +1013,7 @@ module woz_floppy_controller #(
                              reg [7:0] trks_index;
                              trks_index = meta_read_data;
                              pending_is_flux <= 1'b0;  // TMAP = bitstream
+                             pending_entry <= trks_index;
 
                              if (trks_index == 8'hFF) begin
                                  $display("WOZ_CTRL: Track %0d is empty (FF in TMAP)", pending_track_id);
@@ -1052,6 +1076,21 @@ module woz_floppy_controller #(
                                  state <= S_INIT;
                                  scan_failed <= 1;
                                  woz_valid <= 0;
+                                 busy <= 0;
+                             end else if (!IS_35_INCH && trks_index == ram_entry_side0) begin
+                                 // The track RAM already holds this TRKS entry. Any write
+                                 // was saved before the seek, so the RAM matches the image.
+                                 $display("WOZ_CTRL: Track %0d reuses loaded TRKS entry %0d", pending_track_id, trks_index);
+                                 current_track_id_side0 <= pending_track_id;
+                                 bit_count_side0 <= ram_bit_count_side0;
+                                 is_flux_side0 <= 1'b0;
+                                 flux_size_side0 <= 32'd0;
+                                 flux_total_ticks_side0 <= 32'd0;
+                                 trk_start_block_side0 <= ram_start_block_side0;
+                                 trk_block_count_side0 <= ram_block_count_side0;
+                                 loading_second_side <= 1'b0;
+                                 track_load_complete <= 1'b1;
+                                 state <= S_IDLE;
                                  busy <= 0;
                              end else if (is_woz_v1) begin
 	                                 // WOZ v1: compute track parameters directly from file position.
@@ -1151,7 +1190,8 @@ module woz_floppy_controller #(
                                  $display("WOZ_CTRL: Track Info: StartBlock=%0d BlockCount=%0d BitCount=%0d",
                                           trk_start_block, trk_block_count, trk_bit_count);
                              end
-                             // Start Loading Track
+                             // Start Loading Track. The RAM is overwritten from here on.
+                             if (!(IS_35_INCH && load_side)) ram_entry_side0 <= 8'hFF;
                              state <= S_READ_TRACK;
                              read_block_base <= 0;
                              sd_lba <= {16'b0, trk_start_block};
@@ -1266,6 +1306,10 @@ module woz_floppy_controller #(
                                 // Store per-side track location for save-back
                                 trk_start_block_side0 <= trk_start_block;
                                 trk_block_count_side0 <= trk_block_count;
+                                ram_entry_side0 <= pending_is_flux ? 8'hFF : pending_entry;
+                                ram_bit_count_side0 <= is_woz_v1 ? {16'd0, v1_bit_count} : trk_bit_count;
+                                ram_start_block_side0 <= trk_start_block;
+                                ram_block_count_side0 <= trk_block_count;
                                 $display("WOZ_CTRL: Stored track %0d to side0 RAM, %s=%0d is_flux=%0d%s",
                                          pending_track_id, pending_is_flux ? "flux_bytes" : "bit_count",
                                          is_woz_v1 ? {16'd0, v1_bit_count} : trk_bit_count, pending_is_flux,

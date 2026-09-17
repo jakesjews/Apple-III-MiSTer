@@ -15,6 +15,19 @@ Local changes:
   larger allocations. Avoid per-block host scheduling delays during the SOS
   synchronized-track protection check.
 
+- Remember which TRKS entry the 5.25" track RAM holds and reuse it. Upstream
+  reloads on every quarter-track change, so a one-track step fetched the
+  destination track two or three times and blanked the flux for each host
+  transfer. With 12 ms per transfer that broke SOS's synchronized-track check,
+  and with 27 ms SOS's address-field reads failed outright. A step inside one
+  TMAP entry, or back across an unmapped half track, now costs no transfer.
+
+- Publish a loading track's bit count only after all four bytes have been read
+  from the TRKS entry. Upstream exposes the partial value; following an
+  unmapped half track it reads 128 for two clocks, and a bit-cell tick in that
+  window makes the drive model wrap its rotation position to zero. That lost
+  cross-track angular position at random, about once in thirty seeks.
+
 - Accept an SD acknowledgement on the first request cycle, including its first
   byte, without requiring an extra unacknowledged request cycle.
 - Replace the upstream track-length normalization with WOZ INFO timing in
