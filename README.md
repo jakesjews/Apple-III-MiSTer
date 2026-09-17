@@ -16,8 +16,14 @@ audio and serial support. Tested with SOS 1.3 System Utilities and Business BASI
    main=MiSTer_AppleIII
    ```
 
-4. Supply a 4,096-byte Apple /// boot ROM as
-   `/media/fat/games/Apple-III/boot.rom`. ROMs are not included.
+4. Supply the 4,096-byte Apple /// boot ROM as
+   `/media/fat/games/Apple-III/boot.rom`. It is the file MAME calls
+   `apple3.rom`. ROMs are not included.
+
+   | Name | Size | CRC32 | SHA-1 |
+   |---|---|---|---|
+   | `apple3.rom` | 4096 | `1af7ec42` | `8043f914ebdcdab9838dbb78f8a2ee3867d210d2` |
+
 5. Put disk images in `/media/fat/games/Apple-III/`, launch the core, and use
    **Mount Drive 1** to select a boot disk. **Mount Drive 2** is the external drive.
 

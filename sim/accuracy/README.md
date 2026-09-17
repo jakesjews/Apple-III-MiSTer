@@ -29,10 +29,9 @@ does not mount or modify disk files.
 
 ## PROM comparison
 
-The PROM dumps are not redistributed. Unpack
-[A3PROMs.zip](https://bitsavers.org/pdf/apple/apple_III/firmware/A3PROMs.zip)
-from bitsavers and set `APPLE3_PROM_DIR` to that directory; without it the
-runner skips the group. Expected SHA-256 hashes:
+The PROM dumps are not redistributed. Unpack the `A3PROMs` archive and set
+`APPLE3_PROM_DIR` to that directory; without it the runner skips the group.
+Expected SHA-256 hashes:
 
 ```text
 341-0030.BIN   9e04e16903f33b38cd8d7c17dc6ef4c2eab7f5bfb926158194448d8dfbadeace
