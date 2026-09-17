@@ -134,6 +134,8 @@ Existing partial implementations are noted where they provide a starting point.
       Preserve paired-byte reads and guest-visible memory timing, and budget for
       future card RAM and disk buffers.
 
+- [ ] **Display Monitor Modes.** Similar to the Apple II core.
+
 - [ ] **PCPI Appli-Card.** Add it as the first CP/M option and validate its disk
       services against the chosen storage configuration.
 
