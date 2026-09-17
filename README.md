@@ -64,7 +64,7 @@ writable WOZ2, see the [conversion instructions](docs/MAIN_STORAGE.md#tests-and-
 | Windows / Command | Open Apple |
 | Alt | Solid Apple |
 | Caps Lock | Alpha Lock |
-| Delete | Keypad period, or DELETE with the /// Plus keymap |
+| Del | Keypad period, or DELETE with the /// Plus keymap |
 
 Keys repeat at 10 cps after half a second. Pressing Solid Apple *while a key is
 already held* raises that key to 30 cps, as on the real machine; holding Solid
