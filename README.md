@@ -1,9 +1,9 @@
 # Apple /// for MiSTer
 
+__Warning: This core is vibe coded.__
+
 Experimental Apple /// core with 256 KiB RAM, two floppy drives, joystick,
 audio and serial support. Tested with SOS 1.3 System Utilities and Business BASIC.
-
-This is an AI-generated, human-directed project; compatibility is still being tested.
 
 ## Setup
 
