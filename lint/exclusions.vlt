@@ -1,0 +1,19 @@
+`verilator_config
+
+// Keep the MiSTer framework out of lint diagnostics while using its real
+// module interfaces for elaboration. Generic lint_off covers lint/style
+// warnings; the named diagnostics below need explicit exclusions.
+lint_off -file "sys/*"
+lint_off -rule TIMESCALEMOD -file "sys/*"
+lint_off -rule SIMILARNAME -file "sys/*"
+lint_off -rule PROCASSWIRE -file "sys/*"
+lint_off -rule UNOPTFLAT -file "sys/*"
+
+// GHDL output is generated from the vendored VHDL and our T65 wrapper.
+lint_off -file "sim/gen/*"
+lint_off -rule TIMESCALEMOD -file "sim/gen/*"
+lint_off -rule SIMILARNAME -file "sim/gen/*"
+
+// The PLL is a port-only boundary, not a behavioral model.
+lint_off -file "lint/pll.sv"
+lint_off -rule TIMESCALEMOD -file "lint/pll.sv"

@@ -35,6 +35,7 @@ build_id.v
 *.bsf
 *.csv
 *.f
+!lint/rtl.f
 *.xml
 build_*.log
 
@@ -42,6 +43,7 @@ build_*.log
 obj_dir/
 sim/gen/
 sim/work/
+lint/gen/
 *.vcd
 *.fst
 *.ghw

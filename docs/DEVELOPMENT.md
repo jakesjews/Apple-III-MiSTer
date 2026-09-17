@@ -116,6 +116,39 @@ Verible directly with the flags file produces space indentation.
 The simulations below check hardware behaviour. No Quartus build or MiSTer
 connection is needed for formatting.
 
+## Linting
+
+With Verilator, GHDL (with synthesis support), Zsh and Perl on `PATH`, run
+from the repository root:
+
+```sh
+make lint
+```
+
+This regenerates the VHDL dependencies using `sim/gen_vhdl.sh`, creates a
+deterministic lint-only build ID, then runs:
+
+```sh
+verilator --lint-only -Wall --top-module emu -f lint/rtl.f
+```
+
+For direct invocation, run `make lint-prepare` first and repeat it after any
+VHDL edits. `lint/rtl.f` lists the Verilog/SystemVerilog sources from `files.qip`;
+update both when adding synthesis sources. `.v` files are parsed as Verilog 2005.
+
+The MiSTer `sys/` modules are loaded to check their connections, with diagnostics
+suppressed by `lint/exclusions.vlt`. The GHDL-generated T65/VIA code and lint-only
+PLL stub are also excluded from diagnostics. Vendored Verilog in `rtl/acia/`
+and `rtl/disk/woz/` is included in linting; the formatter still excludes it.
+
+Lint uses the existing behavioral RAM/ROM branches and a port-only PLL stub,
+so it does not validate Intel primitives, PLL behavior or timing. No ROM image,
+Quartus build or MiSTer connection is needed. Generated files remain ignored.
+
+Warnings are fatal: existing RTL warnings currently make `make lint` fail.
+There is no blanket waiver or automatic fix for project RTL. This setup
+was validated with Verilator 5.052 and GHDL 6.0.0.
+
 ## Testing
 
 The simulation flow needs Icarus Verilog, Verilator, GHDL, a C++ compiler and
