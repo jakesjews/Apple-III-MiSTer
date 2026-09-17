@@ -6,38 +6,46 @@
 // image with INIT_FILE instead.
 
 module apple3_rom #(
-	parameter INIT_FILE = "",
+	parameter         INIT_FILE  = "",
 	parameter integer INIT_START = 0
-)(
+) (
 	input  logic        clk,
 	input  logic [12:0] addr,
-	output logic [7:0]  q,
+	output logic [ 7:0] q,
 	input  logic        host_we,
 	input  logic [12:0] host_addr,
-	input  logic [7:0]  host_data
+	input  logic [ 7:0] host_data
 );
 
 `ifdef APPLE3_USE_ALTSYNCRAM
-	wire [7:0] low_q;
-	wire [7:0] high_q;
-	logic bank_select_d;
+	wire  [7:0] low_q;
+	wire  [7:0] high_q;
+	logic       bank_select_d;
 
 	// Separate physical banks allow one host write to mirror into both banks
 	// without creating a two-write-port memory.  Upper-half writes only replace
 	// the high bank, so both 4 KiB and 8 KiB uploads have the expected layout.
 	apple3_rom_bank low_bank (
-		.clk, .addr(addr[11:0]), .q(low_q), .host_addr(host_addr[11:0]),
-		.host_data, .host_we(host_we && !host_addr[12])
+		.clk,
+		.addr     (addr[11:0]),
+		.q        (low_q),
+		.host_addr(host_addr[11:0]),
+		.host_data,
+		.host_we  (host_we && !host_addr[12])
 	);
 	apple3_rom_bank high_bank (
-		.clk, .addr(addr[11:0]), .q(high_q), .host_addr(host_addr[11:0]),
-		.host_data, .host_we(host_we)
+		.clk,
+		.addr     (addr[11:0]),
+		.q        (high_q),
+		.host_addr(host_addr[11:0]),
+		.host_data,
+		.host_we  (host_we)
 	);
 
 	always_ff @(posedge clk) bank_select_d <= addr[12];
 	always_comb q = bank_select_d ? high_q : low_q;
 `else
-	(* ramstyle = "M10K" *) logic [7:0] mem [0:8191];
+	(* ramstyle = "M10K" *) logic [7:0] mem[0:8191];
 
 	initial begin
 		if (INIT_FILE != "") $readmemh(INIT_FILE, mem, INIT_START);
@@ -62,25 +70,39 @@ endmodule
 module apple3_rom_bank (
 	input  logic        clk,
 	input  logic [11:0] addr,
-	output wire  [7:0]  q,
+	output wire  [ 7:0] q,
 	input  logic [11:0] host_addr,
-	input  logic [7:0]  host_data,
+	input  logic [ 7:0] host_data,
 	input  logic        host_we
 );
 
-	altsyncram memory
-	(
-		.clock0(clk), .address_a(addr), .data_a(8'd0),
-		.wren_a(1'b0), .q_a(q),
-		.clock1(clk), .address_b(host_addr), .data_b(host_data),
-		.wren_b(host_we), .q_b(),
-		.aclr0(1'b0), .aclr1(1'b0),
-		.addressstall_a(1'b0), .addressstall_b(1'b0),
-		.byteena_a(1'b1), .byteena_b(1'b1),
-		.clocken0(1'b1), .clocken1(1'b1),
-		.clocken2(1'b1), .clocken3(1'b1),
-		.eccstatus(), .rden_a(1'b1), .rden_b(1'b1)
+	altsyncram memory (
+		.clock0        (clk),
+		.address_a     (addr),
+		.data_a        (8'd0),
+		.wren_a        (1'b0),
+		.q_a           (q),
+		.clock1        (clk),
+		.address_b     (host_addr),
+		.data_b        (host_data),
+		.wren_b        (host_we),
+		.q_b           (),
+		.aclr0         (1'b0),
+		.aclr1         (1'b0),
+		.addressstall_a(1'b0),
+		.addressstall_b(1'b0),
+		.byteena_a     (1'b1),
+		.byteena_b     (1'b1),
+		.clocken0      (1'b1),
+		.clocken1      (1'b1),
+		.clocken2      (1'b1),
+		.clocken3      (1'b1),
+		.eccstatus     (),
+		.rden_a        (1'b1),
+		.rden_b        (1'b1)
 	);
+	// Keep the Quartus parameter table; Verible exhausts its wrapping search here.
+	// verilog_format: off
 	defparam
 		memory.numwords_a = 4096,
 		memory.widthad_a = 12,
@@ -110,6 +132,7 @@ module apple3_rom_bank (
 		memory.width_byteena_a = 1,
 		memory.width_byteena_b = 1,
 		memory.wrcontrol_wraddress_reg_b = "CLOCK1";
+	// verilog_format: on
 
 endmodule
 `endif

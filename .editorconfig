@@ -1,0 +1,18 @@
+root = true
+
+[*.{v,sv,vh,svh}]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+indent_style = tab
+indent_size = 4
+tab_width = 4
+
+# Imported components and generated IP retain their upstream formatting.
+[{sys/**,rtl/acia/**,rtl/disk/woz/**,rtl/pll.v,rtl/pll/**,sim/gen/**,sim/obj_dir/**,sim/work/**}]
+charset = unset
+end_of_line = unset
+insert_final_newline = unset
+indent_style = unset
+indent_size = unset
+tab_width = unset

@@ -73,6 +73,49 @@ Quartus and compile.
 The `sys/` directory is an unmodified copy of
 [Template_MiSTer](https://github.com/MiSTer-devel/Template_MiSTer).
 
+## Formatting
+
+With `verible-verilog-format`, Python 3.9+ and Git on
+`PATH`, run from the repository root:
+
+```sh
+make format-check                       # read-only; fails if formatting differs
+make format                             # apply formatting
+make format FILES='rtl/apple3_acia.sv'
+```
+
+`make` lists the commands. The same operations are available through
+`python3 tools/verible.py format|format-check [files...]`; explicit paths
+are relative to the calling directory. `format-check` returns nonzero when
+formatting differs; both commands return nonzero on tool errors.
+
+The project scope is the `Apple-III.sv` wrapper and Verilog/SystemVerilog sources
+and headers under `rtl/` and `sim/`, including new, untracked files. Ignored files,
+generated PLL/simulation output and VHDL are excluded. The MiSTer `sys/` framework
+is always excluded.
+
+Formatting also excludes all vendored files in `rtl/acia/` and `rtl/disk/woz/`
+to preserve readable diffs against upstream. Explicit file selection uses the same scope,
+so even `make format FILES='rtl/acia/gen_uart.v'` is rejected without changes.
+
+The configuration follows the [MiSTer development principles](https://mister-devel.github.io/MkDocs_MiSTer/developer/principles/)
+and [template source layout](https://github.com/MiSTer-devel/Template_MiSTer):
+tab indentation and aligned declarations/ports/assignments. The formatter settings live in
+`.verible-format.flags`, with a 120-column target and alignment groups separated
+by blank lines or section comments. Use a current Verible release supporting
+`--alignment_group_boundary` (validated with `v0.0-4219-g3275ab72`).
+
+Verible emits spaces, so the wrapper expands leading tabs at four-column stops
+before formatting and restores them afterward, retaining spaces for alignment.
+It protects string/comment contents and `verilog_format: off/on` regions.
+The long Quartus `defparam` tables in `apple3_ram.sv` and `apple3_rom.sv` use
+these markers because Verible otherwise exhausts its line-wrapping search.
+`.editorconfig` uses the same tab width. Use the wrapper for formatting; invoking
+Verible directly with the flags file produces space indentation.
+
+The simulations below check hardware behaviour. No Quartus build or MiSTer
+connection is needed for formatting.
+
 ## Testing
 
 The simulation flow needs Icarus Verilog, Verilator, GHDL, a C++ compiler and

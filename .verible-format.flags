@@ -1,0 +1,20 @@
+# Verible emits spaces; tools/verible.py restores leading tabs (4-column stops).
+--indentation_spaces=4
+--wrap_spaces=4
+--column_limit=120
+--assignment_statement_alignment=align
+--case_items_alignment=align
+--enum_assignment_statement_alignment=align
+--formal_parameters_alignment=align
+--module_net_variable_alignment=align
+--named_parameter_alignment=align
+--named_port_alignment=align
+--parameter_declaration_alignment=align
+--port_declarations_alignment=align
+--struct_union_members_alignment=align
+--alignment_group_boundary=blank-lines-and-separator-comments
+--port_declarations_indentation=indent
+--formal_parameters_indentation=indent
+--named_parameter_indentation=indent
+--named_port_indentation=indent
+--failsafe_success=false

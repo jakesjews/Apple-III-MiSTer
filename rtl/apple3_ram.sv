@@ -12,12 +12,12 @@
 module apple3_ram #(
 	parameter integer WORD_ADDRESS_BITS = 17
 ) (
-	input  logic        clk,
+	input logic clk,
 
 	input  logic [17:0] cpu_addr,
 	input  logic        cpu_lane,
 	input  logic        cpu_we,
-	input  logic [7:0]  cpu_din,
+	input  logic [ 7:0] cpu_din,
 	output logic [15:0] cpu_q,
 
 	input  logic [17:0] video_addr,
@@ -30,19 +30,33 @@ module apple3_ram #(
 	wire [7:0] video_low_q;
 	wire [7:0] video_high_q;
 
-	altsyncram ram_low
-	(
-		.clock0(clk), .address_a(cpu_addr[WORD_ADDRESS_BITS-1:0]), .data_a(cpu_din),
-		.wren_a(cpu_we && !cpu_lane), .q_a(cpu_low_q),
-		.clock1(clk), .address_b(video_addr[WORD_ADDRESS_BITS-1:0]), .data_b(8'd0),
-		.wren_b(1'b0), .q_b(video_low_q),
-		.aclr0(1'b0), .aclr1(1'b0),
-		.addressstall_a(1'b0), .addressstall_b(1'b0),
-		.byteena_a(1'b1), .byteena_b(1'b1),
-		.clocken0(1'b1), .clocken1(1'b1),
-		.clocken2(1'b1), .clocken3(1'b1),
-		.eccstatus(), .rden_a(1'b1), .rden_b(1'b1)
+	altsyncram ram_low (
+		.clock0        (clk),
+		.address_a     (cpu_addr[WORD_ADDRESS_BITS-1:0]),
+		.data_a        (cpu_din),
+		.wren_a        (cpu_we && !cpu_lane),
+		.q_a           (cpu_low_q),
+		.clock1        (clk),
+		.address_b     (video_addr[WORD_ADDRESS_BITS-1:0]),
+		.data_b        (8'd0),
+		.wren_b        (1'b0),
+		.q_b           (video_low_q),
+		.aclr0         (1'b0),
+		.aclr1         (1'b0),
+		.addressstall_a(1'b0),
+		.addressstall_b(1'b0),
+		.byteena_a     (1'b1),
+		.byteena_b     (1'b1),
+		.clocken0      (1'b1),
+		.clocken1      (1'b1),
+		.clocken2      (1'b1),
+		.clocken3      (1'b1),
+		.eccstatus     (),
+		.rden_a        (1'b1),
+		.rden_b        (1'b1)
 	);
+	// Keep the Quartus parameter table; Verible exhausts its wrapping search here.
+	// verilog_format: off
 	defparam
 		ram_low.numwords_a = (1 << WORD_ADDRESS_BITS),
 		ram_low.widthad_a = WORD_ADDRESS_BITS,
@@ -69,20 +83,34 @@ module apple3_ram #(
 		ram_low.width_byteena_a = 1,
 		ram_low.width_byteena_b = 1,
 		ram_low.wrcontrol_wraddress_reg_b = "CLOCK1";
+	// verilog_format: on
 
-	altsyncram ram_high
-	(
-		.clock0(clk), .address_a(cpu_addr[WORD_ADDRESS_BITS-1:0]), .data_a(cpu_din),
-		.wren_a(cpu_we && cpu_lane), .q_a(cpu_high_q),
-		.clock1(clk), .address_b(video_addr[WORD_ADDRESS_BITS-1:0]), .data_b(8'd0),
-		.wren_b(1'b0), .q_b(video_high_q),
-		.aclr0(1'b0), .aclr1(1'b0),
-		.addressstall_a(1'b0), .addressstall_b(1'b0),
-		.byteena_a(1'b1), .byteena_b(1'b1),
-		.clocken0(1'b1), .clocken1(1'b1),
-		.clocken2(1'b1), .clocken3(1'b1),
-		.eccstatus(), .rden_a(1'b1), .rden_b(1'b1)
+	altsyncram ram_high (
+		.clock0        (clk),
+		.address_a     (cpu_addr[WORD_ADDRESS_BITS-1:0]),
+		.data_a        (cpu_din),
+		.wren_a        (cpu_we && cpu_lane),
+		.q_a           (cpu_high_q),
+		.clock1        (clk),
+		.address_b     (video_addr[WORD_ADDRESS_BITS-1:0]),
+		.data_b        (8'd0),
+		.wren_b        (1'b0),
+		.q_b           (video_high_q),
+		.aclr0         (1'b0),
+		.aclr1         (1'b0),
+		.addressstall_a(1'b0),
+		.addressstall_b(1'b0),
+		.byteena_a     (1'b1),
+		.byteena_b     (1'b1),
+		.clocken0      (1'b1),
+		.clocken1      (1'b1),
+		.clocken2      (1'b1),
+		.clocken3      (1'b1),
+		.eccstatus     (),
+		.rden_a        (1'b1),
+		.rden_b        (1'b1)
 	);
+	// verilog_format: off
 	defparam
 		ram_high.numwords_a = (1 << WORD_ADDRESS_BITS),
 		ram_high.widthad_a = WORD_ADDRESS_BITS,
@@ -109,12 +137,12 @@ module apple3_ram #(
 		ram_high.width_byteena_a = 1,
 		ram_high.width_byteena_b = 1,
 		ram_high.wrcontrol_wraddress_reg_b = "CLOCK1";
+	// verilog_format: on
 
-	assign cpu_q = {cpu_high_q, cpu_low_q};
+	assign cpu_q   = {cpu_high_q, cpu_low_q};
 	assign video_q = {video_high_q, video_low_q};
 `else
-	(* ramstyle = "M10K, no_rw_check" *) logic [15:0]
-		mem [0:(1 << WORD_ADDRESS_BITS)-1];
+	(* ramstyle = "M10K, no_rw_check" *) logic [15:0] mem[0:(1 << WORD_ADDRESS_BITS)-1];
 
 	always_ff @(posedge clk) begin
 		cpu_q   <= mem[cpu_addr[WORD_ADDRESS_BITS-1:0]];
@@ -122,7 +150,7 @@ module apple3_ram #(
 
 		if (cpu_we) begin
 			if (cpu_lane) mem[cpu_addr[WORD_ADDRESS_BITS-1:0]][15:8] <= cpu_din;
-			else          mem[cpu_addr[WORD_ADDRESS_BITS-1:0]][7:0]  <= cpu_din;
+			else mem[cpu_addr[WORD_ADDRESS_BITS-1:0]][7:0] <= cpu_din;
 		end
 	end
 `endif

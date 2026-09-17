@@ -13,49 +13,44 @@ module apple3_rtc #(
 	input  logic [64:0] host_rtc,
 	input  logic        read_strobe,
 	input  logic        write_strobe,
-	input  logic [4:0]  addr,
-	input  logic [7:0]  data_in,
-	output logic [7:0]  data_out,
+	input  logic [ 4:0] addr,
+	input  logic [ 7:0] data_in,
+	output logic [ 7:0] data_out,
 	output logic        irq
 );
 
 	logic [13:0] millisecond_divider;
-	logic [7:0] counter [0:7];
-	logic [7:0] compare [0:7];
-	logic [7:0] irq_status;
-	logic [7:0] irq_control;
-	logic [7:0] year_bcd;
-	logic       host_toggle;
-	logic       compare_match;
-	logic       compare_match_d;
-	logic       millisecond_tick;
+	logic [ 7:0] counter             [0:7];
+	logic [ 7:0] compare             [0:7];
+	logic [ 7:0] irq_status;
+	logic [ 7:0] irq_control;
+	logic [ 7:0] year_bcd;
+	logic        host_toggle;
+	logic        compare_match;
+	logic        compare_match_d;
+	logic        millisecond_tick;
 	// AN-353 describes a 150 us ripple-counter update window each millisecond.
 	localparam integer ROLLOVER_CLOCKS = (CLOCKS_PER_MS * 150 + 999) / 1000;
 	logic counter_read_pending, rollover_status, rollover_window;
-	logic go_command;
+	logic   go_command;
 	integer compare_index;
 	integer reset_index;
 
 	function automatic [7:0] bcd_increment(input logic [7:0] value);
 		begin
-			if (value[3:0] == 4'd9)
-				bcd_increment = {value[7:4] + 1'b1, 4'h0};
-			else
-				bcd_increment = value + 1'b1;
+			if (value[3:0] == 4'd9) bcd_increment = {value[7:4] + 1'b1, 4'h0};
+			else bcd_increment = value + 1'b1;
 		end
 	endfunction
 
-	function automatic [7:0] days_in_month(
-		input logic [7:0] month,
-		input logic [7:0] year
-	);
+	function automatic [7:0] days_in_month(input logic [7:0] month, input logic [7:0] year);
 		logic leap;
 		begin
 			leap = ((({3'b000, year[7:4], 1'b0} + {4'b0000, year[3:0]}) & 8'h03) == 0);
 			case (month)
-				8'h02: days_in_month = leap ? 8'h29 : 8'h28;
+				8'h02:                      days_in_month = leap ? 8'h29 : 8'h28;
 				8'h04, 8'h06, 8'h09, 8'h11: days_in_month = 8'h30;
-				default: days_in_month = 8'h31;
+				default:                    days_in_month = 8'h31;
 			endcase
 		end
 	endfunction
@@ -65,26 +60,24 @@ module apple3_rtc #(
 		for (compare_index = 0; compare_index < 8; compare_index = compare_index + 1) begin
 			// A compare nibble with both high bits set is a don't-care.
 			if ((compare_index != 0) && (compare[compare_index][3:2] != 2'b11) &&
-			    (compare[compare_index][3:0] != counter[compare_index][3:0])) compare_match = 1'b0;
+				(compare[compare_index][3:0] != counter[compare_index][3:0]))
+				compare_match = 1'b0;
 			if ((compare_index != 5) && (compare[compare_index][7:6] != 2'b11) &&
-			    (compare[compare_index][7:4] != counter[compare_index][7:4])) compare_match = 1'b0;
+				(compare[compare_index][7:4] != counter[compare_index][7:4]))
+				compare_match = 1'b0;
 		end
 
 		case (addr)
-			5'h00, 5'h01, 5'h02, 5'h03,
-			5'h04, 5'h05, 5'h06, 5'h07: data_out = counter[addr[2:0]];
-			5'h08, 5'h09, 5'h0a, 5'h0b,
-			5'h0c, 5'h0d, 5'h0e, 5'h0f: data_out = compare[addr[2:0]];
+			5'h00, 5'h01, 5'h02, 5'h03, 5'h04, 5'h05, 5'h06, 5'h07: data_out = counter[addr[2:0]];
+			5'h08, 5'h09, 5'h0a, 5'h0b, 5'h0c, 5'h0d, 5'h0e, 5'h0f: data_out = compare[addr[2:0]];
 			5'h10: data_out = irq_status;
 			5'h11: data_out = irq_control;
-			5'h14: data_out = {7'd0, rollover_status ||
-			                         (counter_read_pending && rollover_window)};
+			5'h14: data_out = {7'd0, rollover_status || (counter_read_pending && rollover_window)};
 			default: data_out = 8'h00;
 		endcase
-		irq = |irq_status;
-		go_command = !reset && write_strobe && (addr == 5'h15);
-		rollover_window = (millisecond_divider < ROLLOVER_CLOCKS) ||
-		                  (millisecond_divider == CLOCKS_PER_MS - 14'd1);
+		irq              = |irq_status;
+		go_command       = !reset && write_strobe && (addr == 5'h15);
+		rollover_window  = (millisecond_divider < ROLLOVER_CLOCKS) || (millisecond_divider == CLOCKS_PER_MS - 14'd1);
 		millisecond_tick = (millisecond_divider == CLOCKS_PER_MS - 14'd1);
 	end
 
@@ -92,18 +85,22 @@ module apple3_rtc #(
 	// FPGA configuration initializes it; register writes provide the MM58167's
 	// counter/RAM reset commands. Time and alarm state survive machine resets.
 	initial begin
-		millisecond_divider = 14'd0;
-		host_toggle = 1'b0;
-		compare_match_d = 1'b0;
+		millisecond_divider  = 14'd0;
+		host_toggle          = 1'b0;
+		compare_match_d      = 1'b0;
 		counter_read_pending = 1'b0;
-		rollover_status = 1'b0;
-		irq_status = 8'h00;
-		irq_control = 8'h00;
-		year_bcd = 8'h80;
-		counter[0] = 8'h00; counter[1] = 8'h00;
-		counter[2] = 8'h00; counter[3] = 8'h00;
-		counter[4] = 8'h00; counter[5] = 8'h01;
-		counter[6] = 8'h01; counter[7] = 8'h01;
+		rollover_status      = 1'b0;
+		irq_status           = 8'h00;
+		irq_control          = 8'h00;
+		year_bcd             = 8'h80;
+		counter[0]           = 8'h00;
+		counter[1]           = 8'h00;
+		counter[2]           = 8'h00;
+		counter[3]           = 8'h00;
+		counter[4]           = 8'h00;
+		counter[5]           = 8'h01;
+		counter[6]           = 8'h01;
+		counter[7]           = 8'h01;
 		for (integer i = 0; i < 8; i = i + 1) compare[i] = 8'hcc;
 	end
 
@@ -122,18 +119,15 @@ module apple3_rtc #(
 					if (counter[5] == 8'h07) begin
 						counter[5] <= 8'h01;
 						if (irq_control[6]) irq_status[6] <= 1'b1;
-					end
-					else counter[5] <= counter[5] + 1'b1;
+					end else counter[5] <= counter[5] + 1'b1;
 					if (counter[6] == days_in_month(counter[7], year_bcd)) begin
 						counter[6] <= 8'h01;
 						if (irq_control[7]) irq_status[7] <= 1'b1;
 						if (counter[7] == 8'h12) begin
 							counter[7] <= 8'h01;
-							year_bcd <= bcd_increment(year_bcd);
-						end
-						else counter[7] <= bcd_increment(counter[7]);
-					end
-					else counter[6] <= bcd_increment(counter[6]);
+							year_bcd   <= bcd_increment(year_bcd);
+						end else counter[7] <= bcd_increment(counter[7]);
+					end else counter[6] <= bcd_increment(counter[6]);
 				end
 			end
 		end
@@ -153,11 +147,11 @@ module apple3_rtc #(
 		end
 		if (!reset && read_strobe && (addr == 5'h14)) begin
 			counter_read_pending <= 1'b0;
-			rollover_status <= 1'b0;
+			rollover_status      <= 1'b0;
 		end
 
 		if (host_rtc[64] != host_toggle) begin
-			host_toggle <= host_rtc[64];
+			host_toggle         <= host_rtc[64];
 			millisecond_divider <= 14'd0;
 			if (counter_read_pending) rollover_status <= 1'b1;
 			counter[0] <= 8'h00;
@@ -165,29 +159,24 @@ module apple3_rtc #(
 			counter[2] <= {1'b0, host_rtc[6:4], host_rtc[3:0]};
 			counter[3] <= {1'b0, host_rtc[14:12], host_rtc[11:8]};
 			counter[4] <= {2'b00, host_rtc[21:20], host_rtc[19:16]};
-			counter[5] <= (host_rtc[50:48] == 0) ? 8'h01 :
-			              {5'b00000, host_rtc[50:48]};
+			counter[5] <= (host_rtc[50:48] == 0) ? 8'h01 : {5'b00000, host_rtc[50:48]};
 			counter[6] <= {2'b00, host_rtc[29:28], host_rtc[27:24]};
 			counter[7] <= {3'b000, host_rtc[36], host_rtc[35:32]};
-			year_bcd <= host_rtc[47:40];
-		end
-		else if (go_command) begin
+			year_bcd   <= host_rtc[47:40];
+		end else if (go_command) begin
 			// GO clears milliseconds through seconds, rounding up at 40 s.
 			millisecond_divider <= 14'd0;
-			counter[0] <= 8'h00;
-			counter[1] <= 8'h00;
-			counter[2] <= 8'h00;
+			counter[0]          <= 8'h00;
+			counter[1]          <= 8'h00;
+			counter[2]          <= 8'h00;
 			if (counter[2] >= 8'h40) advance_minute();
-		end
-		else if (millisecond_tick) begin
+		end else if (millisecond_tick) begin
 			if (counter[0][7:4] != 4'd9) begin
 				counter[0][7:4] <= counter[0][7:4] + 1'b1;
-			end
-			else begin
+			end else begin
 				counter[0] <= 8'h00;
 				// The 10 Hz edge includes the .99 -> .00 transition.
-				if ((counter[1][3:0] == 4'd9) && irq_control[1])
-					irq_status[1] <= 1'b1;
+				if ((counter[1][3:0] == 4'd9) && irq_control[1]) irq_status[1] <= 1'b1;
 				if (counter[1] != 8'h99) counter[1] <= bcd_increment(counter[1]);
 				else begin
 					counter[1] <= 8'h00;
@@ -201,27 +190,29 @@ module apple3_rtc #(
 			end
 		end
 
-		if (!compare_match_d && compare_match && irq_control[0])
-			irq_status[0] <= 1'b1;
+		if (!compare_match_d && compare_match && irq_control[0]) irq_status[0] <= 1'b1;
 
 		if (!reset && read_strobe && (addr == 5'h10)) irq_status <= 8'h00;
 
 		if (!reset && write_strobe) begin
 			case (addr)
-				5'h00, 5'h01, 5'h02, 5'h03,
-				5'h04, 5'h05, 5'h06, 5'h07: counter[addr[2:0]] <= data_in;
-				5'h08, 5'h09, 5'h0a, 5'h0b,
-				5'h0c, 5'h0d, 5'h0e, 5'h0f: compare[addr[2:0]] <= data_in;
+				5'h00, 5'h01, 5'h02, 5'h03, 5'h04, 5'h05, 5'h06, 5'h07: counter[addr[2:0]] <= data_in;
+				5'h08, 5'h09, 5'h0a, 5'h0b, 5'h0c, 5'h0d, 5'h0e, 5'h0f: compare[addr[2:0]] <= data_in;
 				5'h11: irq_control <= data_in;
-				5'h12: if (data_in == 8'hff) begin
-					counter[0] <= 8'h00; counter[1] <= 8'h00;
-					counter[2] <= 8'h00; counter[3] <= 8'h00;
-					counter[4] <= 8'h00; counter[5] <= 8'h01;
-					counter[6] <= 8'h01; counter[7] <= 8'h01;
+				5'h12:
+				if (data_in == 8'hff) begin
+					counter[0] <= 8'h00;
+					counter[1] <= 8'h00;
+					counter[2] <= 8'h00;
+					counter[3] <= 8'h00;
+					counter[4] <= 8'h00;
+					counter[5] <= 8'h01;
+					counter[6] <= 8'h01;
+					counter[7] <= 8'h01;
 				end
-				5'h13: if (data_in == 8'hff)
-					for (reset_index = 0; reset_index < 8; reset_index = reset_index + 1)
-						compare[reset_index] <= 8'h00;
+				5'h13:
+				if (data_in == 8'hff)
+					for (reset_index = 0; reset_index < 8; reset_index = reset_index + 1) compare[reset_index] <= 8'h00;
 				default: ;
 			endcase
 		end
