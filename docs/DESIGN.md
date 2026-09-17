@@ -188,11 +188,16 @@ Apple II emulation restores the conventional mutually exclusive drive enables.
 
 Main's shared Apple-family backend detects containers and sector order, validates
 WOZ CRC/chunk/track bounds, and converts sector/NIB images into in-memory WOZ.
+A converted sector image gets the SOS protection key in its track 9 to 16
+address fields only when its `SOS.INTERP` is encrypted; SOS's BFM.INIT2 would
+otherwise decrypt a plain interpreter and die with SYSTEM FAILURE $06.
 The FPGA reads the WOZ track directory into its cache using the existing MiSTer
 block protocol. It contains no sector-to-GCR converter. Main preserves native
 WOZ bits and metadata, bounds writes to allocated track blocks, and clears the
-CRC before the first write. Converted media and block images are read-only for
-Apple III. WOZ1, FLUX and unmapped tracks are protected in the drive as well.
+CRC before the first write. Writes to a converted DSK, DO, PO or 2MG are decoded
+from the saved track by Main, and only sectors whose address and data fields
+fully verify are stored back into the source file; NIB sources and block images
+are read-only. WOZ1, FLUX and unmapped tracks are protected in the drive as well.
 See `docs/MAIN_STORAGE.md` for the mount assignments and companion Main build.
 `sim/disk` tests P6, cache transfers and physical timing; the Main repository's
 `tests/apple3` tests formats, transport, write policy and file persistence.

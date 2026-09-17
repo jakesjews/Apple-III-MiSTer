@@ -36,13 +36,23 @@ core. The supplied `MiSTer_AppleIII` binary comes from
 
 Supported: **WOZ, DSK, DO, PO, NIB and 2MG**.
 
-- Use **WOZ2** for writable disks. Writes require existing track allocations;
-  formatting cannot create missing tracks.
-- WOZ1, flux-encoded WOZ and all other formats are **read-only**.
+- **DSK, DO, PO and 2MG** are writable. Saves go straight into the image you
+  mounted, so keep a copy of anything you want to preserve, or make the file
+  read-only on the SD card to protect it.
+- **WOZ2** is writable. Writes require existing track allocations; formatting
+  cannot create missing tracks.
+- WOZ1, flux-encoded WOZ, NIB, NIB-payload 2MG and images inside a zip are
+  **read-only**.
 - Raw `.dsk`/`.do` files use DOS sector order; `.po` uses ProDOS order.
   For 2MG files, the header determines the order.
+- Sector dumps of copy-protected originals (an encrypted `SOS.INTERP`) get the
+  SOS protection key and synchronized tracks automatically. Deprotected disks,
+  which is most of what circulates, are left without the key so SOS does not
+  try to decrypt them.
 
-To make a writable WOZ copy, see the [conversion instructions](docs/MAIN_STORAGE.md#tests-and-conversion-utility).
+Most Apple III software circulates as DSK, and most of the original-disk WOZ
+dumps on Asimov are WOZ1, so they mount read-only. To turn a DSK or NIB into a
+writable WOZ2, see the [conversion instructions](docs/MAIN_STORAGE.md#tests-and-conversion-utility).
 
 ## Controls
 
@@ -64,6 +74,9 @@ using host hardware flow control. [Serial details](docs/DEVELOPMENT.md#serial-po
   memory expansion are not implemented.
 - The Confidence Program's **Machine Configuration** screen hangs.
 - Broad software and copy-protection compatibility has not been established.
+- SOS-protected disks rely on a track-to-track timing check that SD card latency
+  can upset. If one stops at **SYSTEM FAILURE = $06** during boot, reset and try
+  again.
 
 ## Planned features and accuracy work
 

@@ -1,5 +1,60 @@
+diff --git a/support/a2/APPLE_III_STORAGE.md b/support/a2/APPLE_III_STORAGE.md
+new file mode 100644
+index 0000000..87c694c
+--- /dev/null
++++ b/support/a2/APPLE_III_STORAGE.md
+@@ -0,0 +1,49 @@
++# Apple III profile
++
++`iigs_disk` also handles WOZ-capable Apple-III cores (S0 advertises WOZ).
++Older Apple-III builds keep their existing generic image path.
++
++- S0: internal Disk III (.D1).
++- S1: first external Disk III (.D2).
++- S2/S3: raw block-device payloads, read-only. The current FPGA exposes only
++  S0/S1; these assignments reserve the block-device interface without treating
++  S1 as the Apple //e hard-disk slot.
++
++The shared 5.25 encoder uses proper 10-bit sync words. Apple III's profile adds
++its standard synchronized track rotation to sector sources. Native WOZ is
++validated and served unchanged; NIB preserves its address fields and data bytes.
++
++SOS copy protection (BFM.INIT2) reads one address-field volume byte on each of
++tracks 9–16. When those tracks are synchronized and the values differ, SOS uses
++them as a key and decrypts SOS.INTERP in memory. Sector images carry no address
++fields, so the key is rebuilt only when it is needed: Main finds SOS.INTERP on
++the volume, decodes a sample with the key, and keeps whichever version has the
++byte statistics of 6502 code. A sector dump of a protected original (encrypted
++interpreter) gets the key; a deprotected or never-protected disk does not,
++because SOS would otherwise "decrypt" working code and stop with SYSTEM FAILURE
++$06. 140K ProDOS-order images use the standard sector map (block 2 is DOS
++sectors 11 and 10).
++
++Native WOZ2 bitstream files permit writes within existing track allocations.
++Main preserves metadata and unrelated chunks, clears CRC to zero before the
++first write, and rejects writes outside those allocations. WOZ1, FLUX, archives
++and protected images remain read-only, as do block payloads.
++
++DSK, DO, PO and sector-order 2MG sources are writable in place. The drive saves
++a track one 512-byte block at a time, so after each block Main decodes that
++track with a strict parser: address checksum and track number, a data field
++within the gap that follows, valid GCR codes, data checksum and both epilogs.
++Only sectors that verify and differ from the source are written, 256 bytes
++each, in the source's own sector order and behind any 2MG header. A torn or
++damaged sector is never stored; if one still fails once the whole track has
++arrived, Main reports how many sectors were not saved. NIB and DC42 sources
++stay read-only. The //e and IIgs keep their existing whole-track write-back.
++
++The hardware still implements Apple III's P6 sequencer, independent spindle/I/O
++selection, motor timeout, disk-change latch and physical bit timing. Main handles
++file formats and file I/O via the existing SD protocol, including multi-block
++transfers up to 16 KiB. No new FPGA/Main transport protocol is introduced.
++
++`tests/apple3/run.sh` exercises the shared backend, including //e/IIgs
++regressions. The Apple III core's simulator exercises the real-time disk path
++using the same converted WOZ output.
 diff --git a/support/a2/iigs_disk.cpp b/support/a2/iigs_disk.cpp
-index a1830f0..ac9fda9 100644
+index a1830f0..2203384 100644
 --- a/support/a2/iigs_disk.cpp
 +++ b/support/a2/iigs_disk.cpp
 @@ -1,4 +1,4 @@
@@ -19,7 +74,11 @@ index a1830f0..ac9fda9 100644
  static int        g_mode[16]    = {};
  static int64_t    g_hdr_off[16]  = {};
  static uint8_t   *g_woz[16]      = {};
-@@ -28,13 +30,14 @@ static int        g_wb_order[16] = {};  // 5.25 source order: 0 = DOS, 1 = ProDO
+@@ -25,16 +27,18 @@ static int        g_wb_ok[16]    = {};  // write-back supported (and file writab
+ static int        g_wb_kind[16]  = {};  // 1 = 3.5", 2 = 5.25"
+ static int64_t    g_wb_off[16]   = {};  // header offset within the source file
+ static int        g_wb_order[16] = {};  // 5.25 source order: 0 = DOS, 1 = ProDOS
++static int        g_wb_verify[16] = {}; // Apple ///: persist checksum-verified sectors only
  
  static int eqi(const char *a, const char *b) { return a && b && !strcasecmp(a, b); }
  
@@ -35,7 +94,7 @@ index a1830f0..ac9fda9 100644
  	return 0;
  }
  
-@@ -56,6 +59,12 @@ static int slot_kind(int index)
+@@ -56,6 +60,12 @@ static int slot_kind(int index)
  		if (index == 1) return 0;                 // HDD (slot 7)
  		if (index == 0 || index == 2) return 2;   // 5.25" drive 1 / drive 2
  		return -1;
@@ -48,7 +107,7 @@ index a1830f0..ac9fda9 100644
  	default:
  		return -1;
  	}
-@@ -68,7 +77,7 @@ int iigs_is_core(void)
+@@ -68,7 +78,7 @@ int iigs_is_core(void)
  
  static void reject(const char *msg)
  {
@@ -57,7 +116,7 @@ index a1830f0..ac9fda9 100644
  	InfoMessage(msg, 5000, "Wrong disk for slot");
  }
  
-@@ -79,6 +88,8 @@ void iigs_unmount(int index)
+@@ -79,15 +89,19 @@ void iigs_unmount(int index)
  	g_woz_sz[index] = 0;
  	g_hdr_off[index] = 0;
  	g_mode[index] = 0;
@@ -66,7 +125,10 @@ index a1830f0..ac9fda9 100644
  	g_wb_ok[index] = 0;
  	g_wb_kind[index] = 0;
  	g_wb_off[index] = 0;
-@@ -88,6 +99,7 @@ void iigs_unmount(int index)
+ 	g_wb_order[index] = 0;
++	g_wb_verify[index] = 0;
+ }
+ 
  // Read the entire open image into a freshly malloc'd buffer (caller frees).
  static uint8_t *read_all(fileTYPE *f, size_t *out_len)
  {
@@ -74,7 +136,7 @@ index a1830f0..ac9fda9 100644
  	size_t n = (size_t)f->size;
  	uint8_t *b = (uint8_t *)malloc(n ? n : 1);
  	if (!b) return NULL;
-@@ -106,12 +118,13 @@ static uint8_t *read_all(fileTYPE *f, size_t *out_len)
+@@ -106,12 +120,13 @@ static uint8_t *read_all(fileTYPE *f, size_t *out_len)
  
  // Build a converted WOZ for a floppy slot. Returns malloc'd buffer + size, or
  // NULL on failure. kind: 1 = 3.5", 2 = 5.25".
@@ -89,7 +151,7 @@ index a1830f0..ac9fda9 100644
  
  	TwoMG m;
  	DC42 d;
-@@ -120,6 +133,7 @@ static uint8_t *build_woz(int kind, const char *ext, const uint8_t *raw, size_t
+@@ -120,6 +135,7 @@ static uint8_t *build_woz(int kind, const char *ext, const uint8_t *raw, size_t
  		pay_len = m.data_len;
  		order_prodos = (m.format == 1);
  		order_nib    = (m.format == 2);
@@ -97,7 +159,7 @@ index a1830f0..ac9fda9 100644
  	} else if (dc42_parse(raw, raw_len, &d)) {
  		pay = raw + 84;
  		pay_len = d.data_size;
-@@ -146,7 +160,7 @@ static uint8_t *build_woz(int kind, const char *ext, const uint8_t *raw, size_t
+@@ -146,7 +162,7 @@ static uint8_t *build_woz(int kind, const char *ext, const uint8_t *raw, size_t
  	static uint8_t dsk[A2_525_IMAGE_SIZE];
  	if (order_nib) {
  		if (pay_len != A2_NIB_IMAGE_SIZE) return NULL;
@@ -106,17 +168,18 @@ index a1830f0..ac9fda9 100644
  	} else {
  		if (pay_len != A2_525_IMAGE_SIZE) return NULL;
  		if (order_prodos) a2_prodos_to_dos(dsk, pay);
-@@ -155,7 +169,8 @@ static uint8_t *build_woz(int kind, const char *ext, const uint8_t *raw, size_t
+@@ -155,7 +171,9 @@ static uint8_t *build_woz(int kind, const char *ext, const uint8_t *raw, size_t
  	size_t cap = 512 * 1024;
  	uint8_t *woz = (uint8_t *)malloc(cap);
  	if (!woz) return NULL;
 -	size_t n = a2_dsk_to_woz525(woz, cap, dsk);
++	// Apple ///: only a disk with an encrypted interpreter gets the SOS key.
 +	size_t n = order_nib ? a2_nib_to_woz525(woz, cap, pay) :
-+		a2_dsk_to_woz525_ex(woz, cap, dsk, apple3, volume);
++		a2_dsk_to_woz525_ex(woz, cap, dsk, apple3 ? 1 + a2_sos_interp_encrypted(dsk) : 0, volume);
  	if (!n) { free(woz); return NULL; }
  	*out_sz = n;
  	return woz;
-@@ -166,6 +181,7 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
+@@ -166,6 +184,7 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
  	if (!iigs_is_core()) return IIGS_PASSTHRU;
  	int kind = slot_kind(index);
  	if (kind < 0) return IIGS_PASSTHRU;
@@ -124,7 +187,7 @@ index a1830f0..ac9fda9 100644
  
  	iigs_unmount(index);
  
-@@ -178,11 +194,39 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
+@@ -178,11 +197,39 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
  
  	const char *dot = strrchr(name, '.');
  	const char *ext = dot ? dot + 1 : NULL;
@@ -165,7 +228,7 @@ index a1830f0..ac9fda9 100644
  
  	if (kind == 0) {
  		// ----- hard-disk slot: permissive (any ProDOS-order block image) -----
-@@ -191,17 +235,19 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
+@@ -191,17 +238,19 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
  		if (is_2mg && m.format != 1) { reject("This 2MG is DOS/NIB order; not a ProDOS hard-disk image."); return IIGS_REJECT; }
  		if (eqi(ext, "do")) { reject("DOS-order disk — load it in a 5.25\" drive, not a hard disk."); return IIGS_REJECT; }
  
@@ -196,7 +259,7 @@ index a1830f0..ac9fda9 100644
  		return IIGS_HANDLED;
  	}
  
-@@ -214,26 +260,6 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
+@@ -214,26 +263,6 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
  			return IIGS_REJECT;
  		}
  
@@ -223,12 +286,12 @@ index a1830f0..ac9fda9 100644
  
  		return IIGS_PASSTHRU;   // native WOZ on a real file: serve directly
  	}
-@@ -267,10 +293,10 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
+@@ -267,10 +296,10 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
  	} else {
  		wb_ok = 1; if (kind == 2) wb_order = 0;                   // raw .po(800K) / .do / .dsk
  	}
 -	if (!FileCanWrite(name)) wb_ok = 0;
-+	if (apple3 || !FileCanWrite(name) || (is_2mg && m.write_protected)) wb_ok = 0;
++	if (f->zip || !FileCanWrite(name) || (is_2mg && m.write_protected)) wb_ok = 0;
  
  	size_t woz_sz = 0;
 -	uint8_t *woz = build_woz(kind, ext, raw, raw_len, &woz_sz);
@@ -236,7 +299,7 @@ index a1830f0..ac9fda9 100644
  	free(raw);
  	if (!woz) { reject("Could not convert this disk to WOZ."); return IIGS_REJECT; }
  
-@@ -278,49 +304,34 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
+@@ -278,49 +307,35 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
  	g_woz[index]     = woz;
  	g_woz_sz[index]  = woz_sz;
  	g_wb_ok[index]   = wb_ok;
@@ -244,6 +307,7 @@ index a1830f0..ac9fda9 100644
  	g_wb_kind[index] = kind;
  	g_wb_off[index]  = wb_off;
  	g_wb_order[index] = wb_order;
++	g_wb_verify[index] = apple3;
  	f->size = (int64_t)woz_sz;            // core sees the WOZ size
  	*out_writable = wb_ok;                // writable only if write-back is supported
 -	printf("IIgs: floppy slot %d converted to WOZ (%zu bytes), %s\n",
@@ -300,7 +364,49 @@ index a1830f0..ac9fda9 100644
  	// Converted floppy: update the in-memory WOZ, then (if write-back is
  	// supported) decode the affected track and persist it to the source image.
  	uint64_t off = lba * 512;
-@@ -354,3 +365,35 @@ void iigs_write(int disk, fileTYPE *f, uint64_t lba, int ack)
+@@ -329,6 +344,8 @@ void iigs_write(int disk, fileTYPE *f, uint64_t lba, int ack)
+ 
+ 	int t = a2_woz_track_for_lba(g_woz[disk], g_woz_sz[disk], (uint32_t)lba);
+ 	if (t < 0) return;   // header block (TMAP/TRKS dir) — nothing to persist
++	// DOS-order position -> ProDOS-order position (same map as a2_dos_to_prodos).
++	static const int D2P[16] = { 0, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 15 };
+ 
+ 	if (g_wb_kind[disk] == 1) {
+ 		// 3.5": decode the track's ProDOS blocks, write that block range back.
+@@ -338,11 +355,31 @@ void iigs_write(int disk, fileTYPE *f, uint64_t lba, int ack)
+ 			if (FileSeek(f, g_wb_off[disk] + (int64_t)base * 512, SEEK_SET))
+ 				FileWriteAdv(f, po + (size_t)base * 512, (size_t)cnt * 512);
+ 		}
++	} else if (g_wb_verify[disk]) {
++		// Apple /// 5.25": the drive saves a track one block at a time, so the
++		// track is torn until its last block arrives. Persist only sectors that
++		// fully verify and differ from the source; everything else stays as it is.
++		uint8_t trk[A2_TRACK_SIZE], cur[A2_TRACK_SIZE];
++		int64_t base = g_wb_off[disk] + (int64_t)t * A2_TRACK_SIZE;
++		uint16_t good = a2_woz525_verify_track(g_woz[disk], g_woz_sz[disk], t, trk);
++		int failed = !FileSeek(f, base, SEEK_SET) || FileReadAdv(f, cur, A2_TRACK_SIZE) != A2_TRACK_SIZE;
++		for (int s = 0; s < 16 && !failed; s++) {
++			int pos = (g_wb_order[disk] == 1 ? D2P[s] : s) * A2_SECTOR_SIZE;
++			if (!(good & (1 << s)) || !memcmp(cur + pos, trk + s * A2_SECTOR_SIZE, A2_SECTOR_SIZE)) continue;
++			failed = !FileSeek(f, base + pos, SEEK_SET) ||
++				FileWriteAdv(f, trk + s * A2_SECTOR_SIZE, A2_SECTOR_SIZE) != A2_SECTOR_SIZE;
++		}
++		if (failed) InfoMessage("Could not save to the disk image.", 5000, "Disk write error");
++		else if (good != 0xffff && a2_woz_track_for_lba(g_woz[disk], g_woz_sz[disk], (uint32_t)lba + 1) != t) {
++			// The whole track has arrived and some sectors still do not verify.
++			static char msg[64];
++			snprintf(msg, sizeof(msg), "Track %d: %d unreadable sector(s) not saved.", t, 16 - __builtin_popcount(good));
++			InfoMessage(msg, 5000, "Disk write warning");
++		}
+ 	} else {
+ 		// 5.25": decode the DOS-order track; re-skew to ProDOS if the source is .po.
+ 		static uint8_t dsk[A2_525_IMAGE_SIZE];
+ 		if (a2_woz525_decode_track(g_woz[disk], g_woz_sz[disk], t, dsk) > 0) {
+-			static const int D2P[16] = { 0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 13, 6, 14, 7, 15 };
+ 			uint8_t out[A2_TRACK_SIZE];
+ 			const uint8_t *src = dsk + (size_t)t * A2_TRACK_SIZE;
+ 			if (g_wb_order[disk] == 1)
+@@ -354,3 +391,35 @@ void iigs_write(int disk, fileTYPE *f, uint64_t lba, int ack)
  		}
  	}
  }
@@ -337,10 +443,10 @@ index a1830f0..ac9fda9 100644
 +	for (int i = 0; i < size; i += 512) converted_write(disk, f, lba + i / 512, chunk + i);
 +}
 diff --git a/support/a2/iigs_disk.h b/support/a2/iigs_disk.h
-index d50fc80..04fccbb 100644
+index d50fc80..247668d 100644
 --- a/support/a2/iigs_disk.h
 +++ b/support/a2/iigs_disk.h
-@@ -1,12 +1,14 @@
+@@ -1,12 +1,15 @@
 -// MiSTer integration glue for the Apple IIgs core disk handling.
 +// MiSTer integration glue for Apple-family disk handling.
  //
@@ -353,11 +459,12 @@ index d50fc80..04fccbb 100644
  // Slots: IIgs (Apple-IIgs.sv, VDNUM=4): S0,S1 = hard disk; S2 = 3.5"; S3 = 5.25".
  //        //e  (Apple-II.sv,   VDNUM=3): S0,S2 = 5.25" drives; S1 = hard disk.
 +//        ///  (Apple-III.sv): S0,S1 = Disk III; S2,S3 = block devices.
-+// Apple /// converts floppies read-only; only native WOZ2 track writes persist.
++// Apple /// persists native WOZ2 track writes, and for converted sector images
++// writes back only checksum-verified sectors; NIB and block payloads are read-only.
  
  #ifndef IIGS_DISK_H
  #define IIGS_DISK_H
-@@ -24,10 +26,10 @@
+@@ -24,10 +27,10 @@
  #define IIGS_HANDLED   1   // set up for iigs_read/iigs_write; size/sd_type adjusted
  #define IIGS_REJECT   (-1) // wrong disk for this slot — caller aborts mount (OSD shown)
  
@@ -370,7 +477,7 @@ index d50fc80..04fccbb 100644
  // May convert a floppy image to WOZ (in memory) or set a header offset for a
  // 2MG/DC42 hard disk, validate the image against the slot (strict, with OSD
  // guidance on mismatch), and adjust f->size to what the core should see.
-@@ -38,7 +40,7 @@ int  iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable);
+@@ -38,7 +41,7 @@ int  iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable);
  void iigs_unmount(int index);
  
  // Block dispatch, called from user_io.cpp like a2_readDSK/a2_writeDSK.
@@ -381,7 +488,7 @@ index d50fc80..04fccbb 100644
  
  #endif // IIGS_DISK_H
 diff --git a/support/a2/iigs_fmt.cpp b/support/a2/iigs_fmt.cpp
-index 6a69800..ca4f8d3 100644
+index 6a69800..ae7e290 100644
 --- a/support/a2/iigs_fmt.cpp
 +++ b/support/a2/iigs_fmt.cpp
 @@ -51,10 +51,13 @@ int twomg_parse(const uint8_t *buf, size_t size, TwoMG *out)
@@ -400,7 +507,7 @@ index 6a69800..ca4f8d3 100644
  	    (uint64_t)data_off + data_len > size)
  		return 0;
  
-@@ -162,20 +165,58 @@ size_t dc42_build(uint8_t *out, size_t out_cap, const uint8_t *payload,
+@@ -162,28 +165,69 @@ size_t dc42_build(uint8_t *out, size_t out_cap, const uint8_t *payload,
  // ===========================================================================
  int woz_disk_type(const uint8_t *buf, size_t size)
  {
@@ -470,7 +577,21 @@ index 6a69800..ca4f8d3 100644
  }
  
  // ===========================================================================
-@@ -375,15 +416,15 @@ static int parse_nib_sector(const uint8_t *d, int len, uint8_t *out256,
+ // 140K sector order (DOS 3.3 <-> ProDOS)
+ // ===========================================================================
+-// DOS logical sector -> ProDOS sector position within a track. Inverse pair.
+-static const int DOS_TO_PRODOS[16] = { 0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 13, 6, 14, 7, 15 };
+-static const int PRODOS_TO_DOS[16] = { 0, 2, 4, 6, 8, 10, 12, 14, 1, 3, 5, 7, 9, 11, 13, 15 };
++// DOS-order file position <-> ProDOS-order file position within a track. Physical
++// sector p sits at DOS position {0,7,14,6,13,5,12,4,11,3,10,2,9,1,8,15}[p] and at
++// ProDOS position {0,8,1,9,2,10,3,11,4,12,5,13,6,14,7,15}[p], so block 2 (the volume
++// directory) is DOS sectors 11 and 10. The composed map is its own inverse.
++static const int DOS_TO_PRODOS[16] = { 0, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 15 };
++static const int PRODOS_TO_DOS[16] = { 0, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 15 };
+ 
+ static void reorder_140k(uint8_t *dst, const uint8_t *src, const int map[16])
+ {
+@@ -375,15 +419,15 @@ static int parse_nib_sector(const uint8_t *d, int len, uint8_t *out256,
  
  // Parse one 6656-byte NIB track into a 4096-byte DOS-order track. Returns the
  // number of sectors recovered.
@@ -489,7 +610,7 @@ index 6a69800..ca4f8d3 100644
  			if (s >= 0 && s < A2_SECTORS_PER_TRACK) {
  				uint16_t bit = (uint16_t)(1U << s);
  				if (!(seen & bit)) {
-@@ -421,82 +462,114 @@ int a2_nib_to_dsk(uint8_t *dsk, const uint8_t *nib)
+@@ -421,82 +465,195 @@ int a2_nib_to_dsk(uint8_t *dsk, const uint8_t *nib)
  #define WOZ_TRK_DIR    (160 * 8)         // 1280
  #define WOZ525_BLOCKS_PER_TRACK 13
  #define WOZ525_FIRST_BLOCK 3
@@ -508,26 +629,6 @@ index 6a69800..ca4f8d3 100644
  {
 -	if (woz_cap < WOZ525_SIZE) return 0;
 -	memset(woz, 0, WOZ525_SIZE);
--
--	// nibblize all tracks first
--	static uint8_t nib[A2_NIB_IMAGE_SIZE];
--	a2_dsk_to_nib(nib, dsk);
--
--	uint8_t *p = woz;
--	// File header (CRC filled in at the end)
--	memcpy(p, "WOZ2", 4);
--	p[4] = 0xFF; p[5] = 0x0A; p[6] = 0x0D; p[7] = 0x0A;
--	// p[8..11] CRC later
--	p += 12;
--
--	// INFO chunk
--	woz_put_chunk_hdr(p, "INFO", WOZ_INFO_LEN); p += 8;
--	uint8_t *info = p;
--	info[0] = 2;     // version
--	info[1] = 1;     // disk type 5.25"
--	info[2] = 0;     // write protected
--	info[3] = 0;     // synchronized
--	info[4] = 0;     // cleaned
 +	size_t size = 1536 + A2_TRACKS_525 * blocks * 512;
 +	if (cap < size) return 0;
 +	memset(woz, 0, size);
@@ -535,23 +636,7 @@ index 6a69800..ca4f8d3 100644
 +	woz_put_chunk_hdr(woz + 12, "INFO", 60);
 +	uint8_t *info = woz + 20;
 +	info[0] = 2; info[1] = 1; info[3] = apple3 != 0; info[4] = 1;
- 	memset(info + 5, ' ', 32);
--	memcpy(info + 5, "MiSTer IIgs easy-WOZ 5.25", 25);
--	info[37] = 1;    // sides
--	info[38] = 0;    // boot sector format
--	info[39] = 32;   // optimal bit timing (4us)
--	wr_le16(info + 44, WOZ525_BLOCKS_PER_TRACK);   // largest track
--	p += WOZ_INFO_LEN;
--
--	// TMAP chunk (quarter-track map; whole tracks at t*4 +/- 1)
--	woz_put_chunk_hdr(p, "TMAP", WOZ_TMAP_LEN); p += 8;
--	uint8_t *tmap = p;
--	memset(tmap, 0xFF, WOZ_TMAP_LEN);
--	for (int t = 0; t < A2_TRACKS_525; t++) {
--		int center = t * 4;
--		for (int off = -1; off <= 1; off++) {
--			int idx = center + off;
--			if (idx >= 0 && idx < WOZ_TMAP_LEN) tmap[idx] = (uint8_t)t;
++	memset(info + 5, ' ', 32);
 +	memcpy(info + 5, "MiSTer Apple 5.25 WOZ", 20);
 +	info[37] = 1; info[39] = 32;
 +	wr_le16(info + 44, blocks);
@@ -565,7 +650,10 @@ index 6a69800..ca4f8d3 100644
 +	woz_put_chunk_hdr(woz + 248, "TRKS", size - 256);
 +	return size;
 +}
-+
+ 
+-	// nibblize all tracks first
+-	static uint8_t nib[A2_NIB_IMAGE_SIZE];
+-	a2_dsk_to_nib(nib, dsk);
 +// A real sync word is ten bits (1111111100), not an eight-bit FF byte.
 +static void put_disk_byte(uint8_t *out, unsigned &bit, uint8_t value, int sync = 0)
 +{
@@ -577,45 +665,117 @@ index 6a69800..ca4f8d3 100644
 +	put_disk_byte(out, bit, (value >> 1) | 0xaa);
 +	put_disk_byte(out, bit, value | 0xaa);
 +}
-+
-+size_t a2_dsk_to_woz525_ex(uint8_t *woz, size_t cap, const uint8_t *dsk, int apple3, uint8_t volume)
+ 
+-	uint8_t *p = woz;
+-	// File header (CRC filled in at the end)
+-	memcpy(p, "WOZ2", 4);
+-	p[4] = 0xFF; p[5] = 0x0A; p[6] = 0x0D; p[7] = 0x0A;
+-	// p[8..11] CRC later
+-	p += 12;
++// Apple /// SOS copy protection (BFM.INIT2). SOS reads the address-field volume
++// of one sector on each of tracks 9..16. If those tracks are synchronized and
++// the values differ, it takes them as a key and decrypts SOS.INTERP in memory.
++static const uint8_t sos_key[] = {0xb4,0xc1,0xe4,0xf3,0x9b,0xbd,0xbd,0x7c};   // tracks 9..16
++static const uint8_t sos_key_sector[] = {2,14,10,6,2,14,10,6};
+ 
+-	// INFO chunk
+-	woz_put_chunk_hdr(p, "INFO", WOZ_INFO_LEN); p += 8;
+-	uint8_t *info = p;
+-	info[0] = 2;     // version
+-	info[1] = 1;     // disk type 5.25"
+-	info[2] = 0;     // write protected
+-	info[3] = 0;     // synchronized
+-	info[4] = 0;     // cleaned
+-	memset(info + 5, ' ', 32);
+-	memcpy(info + 5, "MiSTer IIgs easy-WOZ 5.25", 25);
+-	info[37] = 1;    // sides
+-	info[38] = 0;    // boot sector format
+-	info[39] = 32;   // optimal bit timing (4us)
+-	wr_le16(info + 44, WOZ525_BLOCKS_PER_TRACK);   // largest track
+-	p += WOZ_INFO_LEN;
++// SOS's DCLOOP: XOR stream over the interpreter code from load+3 onwards. The
++// key rotates left one bit for each page pass. Encoding and decoding are the same.
++void a2_sos_crypt(uint8_t *code, size_t len, uint16_t load)
 +{
-+	size_t size = woz525_header(woz, cap, 13, apple3);
-+	if (!size) return 0;
-+	// Apple /// SOS reads a synchronized volume key from tracks 9..16.
-+	// Sector images omit address fields. Reconstruct the standard SOS layout;
-+	// native WOZ and NIB images never pass through this reconstruction.
-+	static const uint8_t key[] = {0xb4,0xc1,0xe4,0xf3,0x9b,0xbd,0xbd,0x7c};
-+	static const uint8_t key_sector[] = {2,14,10,6,2,14,10,6};
-+	for (int t = 0; t < 35; ++t) {
-+		uint8_t *out = woz + (3 + t * 13) * 512;
-+		unsigned bit = 0;
-+		for (int i = 0; i < 16; ++i) put_disk_byte(out, bit, 255, 1);
-+		for (int sector = 0; sector < 16; ++sector) {
-+			uint8_t vol = apple3 && t >= 9 && t <= 16 && sector == key_sector[t - 9] ? key[t - 9] : volume;
-+			for (uint8_t b : addr_prolog) put_disk_byte(out, bit, b);
-+			put_disk_44(out, bit, vol); put_disk_44(out, bit, t);
-+			put_disk_44(out, bit, sector); put_disk_44(out, bit, vol ^ t ^ sector);
-+			for (uint8_t b : addr_epilog) put_disk_byte(out, bit, b);
-+			for (int i = 0; i < 7; ++i) put_disk_byte(out, bit, 255, 1);
-+			for (uint8_t b : data_prolog) put_disk_byte(out, bit, b);
-+			uint8_t data[343]; nibbilize(dsk + t * 4096 + soft_interleave[sector] * 256, data);
-+			for (uint8_t b : data) put_disk_byte(out, bit, b);
-+			for (uint8_t b : data_epilog) put_disk_byte(out, bit, b);
-+			for (int i = 0; i < 16; ++i) put_disk_byte(out, bit, 255, 1);
-+		}
-+		wr_le32(woz + 260 + t * 8, bit);
-+		if (apple3) {
-+			// 50,304-bit tracks, rotated by the Apple /// synchronized-format
-+			// inter-track offset. This matches the original SOS seek/key sequence.
-+			uint8_t copy[6288]; memcpy(copy, out, sizeof(copy));
-+			unsigned rotation = (t * 2950) % sizeof(copy);
-+			for (unsigned i = 0; i < sizeof(copy); ++i) out[i] = copy[(i + rotation) % sizeof(copy)];
++	uint8_t key[8], prev = 0;
++	for (int i = 0; i < 8; ++i) key[i] = sos_key[7 - i];        // KEY+0 is track 16
++	unsigned y = (load + 3) & 255;
++	for (size_t i = 3; i < len;) {
++		unsigned carry = key[0] >> 7;
++		for (int x = 7; x >= 0; --x) { unsigned v = (key[x] << 1) | carry; carry = v >> 8; key[x] = v; }
++		do {
++			uint8_t a = key[(y & 7) ^ 2];
++			prev = uint8_t(a + prev + key[a & 7]);
++			code[i++] ^= prev;
++			y = (y + 1) & 255;
++		} while (y && i < len);
++	}
++}
+ 
+-	// TMAP chunk (quarter-track map; whole tracks at t*4 +/- 1)
+-	woz_put_chunk_hdr(p, "TMAP", WOZ_TMAP_LEN); p += 8;
+-	uint8_t *tmap = p;
+-	memset(tmap, 0xFF, WOZ_TMAP_LEN);
+-	for (int t = 0; t < A2_TRACKS_525; t++) {
+-		int center = t * 4;
+-		for (int off = -1; off <= 1; off++) {
+-			int idx = center + off;
+-			if (idx >= 0 && idx < WOZ_TMAP_LEN) tmap[idx] = (uint8_t)t;
++// One 512-byte ProDOS/SOS block of a DOS-order 140K image.
++static void dsk_block(const uint8_t *dsk, unsigned block, uint8_t *out)
++{
++	const uint8_t *track = dsk + (block / 8) * A2_TRACK_SIZE;
++	for (int half = 0; half < 2; ++half)
++		memcpy(out + half * 256, track + PRODOS_TO_DOS[(block % 8) * 2 + half] * A2_SECTOR_SIZE, 256);
++}
++
++// A sector image has no address fields, so the key cannot be copied from it.
++// Rebuild it only when the boot volume's SOS.INTERP really is encrypted: a
++// deprotected disk carries a plain interpreter, and SOS would "decrypt" that
++// into garbage and die with SYSTEM FAILURE $06. Decode a sample and keep
++// whichever version has the byte statistics of 6502 code.
++int a2_sos_interp_encrypted(const uint8_t *dsk)
++{
++	uint8_t dir[512], index[512], file[2048];
++	unsigned key_block = 0, storage = 0, per_block = 13;
++	for (unsigned block = 2, hops = 0; block && block < 280 && hops < 16 && !key_block; ++hops) {
++		dsk_block(dsk, block, dir);
++		if (block == 2) {
++			// Early SOS volumes declare 12 entries per block instead of 13.
++			per_block = dir[0x24];
++			if ((dir[4] >> 4) != 0xf || dir[0x23] != 39 || per_block < 1 || per_block > 13) return 0;
  		}
++		for (unsigned i = 0; i < per_block && !key_block; ++i) {
++			const uint8_t *e = dir + 4 + i * 39;
++			if ((e[0] & 15) != 10 || memcmp(e + 1, "SOS.INTERP", 10)) continue;
++			storage = e[0] >> 4; key_block = rd_le16(e + 0x11);
++		}
++		block = rd_le16(dir + 2);
  	}
 -	p += WOZ_TMAP_LEN;
-+	wr_le32(woz + 8, woz_crc32(woz + 12, size - 12));
-+	return size;
++	if (!key_block || key_block >= 280 || storage < 1 || storage > 2) return 0;
++	size_t got = 0;
++	if (storage == 2) dsk_block(dsk, key_block, index);
++	for (unsigned i = 0; i < sizeof(file) / 512; ++i) {
++		unsigned block = storage == 1 ? (i ? 0 : key_block) : unsigned(index[i] | index[256 + i] << 8);
++		if (!block || block >= 280) break;
++		dsk_block(dsk, block, file + got); got += 512;
++	}
++	if (got < 512 || memcmp(file, "SOS NTRP", 8)) return 0;
++	size_t code = 10 + rd_le16(file + 8) + 4;
++	if (code + 256 > got) return 0;
++	uint16_t load = rd_le16(file + code - 4);
++	size_t len = got - code;
++	if (rd_le16(file + code - 2) < len) len = rd_le16(file + code - 2);
++	if (len < 256) return 0;
++	unsigned raw[256] = {}, dec[256] = {};
++	for (size_t i = 3; i < len; ++i) ++raw[file[code + i]];
++	a2_sos_crypt(file + code, len, load);
++	for (size_t i = 3; i < len; ++i) ++dec[file[code + i]];
++	// Code repeats a few opcodes and operands; ciphertext is close to uniform.
++	unsigned long raw_sum = 0, dec_sum = 0;
++	for (int v = 0; v < 256; ++v) { raw_sum += raw[v] * raw[v]; dec_sum += dec[v] * dec[v]; }
++	return dec_sum > 2 * raw_sum;
 +}
  
 -	// TRKS chunk: 1280-byte dir + BITS data
@@ -639,6 +799,45 @@ index 6a69800..ca4f8d3 100644
 -	uint32_t crc = woz_crc32(woz + 12, WOZ525_SIZE - 12);
 -	wr_le32(woz + 8, crc);
 -	return WOZ525_SIZE;
++// apple3: 0 = Apple II layout, 1 = Apple /// synchronized tracks,
++// 2 = synchronized tracks plus the SOS protection key in the address fields.
++size_t a2_dsk_to_woz525_ex(uint8_t *woz, size_t cap, const uint8_t *dsk, int apple3, uint8_t volume)
++{
++	size_t size = woz525_header(woz, cap, 13, apple3);
++	if (!size) return 0;
++	// Sector images omit address fields. Native WOZ and NIB images keep their
++	// own and never pass through this reconstruction.
++	const uint8_t *key = sos_key, *key_sector = sos_key_sector;
++	for (int t = 0; t < 35; ++t) {
++		uint8_t *out = woz + (3 + t * 13) * 512;
++		unsigned bit = 0;
++		for (int i = 0; i < 16; ++i) put_disk_byte(out, bit, 255, 1);
++		for (int sector = 0; sector < 16; ++sector) {
++			uint8_t vol = apple3 == 2 && t >= 9 && t <= 16 && sector == key_sector[t - 9] ? key[t - 9] : volume;
++			for (uint8_t b : addr_prolog) put_disk_byte(out, bit, b);
++			put_disk_44(out, bit, vol); put_disk_44(out, bit, t);
++			put_disk_44(out, bit, sector); put_disk_44(out, bit, vol ^ t ^ sector);
++			for (uint8_t b : addr_epilog) put_disk_byte(out, bit, b);
++			for (int i = 0; i < 7; ++i) put_disk_byte(out, bit, 255, 1);
++			for (uint8_t b : data_prolog) put_disk_byte(out, bit, b);
++			uint8_t data[343]; nibbilize(dsk + t * 4096 + soft_interleave[sector] * 256, data);
++			for (uint8_t b : data) put_disk_byte(out, bit, b);
++			for (uint8_t b : data_epilog) put_disk_byte(out, bit, b);
++			for (int i = 0; i < 16; ++i) put_disk_byte(out, bit, 255, 1);
++		}
++		wr_le32(woz + 260 + t * 8, bit);
++		if (apple3) {
++			// 50,304-bit tracks, rotated by the Apple /// synchronized-format
++			// inter-track offset. This matches the original SOS seek/key sequence.
++			uint8_t copy[6288]; memcpy(copy, out, sizeof(copy));
++			unsigned rotation = (t * 2950) % sizeof(copy);
++			for (unsigned i = 0; i < sizeof(copy); ++i) out[i] = copy[(i + rotation) % sizeof(copy)];
++		}
++	}
++	wr_le32(woz + 8, woz_crc32(woz + 12, size - 12));
++	return size;
++}
++
 +size_t a2_dsk_to_woz525(uint8_t *woz, size_t cap, const uint8_t *dsk)
 +{
 +	return a2_dsk_to_woz525_ex(woz, cap, dsk, 0, DEFAULT_VOLUME);
@@ -669,7 +868,7 @@ index 6a69800..ca4f8d3 100644
  }
  
  // Locate a chunk by id; returns pointer to its data and fills *out_size, or NULL.
-@@ -506,6 +579,7 @@ static const uint8_t *woz_find_chunk(const uint8_t *woz, size_t size,
+@@ -506,6 +663,7 @@ static const uint8_t *woz_find_chunk(const uint8_t *woz, size_t size,
  	size_t pos = 12;
  	while (pos + 8 <= size) {
  		uint32_t csize = rd_le32(woz + pos + 4);
@@ -677,28 +876,19 @@ index 6a69800..ca4f8d3 100644
  		if (memcmp(woz + pos, id, 4) == 0) {
  			if (out_size) *out_size = csize;
  			return woz + pos + 8;
-@@ -515,47 +589,40 @@ static const uint8_t *woz_find_chunk(const uint8_t *woz, size_t size,
+@@ -515,47 +673,102 @@ static const uint8_t *woz_find_chunk(const uint8_t *woz, size_t size,
  	return NULL;
  }
  
 -int a2_woz525_to_dsk(uint8_t *dsk, const uint8_t *woz, size_t woz_size)
-+int a2_woz525_decode_track(const uint8_t *woz, size_t size, int track, uint8_t *dsk)
++#define WOZ525_NIB_CAP 32768
++
++// Read one 5.25" WOZ2 track as the disk bytes a Disk II would see. Returns the count.
++static int woz525_track_nibbles(const uint8_t *woz, size_t size, int track, uint8_t *nib)
  {
 -	if (woz_disk_type(woz, woz_size) != 1) return 0;
 -	const uint8_t *trks = woz_find_chunk(woz, woz_size, "TRKS", NULL);
 -	if (!trks) return 0;
--
--	static uint8_t nib[A2_NIB_IMAGE_SIZE];
--	memset(nib, 0, sizeof(nib));
--
--	for (int t = 0; t < A2_TRACKS_525; t++) {
--		const uint8_t *e = trks + t * 8;
--		uint16_t start_block = rd_le16(e + 0);
--		uint16_t block_cnt   = rd_le16(e + 2);
--		if (block_cnt == 0) continue;
--		size_t off = (size_t)start_block * A2_BLOCK_SIZE;
--		if (off + A2_NIB_TRACK_SIZE > woz_size) return 0;
--		memcpy(nib + (size_t)t * A2_NIB_TRACK_SIZE, woz + off, A2_NIB_TRACK_SIZE);
 +	if (woz_disk_type(woz, size) != 1 || woz[3] != '2' || track < 0 || track >= 35) return 0;
 +	uint32_t n = 0;
 +	const uint8_t *trks = woz_find_chunk(woz, size, "TRKS", &n);
@@ -709,20 +899,82 @@ index 6a69800..ca4f8d3 100644
 +	if (!bits || bits > 131071 || start + (bits + 7) / 8 > size) return 0;
 +	// Disk II's shift register supplies a byte whenever bit 7 becomes set.
 +	// Two revolutions recover a sector that straddles the track splice.
-+	uint8_t nib[32768], shift = 0;
++	uint8_t shift = 0;
 +	int count = 0;
-+	for (uint32_t i = 0; i < bits * 2 && count < int(sizeof(nib)); ++i) {
++	for (uint32_t i = 0; i < bits * 2 && count < WOZ525_NIB_CAP; ++i) {
 +		uint32_t pos = i % bits;
 +		shift = (shift << 1) | ((woz[start + pos / 8] >> (7 - (pos & 7))) & 1);
 +		if (shift & 0x80) { nib[count++] = shift; shift = 0; }
++	}
++	return count;
++}
+ 
+-	static uint8_t nib[A2_NIB_IMAGE_SIZE];
+-	memset(nib, 0, sizeof(nib));
++int a2_woz525_decode_track(const uint8_t *woz, size_t size, int track, uint8_t *dsk)
++{
++	uint8_t nib[WOZ525_NIB_CAP];
++	int count = woz525_track_nibbles(woz, size, track, nib);
++	return count ? nib_track_to_dsk_track(nib, dsk + track * 4096, count) : 0;
++}
+ 
+-	for (int t = 0; t < A2_TRACKS_525; t++) {
+-		const uint8_t *e = trks + t * 8;
+-		uint16_t start_block = rd_le16(e + 0);
+-		uint16_t block_cnt   = rd_le16(e + 2);
+-		if (block_cnt == 0) continue;
+-		size_t off = (size_t)start_block * A2_BLOCK_SIZE;
+-		if (off + A2_NIB_TRACK_SIZE > woz_size) return 0;
+-		memcpy(nib + (size_t)t * A2_NIB_TRACK_SIZE, woz + off, A2_NIB_TRACK_SIZE);
++// Strict sector decode for write-back into a user's source image. The import
++// parser above is permissive on purpose; this one accepts a sector only when
++// the address checksum, track number, data-field position, every GCR code, the
++// data checksum and both epilogs verify, as the machine's own read routine does.
++static uint16_t nib_track_verify_sectors(const uint8_t *n, int len, int track, uint8_t *dt)
++{
++	uint16_t good = 0, conflict = 0;
++	for (int i = 0; i + 13 <= len; ++i) {
++		if (n[i] != 0xd5 || n[i + 1] != 0xaa || n[i + 2] != 0x96) continue;
++		uint8_t vol = odd_even_decode(n[i + 3], n[i + 4]), trk = odd_even_decode(n[i + 5], n[i + 6]);
++		uint8_t sec = odd_even_decode(n[i + 7], n[i + 8]), chk = odd_even_decode(n[i + 9], n[i + 10]);
++		if ((vol ^ trk ^ sec) != chk || trk != track || sec >= A2_SECTORS_PER_TRACK) continue;
++		if (n[i + 11] != 0xde || n[i + 12] != 0xaa) continue;
++		// The data field belongs to this address only if it follows within the
++		// gap; a later field is another sector's data and must never be paired.
++		int d = -1;
++		for (int j = i + 13; j < i + 13 + 32 && j + 3 <= len; ++j) {
++			if (n[j] != 0xd5 || n[j + 1] != 0xaa) continue;
++			if (n[j + 2] == 0xad) d = j + 3;
++			break;
++		}
++		if (d < 0 || d + DATA_LEN + 3 > len) continue;
++		uint8_t secondary[SECONDARY_BUF_LEN], primary[PRIMARY_BUF_LEN], sector[A2_SECTOR_SIZE];
++		int x = 0, ok = 1;
++		for (int k = 0; k <= DATA_LEN && ok; ++k) {
++			const uint8_t *p = (const uint8_t *)memchr(gcr6_table, n[d + k], 0x40);
++			if (!p) { ok = 0; break; }
++			x ^= int(p - gcr6_table);
++			if (k < SECONDARY_BUF_LEN) secondary[k] = x;
++			else if (k < DATA_LEN) primary[k - SECONDARY_BUF_LEN] = x;
++		}
++		if (!ok || x || n[d + DATA_LEN + 1] != 0xde || n[d + DATA_LEN + 2] != 0xaa) continue;
++		for (int k = 0; k < PRIMARY_BUF_LEN; ++k) {
++			uint8_t pair = (secondary[k % SECONDARY_BUF_LEN] >> (k / SECONDARY_BUF_LEN * 2)) & 3;
++			sector[k] = (primary[k] << 2) | ((pair & 1) << 1) | (pair >> 1);
++		}
++		int pos = soft_interleave[sec];
++		uint16_t bit = 1U << pos;
++		// Both revolutions must agree; two differing copies are never persisted.
++		if ((good & bit) && memcmp(dt + pos * A2_SECTOR_SIZE, sector, A2_SECTOR_SIZE)) conflict |= bit;
++		if (!(good & bit)) { memcpy(dt + pos * A2_SECTOR_SIZE, sector, A2_SECTOR_SIZE); good |= bit; }
  	}
 -	return a2_nib_to_dsk(dsk, nib);
-+	return nib_track_to_dsk_track(nib, dsk + track * 4096, count);
++	return good & ~conflict;
  }
  
 -// Decode a single 5.25" track from a WOZ into dsk (143360) at track*4096.
 -int a2_woz525_decode_track(const uint8_t *woz, size_t woz_size, int track, uint8_t *dsk)
-+int a2_woz525_to_dsk(uint8_t *dsk, const uint8_t *woz, size_t size)
++uint16_t a2_woz525_verify_track(const uint8_t *woz, size_t size, int track, uint8_t *trk)
  {
 -	if (woz_disk_type(woz, woz_size) != 1) return 0;
 -	const uint8_t *trks = woz_find_chunk(woz, woz_size, "TRKS", NULL);
@@ -734,6 +986,13 @@ index 6a69800..ca4f8d3 100644
 -	size_t off = (size_t)start_block * A2_BLOCK_SIZE;
 -	if (off + A2_NIB_TRACK_SIZE > woz_size) return 0;
 -	return nib_track_to_dsk_track(woz + off, dsk + (size_t)track * A2_TRACK_SIZE);
++	uint8_t nib[WOZ525_NIB_CAP];
++	int count = woz525_track_nibbles(woz, size, track, nib);
++	return count ? nib_track_verify_sectors(nib, count, track, trk) : 0;
++}
++
++int a2_woz525_to_dsk(uint8_t *dsk, const uint8_t *woz, size_t size)
++{
 +	for (int t = 0; t < 35; ++t) if (a2_woz525_decode_track(woz, size, t, dsk) != 16) return 0;
 +	return 1;
  }
@@ -750,7 +1009,7 @@ index 6a69800..ca4f8d3 100644
  		const uint8_t *e = trks + t * 8;
  		uint16_t sb = rd_le16(e + 0);
 diff --git a/support/a2/iigs_fmt.h b/support/a2/iigs_fmt.h
-index 53ab2a1..f80bc3d 100644
+index 53ab2a1..a2b0f96 100644
 --- a/support/a2/iigs_fmt.h
 +++ b/support/a2/iigs_fmt.h
 @@ -85,6 +85,9 @@ size_t dc42_build(uint8_t *out, size_t out_cap, const uint8_t *payload,
@@ -763,17 +1022,335 @@ index 53ab2a1..f80bc3d 100644
  // zlib-compatible CRC32 (poly 0xEDB88320), init 0.
  uint32_t woz_crc32(const uint8_t *data, size_t len);
  
-@@ -103,6 +106,10 @@ int  a2_nib_to_dsk(uint8_t *dsk, const uint8_t *nib);   // 1 if all tracks parse
+@@ -103,6 +106,16 @@ int  a2_nib_to_dsk(uint8_t *dsk, const uint8_t *nib);   // 1 if all tracks parse
  // Builds a fully-allocated standard-layout WOZ2 (all 35 tracks present) so the
  // core can read and write it; trivially reversible. Returns bytes written / 0.
  size_t a2_dsk_to_woz525(uint8_t *woz, size_t woz_cap, const uint8_t *dsk);
-+// Same shared encoder with Apple /// synchronized formatting and SOS key fields.
++// Same shared encoder. apple3: 0 = Apple II layout, 1 = Apple /// synchronized
++// tracks, 2 = synchronized tracks plus the SOS protection key in tracks 9..16.
 +size_t a2_dsk_to_woz525_ex(uint8_t *woz, size_t cap, const uint8_t *dsk, int apple3, uint8_t volume);
++// SOS BFM.INIT2 interpreter cipher (its own inverse) over code loaded at `load`.
++void a2_sos_crypt(uint8_t *code, size_t len, uint16_t load);
++// 1 if the DOS-order image is a SOS boot volume whose SOS.INTERP is encrypted,
++// i.e. a sector dump of a protected original that needs the key to boot.
++int a2_sos_interp_encrypted(const uint8_t *dsk);
 +// Preserve NIB track bytes without decoding/re-encoding their sectors.
 +size_t a2_nib_to_woz525(uint8_t *woz, size_t cap, const uint8_t *nib);
  int    a2_woz525_to_dsk(uint8_t *dsk, const uint8_t *woz, size_t woz_size);
  
  // ---- 3.5" 800K (ProDOS-order PO <-> WOZ2), Apple zoned GCR ----
+@@ -121,6 +134,9 @@ int a2_woz35_decode_track(const uint8_t *woz, size_t woz_size, int track, uint8_
+                           int *base_block, int *block_count);
+ // 5.25": decode one track into dsk (143360) at track*4096 (16 sectors, DOS order).
+ int a2_woz525_decode_track(const uint8_t *woz, size_t woz_size, int track, uint8_t *dsk);
++// 5.25" strict decode: fills trk (4096 bytes, DOS order) only at sectors whose
++// address and data fields fully verify, and returns the mask of those positions.
++uint16_t a2_woz525_verify_track(const uint8_t *woz, size_t woz_size, int track, uint8_t *trk);
+ 
+ #ifdef __cplusplus
+ }
+diff --git a/tests/apple3/README.md b/tests/apple3/README.md
+new file mode 100644
+index 0000000..6d32908
+--- /dev/null
++++ b/tests/apple3/README.md
+@@ -0,0 +1,25 @@
++# Apple III storage regression tests
++
++Run `tests/apple3/run.sh` from Main. The test links the production shared
++`iigs_disk.cpp` and `iigs_fmt.cpp` to file and SPI shims, with ASan/UBSan enabled.
++It runs on macOS and Linux and does not require ROMs, copyrighted disk images,
++or a MiSTer. Fixtures are generated from deterministic byte patterns.
++
++Coverage includes Apple III S0/S1 floppies and S2/S3 read-only block assignments;
++DOS/ProDOS/2MG conversion equivalence; 10-bit sync and bitstream GCR round-trips;
++NIB address-field preservation; the ProDOS-order sector map pinned to block
++positions; SOS protection-key reconstruction only for an encrypted SOS.INTERP; full 16 KiB transfers; partial final reads;
++DSK/PO/2MG sector write-back saved block by block, with torn, damaged and
++mis-tracked sectors kept out of the source; read-only writes that leave both
++RAM and disk unchanged; native WOZ CRC,
++metadata guards, allocation bounds and persistent writes; archive/host/INFO/FLUX
++protection; invalid 2MG/WOZ rejection; and existing //e/IIgs behavior.
++
++The same executable can serialize the actual Main mount result to a separate
++WOZ file for a core simulator or a writable copy:
++
++```
++/tmp/mister-apple3-tests/storage_test --convert source.dsk copy.woz
++```
++
++This utility uses Main's converter. There is no independent test-only encoder.
+diff --git a/tests/apple3/compat.h b/tests/apple3/compat.h
+new file mode 100644
+index 0000000..d44d3d3
+--- /dev/null
++++ b/tests/apple3/compat.h
+@@ -0,0 +1,6 @@
++#ifdef __APPLE__
++#define reboot host_reboot
++#include <unistd.h>
++#undef reboot
++#define __off64_t off_t
++#endif
+diff --git a/tests/apple3/run.sh b/tests/apple3/run.sh
+new file mode 100755
+index 0000000..921147a
+--- /dev/null
++++ b/tests/apple3/run.sh
+@@ -0,0 +1,9 @@
++#!/usr/bin/env bash
++set -euo pipefail
++cd "$(dirname "$0")/../.."
++out=${APPLE3_TEST_OUT:-/tmp/mister-apple3-tests}
++mkdir -p "$out"
++${CXX:-c++} -std=c++14 -O1 -g -Wall -Wextra -fsanitize=address,undefined \
++  -include tests/apple3/compat.h tests/apple3/storage_test.cpp \
++  support/a2/iigs_disk.cpp support/a2/iigs_fmt.cpp -o "$out/storage_test"
++"$out/storage_test" "$@"
+diff --git a/tests/apple3/storage_test.cpp b/tests/apple3/storage_test.cpp
+new file mode 100644
+index 0000000..21fd469
+--- /dev/null
++++ b/tests/apple3/storage_test.cpp
+@@ -0,0 +1,238 @@
++#include "../../file_io.h"
++#include "../../user_io.h"
++#include "../../support/a2/iigs_fmt.h"
++#include "../../support/a2/iigs_disk.h"
++#include <cassert>
++#include <cstring>
++#include <string>
++#include <vector>
++#include <fstream>
++#include <algorithm>
++
++static std::string core = "Apple-III";
++static bool can_write = true, modern = true;
++static std::vector<uint8_t> to_fpga, from_fpga;
++static unsigned command;
++static std::string message;
++fileTYPE::fileTYPE() : filp(nullptr), mode(0), type(1), zip(nullptr), size(0), offset(0) {}
++fileTYPE::~fileTYPE() { if (filp) fclose(filp); }
++char *user_io_get_core_name(int) { return &core[0]; }
++char user_io_a2_woz_enabled() { return modern; }
++char user_io_a3_woz_enabled() { return modern && core=="Apple-III"; }
++char *user_io_get_confstr(int i) { static char v[] = "S0,WOZDSKDO PO NIB2MG,Drive 1"; return modern && i == 1 ? v : nullptr; }
++int user_io_get_width() { return 0; }
++int FileCanWrite(const char *) { return can_write; }
++int FileSeek(fileTYPE *f, __off64_t off, int whence) { if (fseeko(f->filp, off, whence)) return 0; f->offset = ftello(f->filp); return 1; }
++int FileReadAdv(fileTYPE *f, void *buf, int len, int) { return fread(buf, 1, len, f->filp); }
++int FileWriteAdv(fileTYPE *f, void *buf, int len, int) { int n = fwrite(buf, 1, len, f->filp); fflush(f->filp); return n; }
++void InfoMessage(const char *msg, int, const char *) { message = msg; }
++void EnableIO() {}
++void DisableIO() {}
++uint16_t fpga_spi(uint16_t v) { command = v; return 0; }
++void spi_block_write(const uint8_t *p, int, int n) { to_fpga.assign(p, p+n); }
++void spi_block_read(uint8_t *p, int, int n) { assert(from_fpga.size() == unsigned(n)); memcpy(p, from_fpga.data(), n); }
++static void put32(uint8_t *p, uint32_t v) { for(int i=0;i<4;i++) p[i]=v>>(i*8); }
++static uint32_t get32(const uint8_t *p) { return p[0] | p[1]<<8 | p[2]<<16 | uint32_t(p[3])<<24; }
++static std::vector<uint8_t> bytes(fileTYPE &f) {
++  fseeko(f.filp,0,SEEK_END); size_t n=ftello(f.filp); rewind(f.filp);
++  std::vector<uint8_t> b(n); assert(fread(b.data(),1,n,f.filp)==n); return b;
++}
++static void source(fileTYPE &f, const std::vector<uint8_t> &b) {
++  if(f.filp) fclose(f.filp); f.filp=tmpfile(); assert(f.filp);
++  assert(fwrite(b.data(),1,b.size(),f.filp)==b.size()); fflush(f.filp);
++  f.size=b.size(); f.zip=nullptr; rewind(f.filp);
++}
++static std::vector<uint8_t> serve(int slot, fileTYPE &f) {
++  std::vector<uint8_t> result;
++  for(uint64_t lba=0;lba*512<uint64_t(f.size);lba+=32) {
++    iigs_read(slot,&f,lba,0x100*(slot+1),16384);
++    assert(to_fpga.size()==16384); assert(command==unsigned(UIO_SECTOR_RD|0x100*(slot+1)));
++    result.insert(result.end(),to_fpga.begin(),to_fpga.end());
++  }
++  result.resize(f.size); return result;
++}
++static std::vector<uint8_t> mount_serve(fileTYPE &f, const std::vector<uint8_t> &b, const char *name, int slot=0, bool rw=false) {
++  source(f,b); int writable=!rw; assert(iigs_mount(slot,name,&f,&writable)==IIGS_HANDLED);
++  assert(!!writable==rw); return serve(slot,f);
++}
++// The drive saves track `from` of woz over track `to` as consecutive 512-byte blocks,
++// exactly as the FPGA controller does; each() inspects the source after every block.
++template<class F> static void save_track(int slot, fileTYPE &f, const std::vector<uint8_t> &woz, int from, int to, F each) {
++  for(int b=0;b<13;b++) {
++    from_fpga.assign(woz.begin()+(3+from*13+b)*512,woz.begin()+(4+from*13+b)*512);
++    iigs_write(slot,&f,3+to*13+b,0x100*(slot+1)); each();
++  }
++}
++// Each sector slot of a source track holds its old or its new contents, never anything
++// else (zeros, a torn sector or a neighbour's data). Returns how many slots are new.
++static int fresh(const std::vector<uint8_t> &now, const std::vector<uint8_t> &old, const std::vector<uint8_t> &next, int track, size_t off=0) {
++  int n=0;
++  for(int s=0;s<16;s++) {
++    size_t p=off+track*4096+s*256; bool is_new=!memcmp(&now[p],&next[p],256);
++    assert(is_new || !memcmp(&now[p],&old[p],256)); n+=is_new;
++  }
++  return n;
++}
++int main(int argc,char **argv) {
++  fileTYPE f;
++  if(argc==4 && !strcmp(argv[1],"--convert")) {
++    std::ifstream input(argv[2],std::ios::binary);
++    std::vector<uint8_t> b((std::istreambuf_iterator<char>(input)),{});
++    source(f,b); int writable; assert(iigs_mount(0,argv[2],&f,&writable)==IIGS_HANDLED);
++    auto w=serve(0,f); std::ofstream out(argv[3],std::ios::binary); out.write((char*)w.data(),w.size());
++    iigs_unmount(0); return !out;
++  }
++  std::vector<uint8_t> dsk(A2_525_IMAGE_SIZE), po(dsk.size()), back(dsk.size());
++  uint32_t rng=1; for(auto &b:dsk) { rng=rng*1664525+1013904223; b=rng>>24; }
++  int writable=0;
++  auto w=mount_serve(f,dsk,"disk.DSK",0,true);
++  A2WozInfo info; assert(a2_woz_validate(w.data(),w.size(),&info)); assert(w[23]==1);
++  assert(a2_woz525_to_dsk(back.data(),w.data(),w.size())); assert(back==dsk);
++  assert(get32(w.data()+260)==50304);
++  // A burst that decodes to nothing valid never reaches the source image.
++  from_fpga.assign(1024,0x31); auto original=bytes(f); iigs_write(0,&f,3,0x100,1024);
++  assert(bytes(f)==original);
++  a2_dos_to_prodos(po.data(),dsk.data()); assert(mount_serve(f,po,"disk.PO",0,true)==w);
++  // ProDOS order is blocks in sequence. Block n of a track is physical sectors 2n and
++  // 2n+2 (the second half of block 7 is sector 15), which a DOS-order file stores at
++  // {0,7,14,6,13,5,12,4,11,3,10,2,9,1,8,15}[sector]: block 2 is DOS sectors 11 and 10.
++  const int dos_pos[16]={0,7,14,6,13,5,12,4,11,3,10,2,9,1,8,15};
++  for(int t=0;t<35;t++) for(int half=0;half<16;half++) {
++    int sector=half<8?half*2:half*2-15;
++    assert(!memcmp(&po[t*4096+half*256],&dsk[t*4096+dos_pos[sector]*256],256));
++  }
++  assert(!memcmp(&po[2*512],&dsk[11*256],256) && !memcmp(&po[2*512+256],&dsk[10*256],256));
++  auto do_w=mount_serve(f,dsk,"disk.do",1,true); assert(do_w==w);
++  std::vector<uint8_t> mg(128+dsk.size()+73); twomg_build(mg.data(),mg.size(),po.data(),po.size(),1);
++  memmove(mg.data()+128,mg.data()+64,po.size()); put32(mg.data()+24,128); put32(mg.data()+16,0);
++  assert(mount_serve(f,mg,"disk.2mg",0,true)==w);
++  std::vector<uint8_t> nib(A2_NIB_IMAGE_SIZE); a2_dsk_to_nib(nib.data(),dsk.data());
++  auto nw=mount_serve(f,nib,"disk.nib"); assert(a2_woz525_to_dsk(back.data(),nw.data(),nw.size())); assert(back==dsk);
++  // NIB address volume bytes survive direct packing (never sector decode/rebuild).
++  nib[51]=0xaau; nib[52]=0xab; auto modified=mount_serve(f,nib,"disk.nib"); assert(modified!=nw);
++  puts("PASS shared 5.25 codec: DOS/PO/2MG equivalence, sync bits, round-trip and NIB preservation");
++  // Apple /// sector images persist writes. Tracks 0, 9 (SOS key field) and 34 (largest
++  // synchronized rotation) change in every sector and are saved block by block.
++  const int tracks[]={0,9,34};
++  auto next=dsk; for(int t:tracks) for(int i=0;i<4096;i++) next[t*4096+i]^=0x5a+i%7;
++  std::vector<uint8_t> next_po(next.size()), next_woz(512*1024), plain(512*1024);
++  a2_dos_to_prodos(next_po.data(),next.data());
++  next_woz.resize(a2_dsk_to_woz525_ex(next_woz.data(),next_woz.size(),next.data(),1,254));
++  plain.resize(a2_dsk_to_woz525(plain.data(),plain.size(),next.data()));
++  mount_serve(f,dsk,"disk.dsk",0,true); message.clear();
++  for(int t:tracks) save_track(0,f,next_woz,t,t,[&]{ fresh(bytes(f),dsk,next,t); });
++  assert(bytes(f)==next); assert(message.empty());
++  assert(mount_serve(f,bytes(f),"disk.dsk",0,true)==next_woz);
++  mount_serve(f,po,"disk.po",1,true);
++  for(int t:tracks) save_track(1,f,next_woz,t,t,[&]{ fresh(bytes(f),po,next_po,t); });
++  assert(bytes(f)==next_po); assert(message.empty());
++  // 2MG keeps its header, offset and trailing comment; only payload sectors change.
++  auto next_mg=mg; memcpy(next_mg.data()+128,next_po.data(),next_po.size());
++  mount_serve(f,mg,"disk.2mg",0,true);
++  for(int t:tracks) save_track(0,f,next_woz,t,t,[&]{ fresh(bytes(f),mg,next_mg,t,128); });
++  assert(bytes(f)==next_mg); assert(message.empty());
++  // Unrotated tracks place physical sector s at bit 160+s*3134: address field, 70-bit
++  // gap, data prologue at +182 and data at +206. Damage is never written to the source.
++  auto flip=[](std::vector<uint8_t> &v,int t,unsigned bit){ v[(3+t*13)*512+bit/8]^=0x80>>(bit&7); };
++  auto bad_data=plain; flip(bad_data,0,160+5*3134+206+8*100+7);
++  mount_serve(f,dsk,"disk.dsk",0,true); message.clear();
++  save_track(0,f,bad_data,0,0,[&]{ fresh(bytes(f),dsk,next,0); });
++  assert(fresh(bytes(f),dsk,next,0)==15); assert(message.find("1 unreadable")!=std::string::npos);
++  // A lost data prologue must not pair that address field with the next sector's data.
++  auto bad_prologue=plain; flip(bad_prologue,9,160+7*3134+182+23);
++  mount_serve(f,dsk,"disk.dsk",0,true); message.clear();
++  save_track(0,f,bad_prologue,9,9,[&]{ fresh(bytes(f),dsk,next,9); });
++  assert(fresh(bytes(f),dsk,next,9)==15); assert(message.find("1 unreadable")!=std::string::npos);
++  // Address fields for another track (a mis-stepped head) leave the source untouched.
++  mount_serve(f,dsk,"disk.dsk",0,true); message.clear();
++  save_track(0,f,plain,34,0,[&]{ assert(bytes(f)==dsk); });
++  assert(message.find("16 unreadable")!=std::string::npos);
++  // Host permissions and archives keep a sector image read-only and unmodified.
++  can_write=false; mount_serve(f,dsk,"disk.dsk"); save_track(0,f,next_woz,0,0,[&]{ assert(bytes(f)==dsk); });
++  assert(serve(0,f)==w); can_write=true; source(f,dsk); f.zip=reinterpret_cast<fileZipArchive*>(1);
++  assert(iigs_mount(0,"disk.dsk",&f,&writable)==IIGS_HANDLED && !writable); f.zip=nullptr;
++  puts("PASS Apple /// sector write-back: DSK/PO/2MG persistence, torn saves, damaged fields and protection");
++  // SOS copy protection: the key is rebuilt only for a boot volume whose SOS.INTERP is
++  // encrypted. A plain interpreter must never get it, or SOS decodes working code into
++  // garbage (SYSTEM FAILURE $06). Fixture: volume directory in block 2, a sapling file
++  // with its index in block 10 and data from block 11, holding code-like plaintext.
++  std::vector<uint8_t> sos_po(A2_525_IMAGE_SIZE), sos(sos_po.size());
++  uint8_t *vd=&sos_po[2*512]; vd[4]=0xf4; memcpy(vd+5,"BOOT",4); vd[0x23]=39; vd[0x24]=13;
++  uint8_t *fe=vd+4+39; fe[0]=0x2a; memcpy(fe+1,"SOS.INTERP",10); fe[0x11]=10; fe[0x15]=0x00; fe[0x16]=0x10;
++  for(int i=0;i<8;i++) sos_po[10*512+i]=11+i;
++  std::vector<uint8_t> interp(4096); memcpy(interp.data(),"SOS NTRP",8); interp[10]=0x0e; interp[11]=0x83; interp[12]=0xf2; interp[13]=0x0f;
++  const uint8_t code_like[]={0x4c,0x00,0x84,0xa9,0x00,0x8d,0x00,0x19,0x20,0x40,0x84,0xd0,0x03,0x4c,0x80,0x85,0xa5,0x10,0x85,0x12,0x60};
++  for(unsigned i=14;i<interp.size();i++) interp[i]=code_like[(i*7+i/64)%sizeof(code_like)];
++  const auto plain_interp=interp;
++  memcpy(&sos_po[11*512],interp.data(),interp.size()); a2_prodos_to_dos(sos.data(),sos_po.data());
++  assert(!a2_sos_interp_encrypted(sos.data())); assert(!a2_sos_interp_encrypted(dsk.data()));
++  std::vector<uint8_t> plain_woz(512*1024), keyed_woz(512*1024);
++  plain_woz.resize(a2_dsk_to_woz525_ex(plain_woz.data(),plain_woz.size(),sos.data(),1,254));
++  assert(mount_serve(f,sos,"boot.dsk",0,true)==plain_woz);
++  a2_sos_crypt(&interp[14],interp.size()-14,0x830e);
++  memcpy(&sos_po[11*512],interp.data(),interp.size()); a2_prodos_to_dos(sos.data(),sos_po.data());
++  assert(a2_sos_interp_encrypted(sos.data()));
++  keyed_woz.resize(a2_dsk_to_woz525_ex(keyed_woz.data(),keyed_woz.size(),sos.data(),2,254));
++  assert(mount_serve(f,sos,"boot.dsk",0,true)==keyed_woz);
++  plain_woz.resize(512*1024); plain_woz.resize(a2_dsk_to_woz525_ex(plain_woz.data(),plain_woz.size(),sos.data(),1,254));
++  assert(keyed_woz!=plain_woz && a2_woz525_to_dsk(back.data(),keyed_woz.data(),keyed_woz.size()) && back==sos);
++  assert(interp!=plain_interp && !memcmp(&interp[14],&plain_interp[14],3));
++  a2_sos_crypt(&interp[14],interp.size()-14,0x830e); assert(interp==plain_interp);
++  puts("PASS SOS protection: key only for an encrypted SOS.INTERP, cipher round-trip, plain volumes untouched");
++  // Native WOZ: unknown chunks, raw bits and all metadata remain byte-for-byte.
++  w.insert(w.end(),{'M','E','T','A',3,0,0,0,'x','y','z'}); put32(w.data()+8,woz_crc32(w.data()+12,w.size()-12));
++  source(f,w); assert(iigs_mount(1,"native.woz",&f,&writable)==IIGS_HANDLED && writable);
++  assert(serve(1,f)==w); from_fpga.assign(w.begin()+1536,w.begin()+2560); from_fpga[345]^=0x20;
++  iigs_write(1,&f,3,0x200,1024); auto expected=w; expected[1536+345]^=0x20; memset(expected.data()+8,0,4);
++  assert(bytes(f)==expected); assert(serve(1,f)==expected); assert(a2_woz_validate(expected.data(),expected.size(),&info));
++  from_fpga.assign(512,0); iigs_write(1,&f,0,0x200); assert(bytes(f)==expected);
++  from_fpga.assign(1024,0); iigs_write(1,&f,(f.size/512),0x200,1024); assert(bytes(f)==expected);
++  source(f,expected); assert(iigs_mount(1,"native.woz",&f,&writable)==IIGS_HANDLED && writable); assert(serve(1,f)==expected);
++  expected[22]=1; source(f,expected); assert(iigs_mount(1,"native.woz",&f,&writable)==IIGS_HANDLED && !writable);
++  from_fpga.assign(512,0x55); iigs_write(1,&f,3,0x200); assert(bytes(f)==expected); assert(serve(1,f)==expected);
++  auto bad=w; bad.back()^=1; source(f,bad); assert(iigs_mount(0,"broken.woz",&f,&writable)==IIGS_REJECT);
++  bad=w; put32(bad.data()+8,0); put32(bad.data()+16,0x7fffffff); source(f,bad); assert(iigs_mount(0,"broken.woz",&f,&writable)==IIGS_REJECT);
++  puts("PASS native WOZ: full bursts, CRC, partial EOF, metadata guards, persistence and write protection");
++  // Block slots use the header's payload length, not trailing comments/tags.
++  std::vector<uint8_t> block(2048); for(unsigned i=0;i<block.size();i++) block[i]=i;
++  std::vector<uint8_t> bm(128+block.size()+99); twomg_build(bm.data(),bm.size(),block.data(),block.size(),1);
++  memmove(bm.data()+128,bm.data()+64,block.size()); put32(bm.data()+24,128);
++  assert(mount_serve(f,bm,"block.2mg",2)==block); assert(f.size==2048);
++  from_fpga.assign(512,0xa5); auto before=bytes(f); iigs_write(2,&f,0,0x300); assert(bytes(f)==before);
++  assert(mount_serve(f,block,"block.hdv",3)==block);
++  source(f,w); assert(iigs_mount(2,"floppy.woz",&f,&writable)==IIGS_REJECT);
++  source(f,block); assert(iigs_mount(0,"hard.hdv",&f,&writable)==IIGS_REJECT);
++  source(f,bm); bm[12]=3; source(f,bm); assert(iigs_mount(2,"bad.2mg",&f,&writable)==IIGS_REJECT);
++  core="Apple-II"; source(f,dsk); assert(iigs_mount(2,"disk.dsk",&f,&writable)==IIGS_HANDLED && writable);
++  auto a2w=serve(2,f); assert(a2_woz525_to_dsk(back.data(),a2w.data(),a2w.size()) && back==dsk);
++  source(f,block); assert(iigs_mount(1,"disk.po",&f,&writable)==IIGS_PASSTHRU);
++  // Preserve the other Apple cores' converted-image write-back policy.
++  auto changed_dsk=dsk; changed_dsk[512]^=0x73;
++  std::vector<uint8_t> changed_woz(512*1024);
++  changed_woz.resize(a2_dsk_to_woz525(changed_woz.data(),changed_woz.size(),changed_dsk.data()));
++  source(f,dsk); assert(iigs_mount(0,"disk.dsk",&f,&writable)==IIGS_HANDLED && writable);
++  from_fpga.assign(changed_woz.begin()+1536,changed_woz.begin()+1536+6656);
++  iigs_write(0,&f,3,0,6656); assert(bytes(f)==changed_dsk);
++  // 800K IIgs encoding/decoding also remains on the same backend.
++  core="Apple-IIgs"; std::vector<uint8_t> po35(A2_35_IMAGE_SIZE), back35(po35.size());
++  for(auto &b:po35) { rng=rng*1664525+1013904223; b=rng>>24; }
++  source(f,po35); assert(iigs_mount(2,"disk.po",&f,&writable)==IIGS_HANDLED && writable);
++  auto gs=serve(2,f); assert(a2_woz35_to_po(back35.data(),gs.data(),gs.size()) && back35==po35);
++  // Archives and host permissions force native WOZ read-only without changing it.
++  core="Apple-III"; can_write=false; source(f,w);
++  assert(iigs_mount(0,"native.woz",&f,&writable)==IIGS_HANDLED && !writable);
++  assert(serve(0,f)==w); can_write=true; source(f,w); f.zip=reinterpret_cast<fileZipArchive*>(1);
++  assert(iigs_mount(0,"native.woz",&f,&writable)==IIGS_HANDLED && !writable);
++  assert(serve(0,f)==w); f.zip=nullptr;
++  // A supported FLUX container is read-only and is never converted.
++  auto flux=w; flux.insert(flux.end(),{'F','L','U','X',160,0,0,0}); flux.resize(flux.size()+160,255);
++  flux[20]=3; put32(flux.data()+8,woz_crc32(flux.data()+12,flux.size()-12));
++  source(f,flux); assert(iigs_mount(0,"flux.woz",&f,&writable)==IIGS_HANDLED && !writable); assert(serve(0,f)==flux);
++  // A recognizable malformed container must not fall back to a raw block image.
++  auto overflow=bm; put32(overflow.data()+12,1); put32(overflow.data()+20,0xffffffff); put32(overflow.data()+28,0);
++  source(f,overflow); assert(iigs_mount(2,"bad.2mg",&f,&writable)==IIGS_REJECT);
++  puts("PASS II/IIgs write-back and codec compatibility, native archive/permission/FLUX protection");
++  core="Apple-III"; modern=false; assert(!iigs_is_core()); modern=true; assert(iigs_is_core());
++  for(int i=0;i<16;i++) iigs_unmount(i);
++  puts("PASS Apple-family slot assignments, read-only block payloads, invalid containers and legacy compatibility");
++}
 diff --git a/user_io.cpp b/user_io.cpp
 index fd7a0e1..468d0df 100644
 --- a/user_io.cpp
@@ -842,241 +1419,3 @@ index 5f5bbc1..b75855c 100644
  char is_neogeo();
  char is_neogeo_cd();
  char is_megacd();
-diff --git a/support/a2/APPLE_III_STORAGE.md b/support/a2/APPLE_III_STORAGE.md
-new file mode 100644
-index 0000000..f280ce1
---- /dev/null
-+++ b/support/a2/APPLE_III_STORAGE.md
-@@ -0,0 +1,30 @@
-+# Apple III profile
-+
-+`iigs_disk` also handles WOZ-capable Apple-III cores (S0 advertises WOZ).
-+Older Apple-III builds keep their existing generic image path.
-+
-+- S0: internal Disk III (.D1).
-+- S1: first external Disk III (.D2).
-+- S2/S3: raw block-device payloads, read-only. The current FPGA exposes only
-+  S0/S1; these assignments reserve the block-device interface without treating
-+  S1 as the Apple //e hard-disk slot.
-+
-+The shared 5.25 encoder uses proper 10-bit sync words. Apple III's profile adds
-+its standard synchronized track rotation and SOS address-field key from tracks
-+9–16. These are reconstructed only for sector sources. Native WOZ is validated
-+and served unchanged; NIB preserves its address fields and data bytes.
-+
-+Apple III converted images and block payloads are read-only. Native WOZ2
-+bitstream files permit writes within existing track allocations. Main preserves
-+metadata and unrelated chunks, clears CRC to zero before the first write, and
-+rejects writes outside those allocations. WOZ1, FLUX, archives and protected
-+images remain read-only. No reverse sector conversion occurs for Apple III.
-+
-+The hardware still implements Apple III's P6 sequencer, independent spindle/I/O
-+selection, motor timeout, disk-change latch and physical bit timing. Main handles
-+file formats and file I/O via the existing SD protocol, including multi-block
-+transfers up to 16 KiB. No new FPGA/Main transport protocol is introduced.
-+
-+`tests/apple3/run.sh` exercises the shared backend, including //e/IIgs
-+regressions. The Apple III core's simulator exercises the real-time disk path
-+using the same converted WOZ output.
-diff --git a/tests/apple3/README.md b/tests/apple3/README.md
-new file mode 100644
-index 0000000..a0afc67
---- /dev/null
-+++ b/tests/apple3/README.md
-@@ -0,0 +1,22 @@
-+# Apple III storage regression tests
-+
-+Run `tests/apple3/run.sh` from Main. The test links the production shared
-+`iigs_disk.cpp` and `iigs_fmt.cpp` to file and SPI shims, with ASan/UBSan enabled.
-+It runs on macOS and Linux and does not require ROMs, copyrighted disk images,
-+or a MiSTer. Fixtures are generated from deterministic byte patterns.
-+
-+Coverage includes Apple III S0/S1 floppies and S2/S3 read-only block assignments;
-+DOS/ProDOS/2MG conversion equivalence; 10-bit sync and bitstream GCR round-trips;
-+NIB address-field preservation; full 16 KiB transfers; partial final reads;
-+read-only writes that leave both RAM and disk unchanged; native WOZ CRC,
-+metadata guards, allocation bounds and persistent writes; archive/host/INFO/FLUX
-+protection; invalid 2MG/WOZ rejection; and existing //e/IIgs behavior.
-+
-+The same executable can serialize the actual Main mount result to a separate
-+WOZ file for a core simulator or a writable copy:
-+
-+```
-+/tmp/mister-apple3-tests/storage_test --convert source.dsk copy.woz
-+```
-+
-+This utility uses Main's converter. There is no independent test-only encoder.
-diff --git a/tests/apple3/compat.h b/tests/apple3/compat.h
-new file mode 100644
-index 0000000..d44d3d3
---- /dev/null
-+++ b/tests/apple3/compat.h
-@@ -0,0 +1,6 @@
-+#ifdef __APPLE__
-+#define reboot host_reboot
-+#include <unistd.h>
-+#undef reboot
-+#define __off64_t off_t
-+#endif
-diff --git a/tests/apple3/run.sh b/tests/apple3/run.sh
-new file mode 100755
-index 0000000..921147a
---- /dev/null
-+++ b/tests/apple3/run.sh
-@@ -0,0 +1,9 @@
-+#!/usr/bin/env bash
-+set -euo pipefail
-+cd "$(dirname "$0")/../.."
-+out=${APPLE3_TEST_OUT:-/tmp/mister-apple3-tests}
-+mkdir -p "$out"
-+${CXX:-c++} -std=c++14 -O1 -g -Wall -Wextra -fsanitize=address,undefined \
-+  -include tests/apple3/compat.h tests/apple3/storage_test.cpp \
-+  support/a2/iigs_disk.cpp support/a2/iigs_fmt.cpp -o "$out/storage_test"
-+"$out/storage_test" "$@"
-diff --git a/tests/apple3/storage_test.cpp b/tests/apple3/storage_test.cpp
-new file mode 100644
-index 0000000..9f90c03
---- /dev/null
-+++ b/tests/apple3/storage_test.cpp
-@@ -0,0 +1,141 @@
-+#include "../../file_io.h"
-+#include "../../user_io.h"
-+#include "../../support/a2/iigs_fmt.h"
-+#include "../../support/a2/iigs_disk.h"
-+#include <cassert>
-+#include <cstring>
-+#include <string>
-+#include <vector>
-+#include <fstream>
-+#include <algorithm>
-+
-+static std::string core = "Apple-III";
-+static bool can_write = true, modern = true;
-+static std::vector<uint8_t> to_fpga, from_fpga;
-+static unsigned command;
-+static std::string message;
-+fileTYPE::fileTYPE() : filp(nullptr), mode(0), type(1), zip(nullptr), size(0), offset(0) {}
-+fileTYPE::~fileTYPE() { if (filp) fclose(filp); }
-+char *user_io_get_core_name(int) { return &core[0]; }
-+char user_io_a2_woz_enabled() { return modern; }
-+char user_io_a3_woz_enabled() { return modern && core=="Apple-III"; }
-+char *user_io_get_confstr(int i) { static char v[] = "S0,WOZDSKDO PO NIB2MG,Drive 1"; return modern && i == 1 ? v : nullptr; }
-+int user_io_get_width() { return 0; }
-+int FileCanWrite(const char *) { return can_write; }
-+int FileSeek(fileTYPE *f, __off64_t off, int whence) { if (fseeko(f->filp, off, whence)) return 0; f->offset = ftello(f->filp); return 1; }
-+int FileReadAdv(fileTYPE *f, void *buf, int len, int) { return fread(buf, 1, len, f->filp); }
-+int FileWriteAdv(fileTYPE *f, void *buf, int len, int) { int n = fwrite(buf, 1, len, f->filp); fflush(f->filp); return n; }
-+void InfoMessage(const char *msg, int, const char *) { message = msg; }
-+void EnableIO() {}
-+void DisableIO() {}
-+uint16_t fpga_spi(uint16_t v) { command = v; return 0; }
-+void spi_block_write(const uint8_t *p, int, int n) { to_fpga.assign(p, p+n); }
-+void spi_block_read(uint8_t *p, int, int n) { assert(from_fpga.size() == unsigned(n)); memcpy(p, from_fpga.data(), n); }
-+static void put32(uint8_t *p, uint32_t v) { for(int i=0;i<4;i++) p[i]=v>>(i*8); }
-+static uint32_t get32(const uint8_t *p) { return p[0] | p[1]<<8 | p[2]<<16 | uint32_t(p[3])<<24; }
-+static std::vector<uint8_t> bytes(fileTYPE &f) {
-+  fseeko(f.filp,0,SEEK_END); size_t n=ftello(f.filp); rewind(f.filp);
-+  std::vector<uint8_t> b(n); assert(fread(b.data(),1,n,f.filp)==n); return b;
-+}
-+static void source(fileTYPE &f, const std::vector<uint8_t> &b) {
-+  if(f.filp) fclose(f.filp); f.filp=tmpfile(); assert(f.filp);
-+  assert(fwrite(b.data(),1,b.size(),f.filp)==b.size()); fflush(f.filp);
-+  f.size=b.size(); f.zip=nullptr; rewind(f.filp);
-+}
-+static std::vector<uint8_t> serve(int slot, fileTYPE &f) {
-+  std::vector<uint8_t> result;
-+  for(uint64_t lba=0;lba*512<uint64_t(f.size);lba+=32) {
-+    iigs_read(slot,&f,lba,0x100*(slot+1),16384);
-+    assert(to_fpga.size()==16384); assert(command==unsigned(UIO_SECTOR_RD|0x100*(slot+1)));
-+    result.insert(result.end(),to_fpga.begin(),to_fpga.end());
-+  }
-+  result.resize(f.size); return result;
-+}
-+static std::vector<uint8_t> mount_serve(fileTYPE &f, const std::vector<uint8_t> &b, const char *name, int slot=0) {
-+  source(f,b); int writable=1; assert(iigs_mount(slot,name,&f,&writable)==IIGS_HANDLED);
-+  assert(!writable); return serve(slot,f);
-+}
-+int main(int argc,char **argv) {
-+  fileTYPE f;
-+  if(argc==4 && !strcmp(argv[1],"--convert")) {
-+    std::ifstream input(argv[2],std::ios::binary);
-+    std::vector<uint8_t> b((std::istreambuf_iterator<char>(input)),{});
-+    source(f,b); int writable; assert(iigs_mount(0,argv[2],&f,&writable)==IIGS_HANDLED);
-+    auto w=serve(0,f); std::ofstream out(argv[3],std::ios::binary); out.write((char*)w.data(),w.size());
-+    iigs_unmount(0); return !out;
-+  }
-+  std::vector<uint8_t> dsk(A2_525_IMAGE_SIZE), po(dsk.size()), back(dsk.size());
-+  uint32_t rng=1; for(auto &b:dsk) { rng=rng*1664525+1013904223; b=rng>>24; }
-+  auto w=mount_serve(f,dsk,"disk.DSK");
-+  A2WozInfo info; assert(a2_woz_validate(w.data(),w.size(),&info)); assert(w[23]==1);
-+  assert(a2_woz525_to_dsk(back.data(),w.data(),w.size())); assert(back==dsk);
-+  assert(get32(w.data()+260)==50304);
-+  from_fpga.assign(1024,0x31); auto original=bytes(f); iigs_write(0,&f,3,0x100,1024);
-+  assert(bytes(f)==original); assert(serve(0,f)==w);
-+  a2_dos_to_prodos(po.data(),dsk.data()); assert(mount_serve(f,po,"disk.PO")==w);
-+  auto do_w=mount_serve(f,dsk,"disk.do",1); assert(do_w==w);
-+  std::vector<uint8_t> mg(128+dsk.size()+73); twomg_build(mg.data(),mg.size(),po.data(),po.size(),1);
-+  memmove(mg.data()+128,mg.data()+64,po.size()); put32(mg.data()+24,128); put32(mg.data()+16,0);
-+  assert(mount_serve(f,mg,"disk.2mg")==w);
-+  std::vector<uint8_t> nib(A2_NIB_IMAGE_SIZE); a2_dsk_to_nib(nib.data(),dsk.data());
-+  auto nw=mount_serve(f,nib,"disk.nib"); assert(a2_woz525_to_dsk(back.data(),nw.data(),nw.size())); assert(back==dsk);
-+  // NIB address volume bytes survive direct packing (never sector decode/rebuild).
-+  nib[51]=0xaau; nib[52]=0xab; auto modified=mount_serve(f,nib,"disk.nib"); assert(modified!=nw);
-+  puts("PASS shared 5.25 codec: DOS/PO/2MG equivalence, sync bits, round-trip and NIB preservation");
-+  // Native WOZ: unknown chunks, raw bits and all metadata remain byte-for-byte.
-+  w.insert(w.end(),{'M','E','T','A',3,0,0,0,'x','y','z'}); put32(w.data()+8,woz_crc32(w.data()+12,w.size()-12));
-+  source(f,w); int writable=0; assert(iigs_mount(1,"native.woz",&f,&writable)==IIGS_HANDLED && writable);
-+  assert(serve(1,f)==w); from_fpga.assign(w.begin()+1536,w.begin()+2560); from_fpga[345]^=0x20;
-+  iigs_write(1,&f,3,0x200,1024); auto expected=w; expected[1536+345]^=0x20; memset(expected.data()+8,0,4);
-+  assert(bytes(f)==expected); assert(serve(1,f)==expected); assert(a2_woz_validate(expected.data(),expected.size(),&info));
-+  from_fpga.assign(512,0); iigs_write(1,&f,0,0x200); assert(bytes(f)==expected);
-+  from_fpga.assign(1024,0); iigs_write(1,&f,(f.size/512),0x200,1024); assert(bytes(f)==expected);
-+  source(f,expected); assert(iigs_mount(1,"native.woz",&f,&writable)==IIGS_HANDLED && writable); assert(serve(1,f)==expected);
-+  expected[22]=1; source(f,expected); assert(iigs_mount(1,"native.woz",&f,&writable)==IIGS_HANDLED && !writable);
-+  from_fpga.assign(512,0x55); iigs_write(1,&f,3,0x200); assert(bytes(f)==expected); assert(serve(1,f)==expected);
-+  auto bad=w; bad.back()^=1; source(f,bad); assert(iigs_mount(0,"broken.woz",&f,&writable)==IIGS_REJECT);
-+  bad=w; put32(bad.data()+8,0); put32(bad.data()+16,0x7fffffff); source(f,bad); assert(iigs_mount(0,"broken.woz",&f,&writable)==IIGS_REJECT);
-+  puts("PASS native WOZ: full bursts, CRC, partial EOF, metadata guards, persistence and write protection");
-+  // Block slots use the header's payload length, not trailing comments/tags.
-+  std::vector<uint8_t> block(2048); for(unsigned i=0;i<block.size();i++) block[i]=i;
-+  std::vector<uint8_t> bm(128+block.size()+99); twomg_build(bm.data(),bm.size(),block.data(),block.size(),1);
-+  memmove(bm.data()+128,bm.data()+64,block.size()); put32(bm.data()+24,128);
-+  assert(mount_serve(f,bm,"block.2mg",2)==block); assert(f.size==2048);
-+  from_fpga.assign(512,0xa5); auto before=bytes(f); iigs_write(2,&f,0,0x300); assert(bytes(f)==before);
-+  assert(mount_serve(f,block,"block.hdv",3)==block);
-+  source(f,w); assert(iigs_mount(2,"floppy.woz",&f,&writable)==IIGS_REJECT);
-+  source(f,block); assert(iigs_mount(0,"hard.hdv",&f,&writable)==IIGS_REJECT);
-+  source(f,bm); bm[12]=3; source(f,bm); assert(iigs_mount(2,"bad.2mg",&f,&writable)==IIGS_REJECT);
-+  core="Apple-II"; source(f,dsk); assert(iigs_mount(2,"disk.dsk",&f,&writable)==IIGS_HANDLED && writable);
-+  auto a2w=serve(2,f); assert(a2_woz525_to_dsk(back.data(),a2w.data(),a2w.size()) && back==dsk);
-+  source(f,block); assert(iigs_mount(1,"disk.po",&f,&writable)==IIGS_PASSTHRU);
-+  // Preserve the other Apple cores' converted-image write-back policy.
-+  auto changed_dsk=dsk; changed_dsk[512]^=0x73;
-+  std::vector<uint8_t> changed_woz(512*1024);
-+  changed_woz.resize(a2_dsk_to_woz525(changed_woz.data(),changed_woz.size(),changed_dsk.data()));
-+  source(f,dsk); assert(iigs_mount(0,"disk.dsk",&f,&writable)==IIGS_HANDLED && writable);
-+  from_fpga.assign(changed_woz.begin()+1536,changed_woz.begin()+1536+6656);
-+  iigs_write(0,&f,3,0,6656); assert(bytes(f)==changed_dsk);
-+  // 800K IIgs encoding/decoding also remains on the same backend.
-+  core="Apple-IIgs"; std::vector<uint8_t> po35(A2_35_IMAGE_SIZE), back35(po35.size());
-+  for(auto &b:po35) { rng=rng*1664525+1013904223; b=rng>>24; }
-+  source(f,po35); assert(iigs_mount(2,"disk.po",&f,&writable)==IIGS_HANDLED && writable);
-+  auto gs=serve(2,f); assert(a2_woz35_to_po(back35.data(),gs.data(),gs.size()) && back35==po35);
-+  // Archives and host permissions force native WOZ read-only without changing it.
-+  core="Apple-III"; can_write=false; source(f,w);
-+  assert(iigs_mount(0,"native.woz",&f,&writable)==IIGS_HANDLED && !writable);
-+  assert(serve(0,f)==w); can_write=true; source(f,w); f.zip=reinterpret_cast<fileZipArchive*>(1);
-+  assert(iigs_mount(0,"native.woz",&f,&writable)==IIGS_HANDLED && !writable);
-+  assert(serve(0,f)==w); f.zip=nullptr;
-+  // A supported FLUX container is read-only and is never converted.
-+  auto flux=w; flux.insert(flux.end(),{'F','L','U','X',160,0,0,0}); flux.resize(flux.size()+160,255);
-+  flux[20]=3; put32(flux.data()+8,woz_crc32(flux.data()+12,flux.size()-12));
-+  source(f,flux); assert(iigs_mount(0,"flux.woz",&f,&writable)==IIGS_HANDLED && !writable); assert(serve(0,f)==flux);
-+  // A recognizable malformed container must not fall back to a raw block image.
-+  auto overflow=bm; put32(overflow.data()+12,1); put32(overflow.data()+20,0xffffffff); put32(overflow.data()+28,0);
-+  source(f,overflow); assert(iigs_mount(2,"bad.2mg",&f,&writable)==IIGS_REJECT);
-+  puts("PASS II/IIgs write-back and codec compatibility, native archive/permission/FLUX protection");
-+  core="Apple-III"; modern=false; assert(!iigs_is_core()); modern=true; assert(iigs_is_core());
-+  for(int i=0;i<16;i++) iigs_unmount(i);
-+  puts("PASS Apple-family slot assignments, read-only block payloads, invalid containers and legacy compatibility");
-+}

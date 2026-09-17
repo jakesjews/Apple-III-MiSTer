@@ -34,14 +34,20 @@ int main(int argc, char **argv) {
 	std::vector<uint8_t> disk_image[2];
 	std::string drive2;
 	const bool disk_test = argc > 2;
-	bool key_test = false, warm_reset = false;
+	bool key_test = false, warm_reset = false, to_menu = false;
 	unsigned sd_delay = 0;
+	// MGL-style sequencing: seconds of machine time before each mount, and
+	// between the last mount and the reset that MiSTer issues afterwards.
+	double mount_delay = 0, reset_delay = -1;
 	for (int i = 3; i < argc; ++i) {
 		std::string option = argv[i];
 		if (option.rfind("--sd-delay=", 0) == 0) sd_delay = std::strtoul(argv[i] + 11, nullptr, 10);
 		if (option.rfind("--drive2=", 0) == 0) drive2 = option.substr(9);
 		if (option == "--keytest") key_test = true;
 		if (option == "--warm-reset") warm_reset = true;
+		if (option == "--to-menu") to_menu = true;
+		if (option.rfind("--mount-delay=", 0) == 0) mount_delay = std::strtod(argv[i] + 14, nullptr);
+		if (option.rfind("--reset-delay=", 0) == 0) reset_delay = std::strtod(argv[i] + 14, nullptr);
 	}
 	for (unsigned drive = 0; drive < 2; ++drive) {
 		if (!disk_test || (drive == 1 && drive2.empty())) continue;
@@ -108,14 +114,24 @@ int main(int argc, char **argv) {
 		finish_storage();
 	}
 	top.reset = 0;
+	auto run_seconds = [&](double seconds) {
+		const unsigned long long steps = static_cast<unsigned long long>(seconds * 2 * 14318181.0);
+		for (unsigned long long i = 0; i < steps; ++i) { prepare_storage(); top.clk ^= 1; top.eval(); finish_storage(); }
+	};
 	for (unsigned drive = 0; drive < 2; ++drive) {
 		if (disk_image[drive].empty()) continue;
+		run_seconds(mount_delay);
 		top.image_size = disk_image[drive].size(); top.image_change = 1 << drive;
 		for (int i = 0; i < 8; ++i) { prepare_storage(); top.clk ^= 1; top.eval(); finish_storage(); }
 		top.image_change = 0;
 		for (int i = 0; i < 8; ++i) { prepare_storage(); top.clk ^= 1; top.eval(); finish_storage(); }
 	}
 
+	if (reset_delay >= 0) {
+		run_seconds(reset_delay);
+		std::printf("MGL reset at pc=%04X env=%02X zp=%02X after %.2f s\n", top.pc, top.environment, top.zero_page, reset_delay);
+		top.reset = 1; run_seconds(0.05); top.reset = 0;
+	}
 	if (warm_reset) {
 		// MGL-style reset after both mounts, including an in-flight transfer.
 		for (unsigned i = 0; i < 8000000; ++i) { prepare_storage(); top.clk ^= 1; top.eval(); finish_storage(); }
@@ -145,6 +161,7 @@ int main(int argc, char **argv) {
 	unsigned retry_count = 0;
 	unsigned recalibrate_count = 0;
 	bool reached_system_failure = false;
+	bool reached_menu = false;
 	uint8_t system_failure_code = 0;
 	unsigned bank_changes = 0;
 	unsigned previous_bank_output = top.e_pa_o;
@@ -235,6 +252,10 @@ int main(int argc, char **argv) {
 		if (!top.clk) {
 			// Inputs change on the low phase so the next rising edge samples them.
 			const unsigned long long clock_cycles = half_cycle / 2;
+			if (to_menu && clock_cycles > 0 && clock_cycles % (second / 4) == 0) {
+				for (const std::string &row : read_screen())
+					if (row.find("Device handling") != std::string::npos) reached_menu = true;
+			}
 			if (key_test && !script_armed && clock_cycles > 0 &&
 			    clock_cycles % (second / 4) == 0) {
 				for (const std::string &row : read_screen()) {
@@ -331,7 +352,8 @@ int main(int argc, char **argv) {
 				++sync_count;
 			}
 		}
-		if (reached_system_failure || (reached_interpreter && !key_test) ||
+		if (reached_menu) break;
+		if (reached_system_failure || (reached_interpreter && !key_test && !to_menu) ||
 		    loader_io_error || boot_block_error || disk_hard_error) break;
 	}
 
@@ -344,6 +366,11 @@ int main(int argc, char **argv) {
 	std::printf("milestones bank_exit=%u reconfigure=%u disk_boot=%u bank_changes=%u\n",
 	            reached_bank_loop_exit, reached_reconfigure, reached_disk_boot,
 	            bank_changes);
+	if (to_menu) {
+		std::printf("to-menu: menu=%u sysfail=%u code=%02X\n", reached_menu,
+		            reached_system_failure, system_failure_code);
+		dump_screen("final");
+	}
 	if (disk_test)
 		std::printf("disk image=%s buffered=%u sd_reads=%u bootstrap_A000=%u boot_block_error=%u ext_fetch_ok=%u loader_return=%u "
 		            "loader_jump=%u interpreter=%u final_track=%u loader_io_error=%04X "
@@ -423,6 +450,10 @@ int main(int argc, char **argv) {
 	if (key_test && (!script_armed || dump_index < dump_script.size())) {
 		std::fprintf(stderr, "FAIL: keyboard script did not complete (%zu/%zu dumps)\n",
 		             dump_index, dump_script.size());
+		return 1;
+	}
+	if (to_menu && !reached_menu && !reached_system_failure) {
+		std::fprintf(stderr, "FAIL: the System Utilities menu did not appear\n");
 		return 1;
 	}
 	if (disk_test && reached_system_failure) {

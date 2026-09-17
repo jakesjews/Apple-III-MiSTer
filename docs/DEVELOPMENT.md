@@ -182,7 +182,12 @@ APPLE3_ROM=apple3.rom ./sim/run_core_boot.sh 1400000000 sysutils.woz --keytest
 reset, memory sizing, reconfiguration and the disk bootstrap happen. With a WOZ
 image it follows SOS to the interpreter through the real track cache.
 `--drive2=blank.woz` mounts a second drive on the shared transfer bus;
-`--sd-delay=71590` adds 5 ms of host latency per request. `--keytest` drives System Utilities with
+`--sd-delay=71590` adds 5 ms of host latency per request. `--to-menu` keeps
+going past the interpreter until the System Utilities menu is on screen, and
+fails on any SOS system failure; use it for boot regressions, because a bad
+interpreter entry only shows up after the loader hands over. `--mount-delay=8
+--reset-delay=3` reproduces an MGL start: no disk at power-on, a mount after
+each delay, then a reset. `--keytest` drives System Utilities with
 injected PS/2 keys and decodes the text page after each. See
 [sim/accuracy/README.md](../sim/accuracy/README.md) for the PROM-based timing
 comparison and the 6502 functional test.

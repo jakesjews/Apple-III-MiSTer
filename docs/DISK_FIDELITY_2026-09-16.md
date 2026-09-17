@@ -19,8 +19,9 @@ companion Main's shared Apple-family storage backend.
   detection, container validation, ordering and shared WOZ conversion. The
   present FPGA exposes only the two floppies; no block controller is added.
 - Main: complete multi-block transfers, native WOZ caching and file writes,
-  metadata/allocation guards and CRC invalidation. Converted sources and block
-  images are read-only for Apple III. Other Apple cores retain their policies.
+  metadata/allocation guards and CRC invalidation. Sector-image sources take
+  verified per-sector write-back (added after the hardware run below); NIB
+  sources and block images are read-only. Other Apple cores retain their policies.
 
 The imported drive/cache and local fixes are documented in
 [the provenance note](../rtl/disk/woz/README.md). Reads use standard MiSTer bursts
@@ -31,7 +32,8 @@ validation and owns the file format, conversion and persistence policy.
 See [Main integration](MAIN_STORAGE.md) for the paired binary, configuration,
 slot map and converter utility. Native WOZ bits are never normalized or decoded
 back into sectors. Converted Apple III sector disks receive the standard SOS
-synchronized-track layout and address-field key.
+synchronized-track layout. At the time of this run they all received the
+address-field key as well; see the [2026-09-17 follow-up](#follow-up-2026-09-17).
 
 ## Validation
 
@@ -75,12 +77,52 @@ WOZ CRC became zero, with all other header/directory bytes preserved. The
 source DSK remained byte-identical. After reloading the core and both images,
 [SOS read the persisted volume name](disk/woz-volume-after-reload.png) from D2.
 
+## Follow-up 2026-09-17
+
+The hardware run above booted intermittently: seven of its screenshots show
+**SYSTEM FAILURE = $06**, and the next evening 9 of 11 boots of the same
+System Utilities DSK failed the same way, with either Main build and with one
+drive or two. The simulation had never shown it because the boot test stopped
+when SOS entered the interpreter.
+
+Running the simulation on to the menu reproduced the failure on every boot.
+SOS's `BFM.INIT2` found synchronized tracks and the protection key that the
+converter added to every sector image, so it decrypted `SOS.INTERP`. That
+image is deprotected and its interpreter is plain code, so the loader's entry
+pointer became $4D3E instead of $830E, the stray code returned through an empty
+stack, and the interrupt receiver's stack check raised failure $06. On hardware
+SD latency made the synchronization check fail about one boot in five, and
+only those boots survived.
+
+Main now adds the key only when `SOS.INTERP` is encrypted
+([details](MAIN_STORAGE.md#formats-and-transport)). With that change:
+
+- Simulation, run to the menu with an MGL-style late mount and reset: the
+  System Utilities DSK reaches its menu. The protected Apple Writer III and
+  System Demonstration dumps, which do get the key, reach their title screens.
+- Hardware: six of six captured two-drive boots reached the menu, with
+  `direct_video` on and off.
+- Sector-image write-back on hardware: SOS created a subdirectory on a DSK in
+  each drive and on a ProDOS-order PO in drive 2. The host-side check found
+  exactly the directory, bitmap and new directory blocks changed (2, 6 and 76)
+  and every other byte identical. After reloading the core
+  [SOS lists the new directory](disk/sector-image-write-after-reload.png).
+
+`sim/run_core_boot.sh` gained `--to-menu`, `--mount-delay` and `--reset-delay`
+so the boot test covers this path. The Main binary for this follow-up has
+SHA-256 `fe1d468116620cf7a6d6e3b21be75f1514aa66e6df54396a3ac703291a56ec6b`; the RBF is unchanged.
+
 ## Limits
 
 WOZ1 and FLUX representations are read-only. Writes modify existing allocated
 WOZ2 bitstream tracks; allocating an unmapped track is not supported. The track
 cache is bounded. Main validates a nonzero source CRC and writes zero after a
 modification, as permitted by WOZ's not-calculated convention.
+
+SOS-protected disks depend on the synchronized-track check passing. About one
+hardware boot in five failed that check before the fix above, so a protected
+title should be expected to stop with SYSTEM FAILURE $06 at a similar rate until
+track loads keep exact angular position.
 
 Converted sector/NIB images cannot recover lost mastering timing, weak regions
 or write splices. The imported analog/weak-bit and head-motion models remain
