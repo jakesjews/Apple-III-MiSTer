@@ -12,7 +12,7 @@ module rtc_accuracy_tb;
 	// Speed up time without changing counter sequencing.
 	apple3_rtc #(.CLOCKS_PER_MS(1000)) dut (.*);
 	integer failures = 0, ten_hz_events = 0, one_hz_events = 0;
-	logic [7:0] sampled;
+	logic [7:0] sampled, year_latch;
 	task automatic wr(input [4:0] a, input [7:0] value);
 		@(negedge clk);
 		addr         = a;
@@ -176,6 +176,23 @@ module rtc_accuracy_tb;
 		end
 		check(ten_hz_events == 10 && one_hz_events == 1, $sformatf(
 			  "one second produces ten 10 Hz and one 1 Hz interrupts (%0d,%0d)", ten_hz_events, one_hz_events));
+		// Host seed: Thursday 2026-09-17 23:58:07. SOS reads the year back from the
+		// day and month latches as ((month << 2) | 3) & day (SOS 1.3 GET.TIME).
+		host_rtc = {1'b1, 8'h40, 8'h04, 8'h26, 8'h09, 8'h17, 8'h23, 8'h58, 8'h07};
+		repeat (3) @(negedge clk);
+		rd(4, sampled);
+		check(sampled == 8'h23, "host seed sets the hour");
+		rd(7, sampled);
+		check(sampled == 8'h09, "host seed sets the month");
+		rd(6, sampled);
+		check(sampled == 8'h17, "host seed sets the day of month");
+		rd(5, sampled);
+		check(sampled == 8'h05, "host weekday 4 (Thursday) becomes MM58167 day 5");
+		rd(5'h0f, sampled);
+		year_latch = {sampled[5:0], 2'b11};
+		rd(5'h0e, sampled);
+		check((year_latch & sampled) == 8'h26, "SOS reads the seeded year from the day and month latches");
+		check(irq == 0, "don't-care year latches raise no compare interrupt");
 		$display("RTC accuracy: %0d failed checks", failures);
 		if (failures) $fatal(1, "RTC accuracy discrepancies");
 		$finish;

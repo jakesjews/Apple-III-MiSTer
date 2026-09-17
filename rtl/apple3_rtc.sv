@@ -160,10 +160,18 @@ module apple3_rtc #(
 			counter[2] <= {1'b0, host_rtc[6:4], host_rtc[3:0]};
 			counter[3] <= {1'b0, host_rtc[14:12], host_rtc[11:8]};
 			counter[4] <= {2'b00, host_rtc[21:20], host_rtc[19:16]};
-			counter[5] <= (host_rtc[50:48] == 0) ? 8'h01 : {5'b00000, host_rtc[50:48]};
+			// MiSTer counts weekdays from Sunday = 0; the MM58167 and SOS from 1.
+			counter[5] <= {5'b00000, host_rtc[50:48]} + 8'h01;
 			counter[6] <= {2'b00, host_rtc[29:28], host_rtc[27:24]};
 			counter[7] <= {3'b000, host_rtc[36], host_rtc[35:32]};
 			year_bcd   <= host_rtc[47:40];
+			// The chip has no year counter. SOS SET.TIME stores the two-digit year
+			// in the day and month compare latches with the other bits left in the
+			// don't-care state, and GET.TIME reads it back as ((month << 2) | 3) &
+			// day. A year of 00 makes Apple Pascal treat the clock as never set and
+			// overwrite it with the date saved on the boot disk.
+			compare[6] <= host_rtc[47:40] | 8'hcc;
+			compare[7] <= {2'b00, host_rtc[47:42]} | 8'hcc;
 		end else if (go_command) begin
 			// GO clears milliseconds through seconds, rounding up at 40 s.
 			millisecond_divider <= 14'd0;

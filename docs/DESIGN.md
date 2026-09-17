@@ -243,7 +243,13 @@ millisecond; reading status returns and clears that result. [RTC]
 
 FPGA configuration initializes clock state. Machine reset suppresses bus access
 but preserves time, comparison RAM and interrupt settings while the clock runs.
-MiSTer host-clock toggle updates seed the counters. The explicit counter/RAM
+MiSTer host-clock toggle updates seed the counters, mapping MiSTer's
+Sunday = 0 weekday to the chip's 1 to 7. The chip has no year counter: SOS
+SET.TIME keeps the two-digit year in the day and month compare latches with
+their other bits in the don't-care state, and GET.TIME reads it back as
+((month << 2) | 3) & day. The host seed writes those latches too. Left at
+power-on don't-care they read as year 00, and Apple Pascal then treats the
+clock as never set and overwrites it with the date saved on the boot disk. The explicit counter/RAM
 reset commands remain available. This models battery retention across machine
 reset, not across FPGA reconfiguration or loss of MiSTer power.
 
