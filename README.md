@@ -79,70 +79,66 @@ using host hardware flow control. [Serial details](docs/DEVELOPMENT.md#serial-po
 The following items remain open. Existing partial implementations are noted
 where they provide a starting point.
 
-1. **Confidence Program regression.** Machine Configuration and the
-   Seek/Read/Write/Align disk test now pass on hardware. Turn them into a
-   scripted regression with the boot harness's `--keys` option.
-
-2. **Keyboard accuracy and optional III Plus keymap.** Build on the existing
+1. **Keyboard accuracy and optional III Plus keymap.** Build on the existing
    encoder, modifier tracking and repeat tests. Complete repeat activation
    ordering, cursor second-stage behavior and the corresponding guest-visible
    modifier state, and add an optional III Plus keymap.
 
-3. **All four Disk III drives.** Extend the current internal drive and one
+2. **All four Disk III drives.** Extend the current internal drive and one
    external drive to expose all four drives, retaining the Disk II-compatible
    option. Preserve shared disk-phase/fine-scroll behavior and independent
    mounting, write protection and media-change state.
 
-4. **Reusable slots 1–4.** Implement slot I/O, ROM selection/deselection and
+3. **Reusable slots 1–4.** Implement slot I/O, ROM selection/deselection and
    per-slot interrupt routing. Add coprocessor bus ownership when the first
    card needs it.
 
-5. **One virtual block-storage interface.** Use a single interface in place of
+4. **One virtual block-storage interface.** Use a single interface in place of
    separate historical storage-card projects, with compatible SOS driver and
    firmware support. Main already has read-only block-image assignments, but
    the core has no block controller. Add block reads/writes, status, capacity
    and error handling, and a known working SOS configuration. Keep optional
    direct hard-disk boot separate from stock boot behavior.
 
-6. **Video source modes.** Add monochrome-composite and color-composite modes
+5. **Video source modes.** Add monochrome-composite and color-composite modes
    alongside the existing RGB output. Include Apple II artifact color, native
    III composite behavior and the dedicated monochrome signal's grayscale
    behavior.
 
-7. **Native joystick accuracy.** Complete the existing conversion and switch
+6. **Native joystick accuracy.** Complete the existing conversion and switch
    model with accurate charge/start/timeout behavior. Test different polling
    and timer methods, and provide a host mapping for the latching switch.
 
-8. **Peripheral wait-state and boundary timing.** Implement and test delayed
+7. **Peripheral wait-state and boundary timing.** Implement and test delayed
    IOSTOP/ready behavior, and complete extended-horizontal-state timing beyond
    the existing scan counters and Q3 hold.
 
-9. **Display-fetch and character-download timing.** Replace the current line
+8. **Display-fetch and character-download timing.** Replace the current line
    prefetch and batched character downloads with hardware-equivalent timing.
    Add tests for writes during active display and around character-download
    boundaries, extending the static rendering checks.
 
-10. **Apple II Mouse Interface card.** Use host mouse input and validate against
+9. **Apple II Mouse Interface card.** Use host mouse input and validate against
     an existing native mouse-driver configuration.
 
-11. **External memory and optional 512 KiB RAM.** Build on the parameterized
+10. **External memory and optional 512 KiB RAM.** Build on the parameterized
     RAM/MMU support with an external-memory backend and a usable 512 KiB option.
     Preserve paired-byte reads and guest-visible memory timing, and budget for
     future card RAM and disk buffers.
 
-12. **PCPI Appli-Card.** Add it as the first CP/M option and validate its disk
+11. **PCPI Appli-Card.** Add it as the first CP/M option and validate its disk
     services against the chosen storage configuration.
 
-13. **III Plus model with authentic interlace.** Reuse the existing clock and
+12. **III Plus model with authentic interlace.** Reuse the existing clock and
     keyboard work. Implement field timing and display-memory behavior rather
     than simply doubling lines.
 
-14. **Microsoft SoftCard III.** Add it as a second CP/M option, including the
+13. **Microsoft SoftCard III.** Add it as a second CP/M option, including the
     required bus integration and storage-driver configuration.
 
-15. **Titan III+II.** Add support for this expansion.
+14. **Titan III+II.** Add support for this expansion.
 
-16. **Titan III+IIe.** Add support for this expansion.
+15. **Titan III+IIe.** Add support for this expansion.
 
 [Development](docs/DEVELOPMENT.md) · [Hardware design](docs/DESIGN.md) ·
 [Disk validation](docs/DISK_FIDELITY_2026-09-16.md) · [License](LICENSE)
