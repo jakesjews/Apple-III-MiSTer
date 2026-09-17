@@ -2,6 +2,7 @@
 #include "verilated.h"
 #include <array>
 #include <cstdlib>
+#include <cstring>
 #include <cstdio>
 #include <fstream>
 #include <string>
@@ -34,7 +35,10 @@ int main(int argc, char **argv) {
 	std::vector<uint8_t> disk_image[2];
 	std::string drive2;
 	const bool disk_test = argc > 2;
-	bool key_test = false, warm_reset = false, to_menu = false, disk_trace = false;
+	bool key_test = false, warm_reset = false, to_menu = false, disk_trace = false, trace_all = false;
+	// --keys=down,down,enter,wait5,enter typed once --keys-after=TEXT is on screen.
+	std::string keys, keys_after;
+	bool writable = false;  // mount images read-write, as Main does for writable sources
 	unsigned sd_delay = 0;
 	// MGL-style sequencing: seconds of machine time before each mount, and
 	// between the last mount and the reset that MiSTer issues afterwards.
@@ -43,6 +47,8 @@ int main(int argc, char **argv) {
 	std::string expect = "Device handling";
 	// Host clocks per transferred byte. 4 is far quicker than the HPS link.
 	unsigned sd_byte_clocks = 4;
+	// Extra host clocks before each write request is served (slow image saves).
+	unsigned sd_write_delay = 0;
 	// Host clock as MiSTer sends it: --rtc=YYMMDDWhhmmss, W = weekday with Sunday = 0.
 	std::string rtc;
 	for (int i = 3; i < argc; ++i) {
@@ -53,8 +59,13 @@ int main(int argc, char **argv) {
 		if (option == "--warm-reset") warm_reset = true;
 		if (option == "--to-menu") to_menu = true;
 		if (option == "--disk-trace") disk_trace = true;
+		if (option == "--disk-trace-all") disk_trace = trace_all = true;
+		if (option == "--writable") writable = true;
+		if (option.rfind("--keys=", 0) == 0) keys = option.substr(7);
+		if (option.rfind("--keys-after=", 0) == 0) keys_after = option.substr(13);
 		if (option.rfind("--rtc=", 0) == 0) rtc = option.substr(6);
 		if (option.rfind("--expect=", 0) == 0) { expect = option.substr(9); to_menu = true; }
+		if (option.rfind("--sd-write-delay=", 0) == 0) sd_write_delay = std::strtoul(argv[i] + 17, nullptr, 10);
 		if (option.rfind("--sd-byte-clocks=", 0) == 0) sd_byte_clocks = std::strtoul(argv[i] + 17, nullptr, 10);
 		if (option.rfind("--mount-delay=", 0) == 0) mount_delay = std::strtod(argv[i] + 14, nullptr);
 		if (option.rfind("--reset-delay=", 0) == 0) reset_delay = std::strtod(argv[i] + 14, nullptr);
@@ -74,7 +85,7 @@ int main(int argc, char **argv) {
 	top.clk = 0;
 	top.reset = 1;
 	top.image_change = 0;
-	top.image_readonly = 1;
+	top.image_readonly = !writable;
 	top.image_size = 0;
 	top.sd_ack = 0;
 	top.sd_buff_addr = 0;
@@ -97,7 +108,7 @@ int main(int argc, char **argv) {
 		top.sd_buff_wr = 0;
 		if (sd_finishing) { top.sd_ack = 0; sd_finishing = false; return; }
 		if (!top.sd_ack && (top.sd_rd || top.sd_wr)) {
-			if (sd_wait_cycles++ < sd_delay) return;
+			if (sd_wait_cycles++ < sd_delay + (top.sd_wr ? sd_write_delay : 0)) return;
 			sd_wait_cycles = 0;
 			unsigned requests = top.sd_rd | top.sd_wr;
 			sd_disk = (requests & 1) ? 0 : 1;
@@ -206,7 +217,7 @@ int main(int argc, char **argv) {
 	};
 	// The script is armed once the System Utilities menu text is on screen;
 	// times are then relative to that moment (t0), matching the hardware test.
-	bool script_armed = false;
+	bool script_armed = false, keys_armed = false;
 	auto schedule_script = [&](unsigned long long t0) {
 		const double base = static_cast<double>(t0) / second;
 		dump_script.push_back({t0, "before keys"});
@@ -269,6 +280,40 @@ int main(int argc, char **argv) {
 		if (!top.clk) {
 			// Inputs change on the low phase so the next rising edge samples them.
 			const unsigned long long clock_cycles = half_cycle / 2;
+			if (!keys.empty() && !keys_armed && clock_cycles > 0 && clock_cycles % (second / 4) == 0) {
+				for (const std::string &row : read_screen()) {
+					if (row.find(keys_after) == std::string::npos) continue;
+					keys_armed = true;
+					double at = static_cast<double>(clock_cycles) / second + 1.0;
+					std::size_t pos = 0;
+					while (pos <= keys.size()) {
+						std::size_t comma = keys.find(',', pos);
+						std::string k = keys.substr(pos, comma == std::string::npos ? std::string::npos : comma - pos);
+						pos = comma == std::string::npos ? keys.size() + 1 : comma + 1;
+						if (k.rfind("wait", 0) == 0) { at += std::strtod(k.c_str() + 4, nullptr); continue; }
+						if (k.rfind("dump", 0) == 0) { dump_script.push_back({static_cast<unsigned long long>(at * second), "scripted"}); continue; }
+						if (k.rfind("text:", 0) == 0) {
+							// PS/2 set 2 make codes for a-z, 0-9, '.', '/' and '-'.
+							static const char *chars = "abcdefghijklmnopqrstuvwxyz0123456789./-";
+							static const uint8_t codes[] = {0x1c,0x32,0x21,0x23,0x24,0x2b,0x34,0x33,0x43,0x3b,0x42,0x4b,0x3a,
+								0x31,0x44,0x4d,0x15,0x2d,0x1b,0x2c,0x3c,0x2a,0x1d,0x22,0x35,0x1a,
+								0x45,0x16,0x1e,0x26,0x25,0x2e,0x36,0x3d,0x3e,0x46,0x49,0x4a,0x4e};
+							for (char ch : k.substr(5)) {
+								const char *hit = std::strchr(chars, ch);
+								if (hit) { tap(at, codes[hit - chars], false); at += 0.35; }
+							}
+							continue;
+						}
+						uint8_t code = 0; bool ext = false;
+						if (k == "enter") code = 0x5a; else if (k == "esc") code = 0x76;
+						else if (k == "down") { code = 0x72; ext = true; } else if (k == "up") { code = 0x75; ext = true; }
+						else if (k == "space") code = 0x29;
+						if (code) { tap(at, code, ext); at += 0.6; }
+					}
+					std::printf("key script armed at %.2f s\n", static_cast<double>(clock_cycles) / second);
+					break;
+				}
+			}
 			if (to_menu && clock_cycles > 0 && clock_cycles % (second / 4) == 0) {
 				for (const std::string &row : read_screen())
 					if (row.find(expect) != std::string::npos) reached_menu = true;
@@ -312,7 +357,13 @@ int main(int argc, char **argv) {
 			}
 			// --disk-trace: seeks, ROM address-field reads (stock ROM addresses), head
 			// movement and cache validity on tracks 8-17, where SOS reads its key.
-			if (disk_trace && top.track1 >= 8 && top.track1 <= 17) {
+			if (disk_trace && (trace_all || (top.track1 >= 8 && top.track1 <= 17))) {
+				static unsigned last_write = 9;
+				if (top.write_mode1 != last_write) {
+					std::printf("tl %10.2f ms  write mode %s (q=%u, track byte %u)\n", static_cast<double>(half_cycle / 2) / 14318.181,
+					            top.write_mode1 ? "ON" : "off", top.qtrack1, top.track1_addr);
+					last_write = top.write_mode1;
+				}
 				static unsigned last_q = 999, last_valid = 9;
 				const double ms = static_cast<double>(half_cycle / 2) / 14318.181;
 				if (top.qtrack1 != last_q) { std::printf("tl %10.2f ms  head q=%u\n", ms, top.qtrack1); last_q = top.qtrack1; }
@@ -388,8 +439,9 @@ int main(int argc, char **argv) {
 			}
 		}
 		if (reached_menu) break;
-		if (reached_system_failure || (reached_interpreter && !key_test && !to_menu) ||
-		    loader_io_error || boot_block_error || disk_hard_error) break;
+		// The SOS milestone addresses mean nothing to a scripted non-SOS disk.
+		if (keys.empty() && (reached_system_failure || (reached_interpreter && !key_test && !to_menu) ||
+		    loader_io_error || boot_block_error || disk_hard_error)) break;
 	}
 
 	std::printf("boot syncs=%u cycles=%u last=%04X env=%02X zp=%02X bank=%02X vm=%X disk=%u\n",

@@ -1,9 +1,9 @@
 diff --git a/support/a2/APPLE_III_STORAGE.md b/support/a2/APPLE_III_STORAGE.md
 new file mode 100644
-index 0000000..87c694c
+index 0000000..8f424ae
 --- /dev/null
 +++ b/support/a2/APPLE_III_STORAGE.md
-@@ -0,0 +1,49 @@
+@@ -0,0 +1,59 @@
 +# Apple III profile
 +
 +`iigs_disk` also handles WOZ-capable Apple-III cores (S0 advertises WOZ).
@@ -16,7 +16,15 @@ index 0000000..87c694c
 +  S1 as the Apple //e hard-disk slot.
 +
 +The shared 5.25 encoder uses proper 10-bit sync words. Apple III's profile adds
-+its standard synchronized track rotation to sector sources. Native WOZ is
++its standard synchronized track rotation to sector sources, and writes 51,424
++cells per track, read at 3.875 us (INFO timing 31), rather than the bare 50,304
++at 4 us. The drive model consumes one cell per bit the machine writes, 3.91 us
++each, and Apple's Disk /// formatter judges drive speed by how many sync nibbles
++fit between sectors: 19 to 24 is acceptable and 22 is a correctly adjusted
++drive. It starts at 27 and shrinks until sixteen sectors of 10n + 2,988 cells
++close the track. On 50,304 cells it reported "drive is too fast" and the
++Confidence Program's Align check failed; on 51,904 it closed at 25 and reported
++"too slow". 51,424 closes at 22. Native WOZ is
 +validated and served unchanged; NIB preserves its address fields and data bytes.
 +
 +SOS copy protection (BFM.INIT2) reads one address-field volume byte on each of
@@ -36,13 +44,15 @@ index 0000000..87c694c
 +and protected images remain read-only, as do block payloads.
 +
 +DSK, DO, PO and sector-order 2MG sources are writable in place. The drive saves
-+a track one 512-byte block at a time, so after each block Main decodes that
-+track with a strict parser: address checksum and track number, a data field
-+within the gap that follows, valid GCR codes, data checksum and both epilogs.
-+Only sectors that verify and differ from the source are written, 256 bytes
-+each, in the source's own sector order and behind any 2MG header. A torn or
-+damaged sector is never stored; if one still fails once the whole track has
-+arrived, Main reports how many sectors were not saved. NIB and DC42 sources
++a track one 512-byte block at a time, so the track is torn until its last block
++arrives. Main decodes it then, with a strict parser: address checksum and track
++number, a data field within the gap that follows, valid GCR codes, data checksum
++and both epilogs. Sectors that verify replace the source's, in the source's own
++sector order and behind any 2MG header, with a single 4 KiB write per track; the
++image is opened O_SYNC, and sixteen sector writes per track held the drive's
++cache busy long enough to break SOS's formatter. A damaged sector is never
++stored, and Main reports how many were not saved. A read request from the drive
++also stores a track whose save was cut short. NIB and DC42 sources
 +stay read-only. The //e and IIgs keep their existing whole-track write-back.
 +
 +The hardware still implements Apple III's P6 sequencer, independent spindle/I/O
@@ -54,7 +64,7 @@ index 0000000..87c694c
 +regressions. The Apple III core's simulator exercises the real-time disk path
 +using the same converted WOZ output.
 diff --git a/support/a2/iigs_disk.cpp b/support/a2/iigs_disk.cpp
-index a1830f0..2203384 100644
+index a1830f0..889acdc 100644
 --- a/support/a2/iigs_disk.cpp
 +++ b/support/a2/iigs_disk.cpp
 @@ -1,4 +1,4 @@
@@ -74,11 +84,12 @@ index a1830f0..2203384 100644
  static int        g_mode[16]    = {};
  static int64_t    g_hdr_off[16]  = {};
  static uint8_t   *g_woz[16]      = {};
-@@ -25,16 +27,18 @@ static int        g_wb_ok[16]    = {};  // write-back supported (and file writab
+@@ -25,16 +27,19 @@ static int        g_wb_ok[16]    = {};  // write-back supported (and file writab
  static int        g_wb_kind[16]  = {};  // 1 = 3.5", 2 = 5.25"
  static int64_t    g_wb_off[16]   = {};  // header offset within the source file
  static int        g_wb_order[16] = {};  // 5.25 source order: 0 = DOS, 1 = ProDOS
 +static int        g_wb_verify[16] = {}; // Apple ///: persist checksum-verified sectors only
++static int        g_wb_pending[16] = {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1}; // track awaiting its last block
  
  static int eqi(const char *a, const char *b) { return a && b && !strcasecmp(a, b); }
  
@@ -94,7 +105,7 @@ index a1830f0..2203384 100644
  	return 0;
  }
  
-@@ -56,6 +60,12 @@ static int slot_kind(int index)
+@@ -56,6 +61,12 @@ static int slot_kind(int index)
  		if (index == 1) return 0;                 // HDD (slot 7)
  		if (index == 0 || index == 2) return 2;   // 5.25" drive 1 / drive 2
  		return -1;
@@ -107,7 +118,7 @@ index a1830f0..2203384 100644
  	default:
  		return -1;
  	}
-@@ -68,7 +78,7 @@ int iigs_is_core(void)
+@@ -68,7 +79,7 @@ int iigs_is_core(void)
  
  static void reject(const char *msg)
  {
@@ -116,7 +127,7 @@ index a1830f0..2203384 100644
  	InfoMessage(msg, 5000, "Wrong disk for slot");
  }
  
-@@ -79,15 +89,19 @@ void iigs_unmount(int index)
+@@ -79,15 +90,20 @@ void iigs_unmount(int index)
  	g_woz_sz[index] = 0;
  	g_hdr_off[index] = 0;
  	g_mode[index] = 0;
@@ -127,6 +138,7 @@ index a1830f0..2203384 100644
  	g_wb_off[index] = 0;
  	g_wb_order[index] = 0;
 +	g_wb_verify[index] = 0;
++	g_wb_pending[index] = -1;
  }
  
  // Read the entire open image into a freshly malloc'd buffer (caller frees).
@@ -136,7 +148,7 @@ index a1830f0..2203384 100644
  	size_t n = (size_t)f->size;
  	uint8_t *b = (uint8_t *)malloc(n ? n : 1);
  	if (!b) return NULL;
-@@ -106,12 +120,13 @@ static uint8_t *read_all(fileTYPE *f, size_t *out_len)
+@@ -106,12 +122,13 @@ static uint8_t *read_all(fileTYPE *f, size_t *out_len)
  
  // Build a converted WOZ for a floppy slot. Returns malloc'd buffer + size, or
  // NULL on failure. kind: 1 = 3.5", 2 = 5.25".
@@ -151,7 +163,7 @@ index a1830f0..2203384 100644
  
  	TwoMG m;
  	DC42 d;
-@@ -120,6 +135,7 @@ static uint8_t *build_woz(int kind, const char *ext, const uint8_t *raw, size_t
+@@ -120,6 +137,7 @@ static uint8_t *build_woz(int kind, const char *ext, const uint8_t *raw, size_t
  		pay_len = m.data_len;
  		order_prodos = (m.format == 1);
  		order_nib    = (m.format == 2);
@@ -159,7 +171,7 @@ index a1830f0..2203384 100644
  	} else if (dc42_parse(raw, raw_len, &d)) {
  		pay = raw + 84;
  		pay_len = d.data_size;
-@@ -146,7 +162,7 @@ static uint8_t *build_woz(int kind, const char *ext, const uint8_t *raw, size_t
+@@ -146,7 +164,7 @@ static uint8_t *build_woz(int kind, const char *ext, const uint8_t *raw, size_t
  	static uint8_t dsk[A2_525_IMAGE_SIZE];
  	if (order_nib) {
  		if (pay_len != A2_NIB_IMAGE_SIZE) return NULL;
@@ -168,7 +180,7 @@ index a1830f0..2203384 100644
  	} else {
  		if (pay_len != A2_525_IMAGE_SIZE) return NULL;
  		if (order_prodos) a2_prodos_to_dos(dsk, pay);
-@@ -155,7 +171,9 @@ static uint8_t *build_woz(int kind, const char *ext, const uint8_t *raw, size_t
+@@ -155,7 +173,9 @@ static uint8_t *build_woz(int kind, const char *ext, const uint8_t *raw, size_t
  	size_t cap = 512 * 1024;
  	uint8_t *woz = (uint8_t *)malloc(cap);
  	if (!woz) return NULL;
@@ -179,7 +191,7 @@ index a1830f0..2203384 100644
  	if (!n) { free(woz); return NULL; }
  	*out_sz = n;
  	return woz;
-@@ -166,6 +184,7 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
+@@ -166,6 +186,7 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
  	if (!iigs_is_core()) return IIGS_PASSTHRU;
  	int kind = slot_kind(index);
  	if (kind < 0) return IIGS_PASSTHRU;
@@ -187,7 +199,7 @@ index a1830f0..2203384 100644
  
  	iigs_unmount(index);
  
-@@ -178,11 +197,39 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
+@@ -178,11 +199,39 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
  
  	const char *dot = strrchr(name, '.');
  	const char *ext = dot ? dot + 1 : NULL;
@@ -228,7 +240,7 @@ index a1830f0..2203384 100644
  
  	if (kind == 0) {
  		// ----- hard-disk slot: permissive (any ProDOS-order block image) -----
-@@ -191,17 +238,19 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
+@@ -191,17 +240,19 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
  		if (is_2mg && m.format != 1) { reject("This 2MG is DOS/NIB order; not a ProDOS hard-disk image."); return IIGS_REJECT; }
  		if (eqi(ext, "do")) { reject("DOS-order disk — load it in a 5.25\" drive, not a hard disk."); return IIGS_REJECT; }
  
@@ -259,7 +271,7 @@ index a1830f0..2203384 100644
  		return IIGS_HANDLED;
  	}
  
-@@ -214,26 +263,6 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
+@@ -214,26 +265,6 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
  			return IIGS_REJECT;
  		}
  
@@ -286,7 +298,7 @@ index a1830f0..2203384 100644
  
  		return IIGS_PASSTHRU;   // native WOZ on a real file: serve directly
  	}
-@@ -267,10 +296,10 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
+@@ -267,10 +298,10 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
  	} else {
  		wb_ok = 1; if (kind == 2) wb_order = 0;                   // raw .po(800K) / .do / .dsk
  	}
@@ -299,7 +311,7 @@ index a1830f0..2203384 100644
  	free(raw);
  	if (!woz) { reject("Could not convert this disk to WOZ."); return IIGS_REJECT; }
  
-@@ -278,49 +307,35 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
+@@ -278,49 +309,73 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
  	g_woz[index]     = woz;
  	g_woz_sz[index]  = woz_sz;
  	g_wb_ok[index]   = wb_ok;
@@ -317,6 +329,8 @@ index a1830f0..2203384 100644
  }
  
 -void iigs_read(int disk, fileTYPE *f, uint64_t lba, int ack)
++static void store_pending_track(int disk, fileTYPE *f);
++
 +void iigs_read(int disk, fileTYPE *f, uint64_t lba, int ack, int size)
  {
 -	uint8_t chunk[512];
@@ -328,6 +342,8 @@ index a1830f0..2203384 100644
 -		if (!(FileSeek(f, (int64_t)(lba * 512 + g_hdr_off[disk]), SEEK_SET) &&
 -		      FileReadAdv(f, chunk, 512) > 0))
 -			memset(chunk, 0, 512);
++	// A read means the drive has moved on; never leave an abandoned save unstored.
++	if (g_wb_pending[disk] >= 0) store_pending_track(disk, f);
 +	uint8_t chunk[16384] = {};
 +	if (size <= 0 || size > int(sizeof(chunk))) return;
 +	uint64_t off = lba * 512;
@@ -346,58 +362,66 @@ index a1830f0..2203384 100644
  }
  
 -void iigs_write(int disk, fileTYPE *f, uint64_t lba, int ack)
-+static void converted_write(int disk, fileTYPE *f, uint64_t lba, const uint8_t *chunk)
- {
+-{
 -	uint8_t chunk[512];
 -	EnableIO();
 -	spi_w(UIO_SECTOR_WR | ack);
 -	spi_block_read(chunk, user_io_get_width(), 512);
 -	DisableIO();
--
++// DOS-order position -> ProDOS-order position (same map as a2_dos_to_prodos).
++static const int D2P[16] = { 0, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 15 };
+ 
 -	if (g_mode[disk] == 0) {
 -		// Hard disk: write straight back to the file at the header offset.
 -		if (FileSeek(f, (int64_t)(lba * 512 + g_hdr_off[disk]), SEEK_SET))
 -			FileWriteAdv(f, chunk, 512);
 -		return;
--	}
--
++// Apple /// 5.25": store the track whose blocks have all arrived. Only sectors that
++// fully verify replace the source's, and one write covers the track: the image is
++// opened O_SYNC, so every write is an SD commit that the drive waits for. Sixteen
++// sector writes per track stalled the FPGA's cache long enough for SOS's formatter
++// to write into a track that was still being saved.
++static void store_pending_track(int disk, fileTYPE *f)
++{
++	int t = g_wb_pending[disk];
++	g_wb_pending[disk] = -1;
++	if (t < 0 || !g_wb_ok[disk] || !g_woz[disk]) return;
++	uint8_t trk[A2_TRACK_SIZE], cur[A2_TRACK_SIZE];
++	int64_t base = g_wb_off[disk] + (int64_t)t * A2_TRACK_SIZE;
++	uint16_t good = a2_woz525_verify_track(g_woz[disk], g_woz_sz[disk], t, trk);
++	int failed = !FileSeek(f, base, SEEK_SET) || FileReadAdv(f, cur, A2_TRACK_SIZE) != A2_TRACK_SIZE;
++	int changed = 0;
++	for (int s = 0; s < 16 && !failed; s++) {
++		int pos = (g_wb_order[disk] == 1 ? D2P[s] : s) * A2_SECTOR_SIZE;
++		if (!(good & (1 << s)) || !memcmp(cur + pos, trk + s * A2_SECTOR_SIZE, A2_SECTOR_SIZE)) continue;
++		memcpy(cur + pos, trk + s * A2_SECTOR_SIZE, A2_SECTOR_SIZE);
++		changed = 1;
+ 	}
++	if (changed && !failed)
++		failed = !FileSeek(f, base, SEEK_SET) || FileWriteAdv(f, cur, A2_TRACK_SIZE) != A2_TRACK_SIZE;
++	if (failed) InfoMessage("Could not save to the disk image.", 5000, "Disk write error");
++	else if (good != 0xffff) {
++		static char msg[64];
++		snprintf(msg, sizeof(msg), "Track %d: %d unreadable sector(s) not saved.", t, 16 - __builtin_popcount(good));
++		InfoMessage(msg, 5000, "Disk write warning");
++	}
++}
+ 
++static void converted_write(int disk, fileTYPE *f, uint64_t lba, const uint8_t *chunk)
++{
  	// Converted floppy: update the in-memory WOZ, then (if write-back is
  	// supported) decode the affected track and persist it to the source image.
  	uint64_t off = lba * 512;
-@@ -329,6 +344,8 @@ void iigs_write(int disk, fileTYPE *f, uint64_t lba, int ack)
- 
- 	int t = a2_woz_track_for_lba(g_woz[disk], g_woz_sz[disk], (uint32_t)lba);
- 	if (t < 0) return;   // header block (TMAP/TRKS dir) — nothing to persist
-+	// DOS-order position -> ProDOS-order position (same map as a2_dos_to_prodos).
-+	static const int D2P[16] = { 0, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 15 };
- 
- 	if (g_wb_kind[disk] == 1) {
- 		// 3.5": decode the track's ProDOS blocks, write that block range back.
-@@ -338,11 +355,31 @@ void iigs_write(int disk, fileTYPE *f, uint64_t lba, int ack)
+@@ -338,11 +393,16 @@ void iigs_write(int disk, fileTYPE *f, uint64_t lba, int ack)
  			if (FileSeek(f, g_wb_off[disk] + (int64_t)base * 512, SEEK_SET))
  				FileWriteAdv(f, po + (size_t)base * 512, (size_t)cnt * 512);
  		}
 +	} else if (g_wb_verify[disk]) {
-+		// Apple /// 5.25": the drive saves a track one block at a time, so the
-+		// track is torn until its last block arrives. Persist only sectors that
-+		// fully verify and differ from the source; everything else stays as it is.
-+		uint8_t trk[A2_TRACK_SIZE], cur[A2_TRACK_SIZE];
-+		int64_t base = g_wb_off[disk] + (int64_t)t * A2_TRACK_SIZE;
-+		uint16_t good = a2_woz525_verify_track(g_woz[disk], g_woz_sz[disk], t, trk);
-+		int failed = !FileSeek(f, base, SEEK_SET) || FileReadAdv(f, cur, A2_TRACK_SIZE) != A2_TRACK_SIZE;
-+		for (int s = 0; s < 16 && !failed; s++) {
-+			int pos = (g_wb_order[disk] == 1 ? D2P[s] : s) * A2_SECTOR_SIZE;
-+			if (!(good & (1 << s)) || !memcmp(cur + pos, trk + s * A2_SECTOR_SIZE, A2_SECTOR_SIZE)) continue;
-+			failed = !FileSeek(f, base + pos, SEEK_SET) ||
-+				FileWriteAdv(f, trk + s * A2_SECTOR_SIZE, A2_SECTOR_SIZE) != A2_SECTOR_SIZE;
-+		}
-+		if (failed) InfoMessage("Could not save to the disk image.", 5000, "Disk write error");
-+		else if (good != 0xffff && a2_woz_track_for_lba(g_woz[disk], g_woz_sz[disk], (uint32_t)lba + 1) != t) {
-+			// The whole track has arrived and some sectors still do not verify.
-+			static char msg[64];
-+			snprintf(msg, sizeof(msg), "Track %d: %d unreadable sector(s) not saved.", t, 16 - __builtin_popcount(good));
-+			InfoMessage(msg, 5000, "Disk write warning");
-+		}
++		// Apple /// 5.25": the drive saves a track one block at a time, so the track
++		// is torn until its last block arrives. Store it then, and not before.
++		if (g_wb_pending[disk] >= 0 && g_wb_pending[disk] != t) store_pending_track(disk, f);
++		g_wb_pending[disk] = t;
++		if (a2_woz_track_for_lba(g_woz[disk], g_woz_sz[disk], (uint32_t)lba + 1) != t) store_pending_track(disk, f);
  	} else {
  		// 5.25": decode the DOS-order track; re-skew to ProDOS if the source is .po.
  		static uint8_t dsk[A2_525_IMAGE_SIZE];
@@ -406,7 +430,7 @@ index a1830f0..2203384 100644
  			uint8_t out[A2_TRACK_SIZE];
  			const uint8_t *src = dsk + (size_t)t * A2_TRACK_SIZE;
  			if (g_wb_order[disk] == 1)
-@@ -354,3 +391,35 @@ void iigs_write(int disk, fileTYPE *f, uint64_t lba, int ack)
+@@ -354,3 +414,35 @@ void iigs_write(int disk, fileTYPE *f, uint64_t lba, int ack)
  		}
  	}
  }
@@ -488,7 +512,7 @@ index d50fc80..247668d 100644
  
  #endif // IIGS_DISK_H
 diff --git a/support/a2/iigs_fmt.cpp b/support/a2/iigs_fmt.cpp
-index 6a69800..ae7e290 100644
+index 6a69800..8a75f83 100644
 --- a/support/a2/iigs_fmt.cpp
 +++ b/support/a2/iigs_fmt.cpp
 @@ -51,10 +51,13 @@ int twomg_parse(const uint8_t *buf, size_t size, TwoMG *out)
@@ -610,7 +634,7 @@ index 6a69800..ae7e290 100644
  			if (s >= 0 && s < A2_SECTORS_PER_TRACK) {
  				uint16_t bit = (uint16_t)(1U << s);
  				if (!(seen & bit)) {
-@@ -421,82 +465,195 @@ int a2_nib_to_dsk(uint8_t *dsk, const uint8_t *nib)
+@@ -421,82 +465,214 @@ int a2_nib_to_dsk(uint8_t *dsk, const uint8_t *nib)
  #define WOZ_TRK_DIR    (160 * 8)         // 1280
  #define WOZ525_BLOCKS_PER_TRACK 13
  #define WOZ525_FIRST_BLOCK 3
@@ -626,9 +650,7 @@ index 6a69800..ae7e290 100644
  
 -size_t a2_dsk_to_woz525(uint8_t *woz, size_t woz_cap, const uint8_t *dsk)
 +static size_t woz525_header(uint8_t *woz, size_t cap, int blocks, int apple3)
- {
--	if (woz_cap < WOZ525_SIZE) return 0;
--	memset(woz, 0, WOZ525_SIZE);
++{
 +	size_t size = 1536 + A2_TRACKS_525 * blocks * 512;
 +	if (cap < size) return 0;
 +	memset(woz, 0, size);
@@ -650,10 +672,7 @@ index 6a69800..ae7e290 100644
 +	woz_put_chunk_hdr(woz + 248, "TRKS", size - 256);
 +	return size;
 +}
- 
--	// nibblize all tracks first
--	static uint8_t nib[A2_NIB_IMAGE_SIZE];
--	a2_dsk_to_nib(nib, dsk);
++
 +// A real sync word is ten bits (1111111100), not an eight-bit FF byte.
 +static void put_disk_byte(uint8_t *out, unsigned &bit, uint8_t value, int sync = 0)
 +{
@@ -661,10 +680,21 @@ index 6a69800..ae7e290 100644
 +	if (sync) bit += 2;
 +}
 +static void put_disk_44(uint8_t *out, unsigned &bit, uint8_t value)
-+{
+ {
+-	if (woz_cap < WOZ525_SIZE) return 0;
+-	memset(woz, 0, WOZ525_SIZE);
 +	put_disk_byte(out, bit, (value >> 1) | 0xaa);
 +	put_disk_byte(out, bit, value | 0xaa);
 +}
+ 
+-	// nibblize all tracks first
+-	static uint8_t nib[A2_NIB_IMAGE_SIZE];
+-	a2_dsk_to_nib(nib, dsk);
++// Apple /// SOS copy protection (BFM.INIT2). SOS reads the address-field volume
++// of one sector on each of tracks 9..16. If those tracks are synchronized and
++// the values differ, it takes them as a key and decrypts SOS.INTERP in memory.
++static const uint8_t sos_key[] = {0xb4,0xc1,0xe4,0xf3,0x9b,0xbd,0xbd,0x7c};   // tracks 9..16
++static const uint8_t sos_key_sector[] = {2,14,10,6,2,14,10,6};
  
 -	uint8_t *p = woz;
 -	// File header (CRC filled in at the end)
@@ -672,27 +702,6 @@ index 6a69800..ae7e290 100644
 -	p[4] = 0xFF; p[5] = 0x0A; p[6] = 0x0D; p[7] = 0x0A;
 -	// p[8..11] CRC later
 -	p += 12;
-+// Apple /// SOS copy protection (BFM.INIT2). SOS reads the address-field volume
-+// of one sector on each of tracks 9..16. If those tracks are synchronized and
-+// the values differ, it takes them as a key and decrypts SOS.INTERP in memory.
-+static const uint8_t sos_key[] = {0xb4,0xc1,0xe4,0xf3,0x9b,0xbd,0xbd,0x7c};   // tracks 9..16
-+static const uint8_t sos_key_sector[] = {2,14,10,6,2,14,10,6};
- 
--	// INFO chunk
--	woz_put_chunk_hdr(p, "INFO", WOZ_INFO_LEN); p += 8;
--	uint8_t *info = p;
--	info[0] = 2;     // version
--	info[1] = 1;     // disk type 5.25"
--	info[2] = 0;     // write protected
--	info[3] = 0;     // synchronized
--	info[4] = 0;     // cleaned
--	memset(info + 5, ' ', 32);
--	memcpy(info + 5, "MiSTer IIgs easy-WOZ 5.25", 25);
--	info[37] = 1;    // sides
--	info[38] = 0;    // boot sector format
--	info[39] = 32;   // optimal bit timing (4us)
--	wr_le16(info + 44, WOZ525_BLOCKS_PER_TRACK);   // largest track
--	p += WOZ_INFO_LEN;
 +// SOS's DCLOOP: XOR stream over the interpreter code from load+3 onwards. The
 +// key rotates left one bit for each page pass. Encoding and decoding are the same.
 +void a2_sos_crypt(uint8_t *code, size_t len, uint16_t load)
@@ -712,6 +721,29 @@ index 6a69800..ae7e290 100644
 +	}
 +}
  
+-	// INFO chunk
+-	woz_put_chunk_hdr(p, "INFO", WOZ_INFO_LEN); p += 8;
+-	uint8_t *info = p;
+-	info[0] = 2;     // version
+-	info[1] = 1;     // disk type 5.25"
+-	info[2] = 0;     // write protected
+-	info[3] = 0;     // synchronized
+-	info[4] = 0;     // cleaned
+-	memset(info + 5, ' ', 32);
+-	memcpy(info + 5, "MiSTer IIgs easy-WOZ 5.25", 25);
+-	info[37] = 1;    // sides
+-	info[38] = 0;    // boot sector format
+-	info[39] = 32;   // optimal bit timing (4us)
+-	wr_le16(info + 44, WOZ525_BLOCKS_PER_TRACK);   // largest track
+-	p += WOZ_INFO_LEN;
++// One 512-byte ProDOS/SOS block of a DOS-order 140K image.
++static void dsk_block(const uint8_t *dsk, unsigned block, uint8_t *out)
++{
++	const uint8_t *track = dsk + (block / 8) * A2_TRACK_SIZE;
++	for (int half = 0; half < 2; ++half)
++		memcpy(out + half * 256, track + PRODOS_TO_DOS[(block % 8) * 2 + half] * A2_SECTOR_SIZE, 256);
++}
+ 
 -	// TMAP chunk (quarter-track map; whole tracks at t*4 +/- 1)
 -	woz_put_chunk_hdr(p, "TMAP", WOZ_TMAP_LEN); p += 8;
 -	uint8_t *tmap = p;
@@ -721,14 +753,6 @@ index 6a69800..ae7e290 100644
 -		for (int off = -1; off <= 1; off++) {
 -			int idx = center + off;
 -			if (idx >= 0 && idx < WOZ_TMAP_LEN) tmap[idx] = (uint8_t)t;
-+// One 512-byte ProDOS/SOS block of a DOS-order 140K image.
-+static void dsk_block(const uint8_t *dsk, unsigned block, uint8_t *out)
-+{
-+	const uint8_t *track = dsk + (block / 8) * A2_TRACK_SIZE;
-+	for (int half = 0; half < 2; ++half)
-+		memcpy(out + half * 256, track + PRODOS_TO_DOS[(block % 8) * 2 + half] * A2_SECTOR_SIZE, 256);
-+}
-+
 +// A sector image has no address fields, so the key cannot be copied from it.
 +// Rebuild it only when the boot volume's SOS.INTERP really is encrypted: a
 +// deprotected disk carries a plain interpreter, and SOS would "decrypt" that
@@ -799,6 +823,10 @@ index 6a69800..ae7e290 100644
 -	uint32_t crc = woz_crc32(woz + 12, WOZ525_SIZE - 12);
 -	wr_le32(woz + 8, crc);
 -	return WOZ525_SIZE;
++#ifndef A3_GAP3_SYNC
++#define A3_GAP3_SYNC 23
++#endif
++
 +// apple3: 0 = Apple II layout, 1 = Apple /// synchronized tracks,
 +// 2 = synchronized tracks plus the SOS protection key in the address fields.
 +size_t a2_dsk_to_woz525_ex(uint8_t *woz, size_t cap, const uint8_t *dsk, int apple3, uint8_t volume)
@@ -808,6 +836,17 @@ index 6a69800..ae7e290 100644
 +	// Sector images omit address fields. Native WOZ and NIB images keep their
 +	// own and never pass through this reconstruction.
 +	const uint8_t *key = sos_key, *key_sector = sos_key_sector;
++	// Track capacity. The drive model consumes one cell per bit the machine writes,
++	// so a track's cell count is what the machine's own formatter measures as drive
++	// speed. Apple's Disk /// formatter starts at 27 sync nibbles per gap and
++	// shrinks until sixteen sectors of 10n + 2,988 cells close the track; it accepts
++	// 19 to 24 and 22 is a correctly adjusted drive. The bare 50,304-cell layout
++	// ends below 19 (SOS: "drive is too fast", Confidence Program: Align err) and
++	// 51,904 closes at 25 ("too slow"). A3_GAP3_SYNC = 23 gives 51,424 cells, which
++	// closes at 22. Reads use a 3.875 us cell (INFO timing 31), 199 ms a revolution.
++	const int gap3 = apple3 ? A3_GAP3_SYNC : 16;
++	const unsigned cell_ns = apple3 ? 3875 : 4000;
++	if (apple3) woz[20 + 39] = cell_ns / 125;
 +	for (int t = 0; t < 35; ++t) {
 +		uint8_t *out = woz + (3 + t * 13) * 512;
 +		unsigned bit = 0;
@@ -823,15 +862,19 @@ index 6a69800..ae7e290 100644
 +			uint8_t data[343]; nibbilize(dsk + t * 4096 + soft_interleave[sector] * 256, data);
 +			for (uint8_t b : data) put_disk_byte(out, bit, b);
 +			for (uint8_t b : data_epilog) put_disk_byte(out, bit, b);
-+			for (int i = 0; i < 16; ++i) put_disk_byte(out, bit, 255, 1);
++			for (int i = 0; i < gap3; ++i) put_disk_byte(out, bit, 255, 1);
 +		}
 +		wr_le32(woz + 260 + t * 8, bit);
 +		if (apple3) {
-+			// 50,304-bit tracks, rotated by the Apple /// synchronized-format
-+			// inter-track offset. This matches the original SOS seek/key sequence.
-+			uint8_t copy[6288]; memcpy(copy, out, sizeof(copy));
-+			unsigned rotation = (t * 2950) % sizeof(copy);
-+			for (unsigned i = 0; i < sizeof(copy); ++i) out[i] = copy[(i + rotation) % sizeof(copy)];
++			// Apple /// synchronized format: each track is rotated so that the SOS key
++			// sector, four sectors earlier on the next track, passes the head 56.5 ms
++			// after the previous one. SOS's one-track seek takes 48 ms and its first
++			// address read must land on that sector.
++			uint8_t copy[WOZ525_BLOCKS_PER_TRACK * 512];
++			const unsigned bytes = bit / 8, step = (bit * 3 / 4 - 56500000 / cell_ns) / 8;
++			memcpy(copy, out, bytes);
++			unsigned rotation = (t * step) % bytes;
++			for (unsigned i = 0; i < bytes; ++i) out[i] = copy[(i + rotation) % bytes];
 +		}
 +	}
 +	wr_le32(woz + 8, woz_crc32(woz + 12, size - 12));
@@ -868,7 +911,7 @@ index 6a69800..ae7e290 100644
  }
  
  // Locate a chunk by id; returns pointer to its data and fills *out_size, or NULL.
-@@ -506,6 +663,7 @@ static const uint8_t *woz_find_chunk(const uint8_t *woz, size_t size,
+@@ -506,6 +682,7 @@ static const uint8_t *woz_find_chunk(const uint8_t *woz, size_t size,
  	size_t pos = 12;
  	while (pos + 8 <= size) {
  		uint32_t csize = rd_le32(woz + pos + 4);
@@ -876,7 +919,7 @@ index 6a69800..ae7e290 100644
  		if (memcmp(woz + pos, id, 4) == 0) {
  			if (out_size) *out_size = csize;
  			return woz + pos + 8;
-@@ -515,47 +673,102 @@ static const uint8_t *woz_find_chunk(const uint8_t *woz, size_t size,
+@@ -515,47 +692,102 @@ static const uint8_t *woz_find_chunk(const uint8_t *woz, size_t size,
  	return NULL;
  }
  
@@ -1109,10 +1152,10 @@ index 0000000..921147a
 +"$out/storage_test" "$@"
 diff --git a/tests/apple3/storage_test.cpp b/tests/apple3/storage_test.cpp
 new file mode 100644
-index 0000000..21fd469
+index 0000000..f4d3255
 --- /dev/null
 +++ b/tests/apple3/storage_test.cpp
-@@ -0,0 +1,238 @@
+@@ -0,0 +1,240 @@
 +#include "../../file_io.h"
 +#include "../../user_io.h"
 +#include "../../support/a2/iigs_fmt.h"
@@ -1203,7 +1246,9 @@ index 0000000..21fd469
 +  auto w=mount_serve(f,dsk,"disk.DSK",0,true);
 +  A2WozInfo info; assert(a2_woz_validate(w.data(),w.size(),&info)); assert(w[23]==1);
 +  assert(a2_woz525_to_dsk(back.data(),w.data(),w.size())); assert(back==dsk);
-+  assert(get32(w.data()+260)==50304);
++  // Apple /// tracks hold 51,424 cells read at 3.875 us, so the machine's own formatter
++  // closes them at its nominal 22 sync nibbles; the bare 50,304 reads as a fast drive.
++  assert(get32(w.data()+260)==51424 && w[20+39]==31);
 +  // A burst that decodes to nothing valid never reaches the source image.
 +  from_fpga.assign(1024,0x31); auto original=bytes(f); iigs_write(0,&f,3,0x100,1024);
 +  assert(bytes(f)==original);

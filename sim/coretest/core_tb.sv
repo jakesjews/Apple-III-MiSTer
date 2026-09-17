@@ -50,7 +50,8 @@ module core_tb #(
 	output logic [ 5:0] track1,
 	output logic [12:0] track1_addr,
 	output logic [ 7:0] qtrack1,
-	output logic        valid1
+	output logic        valid1,
+	output logic        write_mode1
 );
 
 	wire [7:0] video_r, video_g, video_b;
@@ -91,6 +92,7 @@ module core_tb #(
 	assign track1      = drives[0].woz.track_id[7:2];
 	assign track1_addr = drives[0].woz.bit_addr[12:0];
 	assign qtrack1     = drives[0].woz.track_id;
+	assign write_mode1 = disk_write_mode && disk_active[0];
 	assign valid1      = drives[0].woz.valid && drives[0].woz.ready && (drives[0].woz.bit_count != 0);
 
 	apple3_core #(

@@ -36,9 +36,9 @@ core. The supplied `MiSTer_AppleIII` binary comes from
 
 Supported: **WOZ, DSK, DO, PO, NIB and 2MG**.
 
-- **DSK, DO, PO and 2MG** are writable. Saves go straight into the image you
-  mounted, so keep a copy of anything you want to preserve, or make the file
-  read-only on the SD card to protect it.
+- **DSK, DO, PO and 2MG** are writable, and SOS can format them. Saves go
+  straight into the image you mounted, so keep a copy of anything you want to
+  preserve, or make the file read-only on the SD card to protect it.
 - **WOZ2** is writable. Writes require existing track allocations; formatting
   cannot create missing tracks.
 - WOZ1, flux-encoded WOZ, NIB, NIB-payload 2MG and images inside a zip are
@@ -72,7 +72,6 @@ using host hardware flow control. [Serial details](docs/DEVELOPMENT.md#serial-po
 
 - Expansion cards, ProFile hard disks, Silentype and the optional 512 KiB
   memory expansion are not implemented.
-- The Confidence Program's **Machine Configuration** screen hangs.
 - Broad software and copy-protection compatibility has not been established.
 
 ## Planned features and accuracy work
@@ -80,9 +79,9 @@ using host hardware flow control. [Serial details](docs/DEVELOPMENT.md#serial-po
 The following items remain open. Existing partial implementations are noted
 where they provide a starting point.
 
-1. **Confidence Program regression.** Recheck the **Machine Configuration**
-   hang with the completed Disk III controller and add a regression test.
-   Remove the known limitation above if the retest confirms it is resolved.
+1. **Confidence Program regression.** Machine Configuration and the
+   Seek/Read/Write/Align disk test now pass on hardware. Turn them into a
+   scripted regression with the boot harness's `--keys` option.
 
 2. **Keyboard accuracy and optional III Plus keymap.** Build on the existing
    encoder, modifier tracking and repeat tests. Complete repeat activation

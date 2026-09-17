@@ -25,6 +25,6 @@ Timing groups: 38
 Minimum slack: 0.246 ns; all TNS = 0
 Quartus processors: 6
 RBF SHA256: 2e943434d73b5c5e0ba83fa227ae9332c7ff631ae4c6aca9c9fbe0d2e847f34f
-Main SHA256: fe1d468116620cf7a6d6e3b21be75f1514aa66e6df54396a3ac703291a56ec6b
+Main SHA256: bf2a88c6f759e79070b64a433c7febc80af8bc187751a567a46abad5cba2518a
 Main upstream base: f80abdc79e76bfc63799d028f2337c4d762b5e50
 Main source changes: support/main/apple3-storage.patch

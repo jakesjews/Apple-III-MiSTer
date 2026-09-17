@@ -194,7 +194,13 @@ together with `--sd-delay` shows how much track-load time a protection check
 tolerates. `--rtc=YYMMDDWhhmmss` seeds the host clock as MiSTer does
 (W = weekday, Sunday 0). `--disk-trace` prints a millisecond timeline of seeks,
 ROM address-field reads, head movement and cache validity on tracks 8 to 17,
-where SOS reads its protection key. `--keytest` drives System Utilities with
+where SOS reads its protection key; `--disk-trace-all` covers every track
+and adds write-mode bursts with their track positions. `--keys=` types a script
+once `--keys-after=TEXT` is on screen, for example
+`--keys=text:d,wait3,text:f,wait3,text:.d1,enter,text:wbfmt,enter,wait3,text:y,wait40,dump`
+to run SOS's Format a Volume (tokens: `enter`, `esc`, `up`, `down`, `space`,
+`text:...`, `waitN` seconds, `dump` the text screen). `--writable` mounts images
+read-write and `--sd-write-delay=N` slows saved blocks. `--keytest` drives System Utilities with
 injected PS/2 keys and decodes the text page after each. See
 [sim/accuracy/README.md](../sim/accuracy/README.md) for the PROM-based timing
 comparison and the 6502 functional test.

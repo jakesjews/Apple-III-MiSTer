@@ -50,14 +50,26 @@ mount assignments and write policies.
   WOZ2 persists only existing track allocations. It cannot allocate an unmapped
   track or resize tracks.
 - DSK, DO, PO and sector-order 2MG images are written in place. The drive saves
-  a track one 512-byte block at a time, so Main re-decodes that track after each
-  block with a strict parser: address checksum and track number, a data field
-  within the following gap, valid GCR codes, data checksum and both epilogs.
-  Only sectors that verify and differ from the file are written, 256 bytes each,
-  in the file's own sector order and behind any 2MG header. A torn or damaged
-  sector never reaches the file; if one still fails once the whole track has
-  arrived, Main shows how many sectors were not saved. The reconstructed SOS
-  address-field key is not stored, because sector images have no address fields.
+  a track one 512-byte block at a time, so the track is torn until its last
+  block arrives. Main decodes it then with a strict parser: address checksum and
+  track number, a data field within the following gap, valid GCR codes, data
+  checksum and both epilogs. Verified sectors replace the file's, in the file's
+  own sector order and behind any 2MG header, with one 4 KiB write per track.
+  The image is opened O_SYNC, and sixteen separate sector writes held the
+  drive's cache busy long enough to break SOS's formatter. A damaged sector
+  never reaches the file, and Main shows how many were not saved. The
+  reconstructed SOS address-field key is not stored, because sector images have
+  no address fields.
+- Converted Apple III tracks hold 51,424 cells read at 3.875 us (INFO timing
+  31), not the bare 50,304 at 4 us. The drive model consumes one cell per bit
+  the machine writes, so a track's cell count is what the machine's own
+  formatter measures as drive speed. Apple's Disk III formatter shrinks its
+  sync gap until sixteen sectors of 10n + 2,988 cells close the track and
+  accepts 19 to 24 nibbles, 22 being a correctly adjusted drive. On 50,304
+  cells SOS reported "drive is too fast" and the Confidence Program's Align
+  check failed; on 51,904 it closed at 25, "too slow". 51,424 closes at 22. The
+  inter-track rotation is recomputed so SOS's key sectors still pass the head
+  56.5 ms apart.
 - Main receives complete transfers of up to 16 KiB and zero-pads partial reads.
   Native writes reject metadata/out-of-file ranges and clear the CRC to the WOZ
   specification's zero/not-calculated value. Unknown chunks are preserved.

@@ -140,6 +140,30 @@ On hardware with the rebuilt core the Apple Writer III DSK reached its title on
 created directories on a DSK in each drive, and the host check again found only
 the five expected sectors changed per image.
 
+### Formatting and the Confidence disk test
+
+The Confidence Program's Seek/Read/Write/Align test reported `err` on Align,
+and SOS's Format a Volume failed on a converted DSK. Align is a format pass:
+fill a track with sync, write sixteen sectors, check that the track closes, and
+shrink the gaps until it does. The imported drive model consumes one cell per
+written bit, so the cell count of a track is the "drive speed" a formatter
+sees, and converted tracks had the bare minimum of 50,304 cells. Apple's
+formatter source gives the criterion (19 to 24 sync nibbles per gap, 22
+nominal), and a simulated SOS format gave the layout: 10n + 2,988 cells per
+sector. Main now converts to 51,424 cells, which closes at 22, with a 3.875 us
+read cell and the inter-track rotation recomputed for it.
+
+On hardware SOS then formatted three tracks and stopped with an I/O error.
+Main's write-back did up to sixteen synchronous sector writes per saved track;
+it now stores each track once, with a single write, when its last block
+arrives. With that build [SOS formats a DSK](disk/sos-format-dsk.png) (twice of
+two tries; all 35 tracks rewritten and the image reads back as an empty 280
+block volume, which then took a new directory), the
+[Confidence disk test passes](disk/confidence-disk-test.png) every check for
+D1, and the protected Apple Writer III DSK reached its title on 6 of 6 boots.
+A simulation with 25 ms added to every saved block still formatted, so the
+single-write change is supported by the hardware result, not by simulation.
+
 ### Clock
 
 SOS keeps the two-digit year in the MM58167's day and month compare latches.
