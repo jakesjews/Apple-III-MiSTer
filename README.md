@@ -7,13 +7,13 @@ This is an AI-generated, human-directed project; compatibility is still being te
 
 ## Setup
 
-1. Copy the core's `.rbf` file to `/media/fat/_Computer/`.
-2. Copy the matching companion Main binary to `/media/fat/MiSTer_AppleIII_WOZ`.
+1. Copy the core's latest `.rbf` file in `releases/` to `/media/fat/_Computer/`.
+2. Copy `releases/MiSTer_AppleIII` to `/media/fat/MiSTer_AppleIII`.
 3. Add this to `MiSTer.ini`:
 
    ```ini
    [Apple-III]
-   main=MiSTer_AppleIII_WOZ
+   main=MiSTer_AppleIII
    ```
 
 4. Supply a 4,096-byte Apple /// boot ROM as

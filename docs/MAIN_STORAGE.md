@@ -55,11 +55,11 @@ git -C ../Main_MiSTer-AppleIII apply ../Apple-III-MiSTer/support/main/apple3-sto
 In that checkout, use Main's normal ARM Linux cross toolchain and run
 `make -j6 MAKEFLAGS=-j6`. For the FPGA, follow the
 [core build instructions](DEVELOPMENT.md#building).
-Copy `bin/MiSTer` to `/media/fat/MiSTer_AppleIII_WOZ`. In `MiSTer.ini`:
+Copy `bin/MiSTer` to `/media/fat/MiSTer_AppleIII`. In `MiSTer.ini`:
 
 ```ini
 [Apple-III]
-main=MiSTer_AppleIII_WOZ
+main=MiSTer_AppleIII
 ```
 
 MiSTer selects that binary only for Apple III and returns to the normal Main

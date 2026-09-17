@@ -32,12 +32,12 @@ The exported patch applies to the recorded upstream base and passes the shared s
 
 Installed on MiSTer:
 /media/fat/_Computer/Apple-III_20260916_woz.rbf
-/media/fat/MiSTer_AppleIII_WOZ
+/media/fat/MiSTer_AppleIII
 
 MiSTer.ini addition:
 
 [Apple-III]
-main=MiSTer_AppleIII_WOZ
+main=MiSTer_AppleIII
 
 Physical validation: dual-drive SOS boot, native WOZ2 volume rename, persisted after fresh reload.
 Temporary media, MGLs, screenshots and debug/video settings removed; returned to Menu and stock Main; Zaparoo stopped.
