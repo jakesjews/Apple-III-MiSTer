@@ -1,5 +1,64 @@
 `verilator_config
 
+// MiSTer module/file naming, explicitly unused outputs, FPGA power-up values,
+// and local names do not need style diagnostics. Keep functional checks enabled.
+lint_off -rule DECLFILENAME
+lint_off -rule PINCONNECTEMPTY
+lint_off -rule PROCASSINIT
+lint_off -rule SIMILARNAME
+lint_off -rule VARHIDDEN
+
+// Only waive known unused HPS ports in emu. Name each port so accidentally
+// dropping a required connection still produces PINMISSING.
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'joystick_2'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'joystick_3'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'joystick_4'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'joystick_5'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'joystick_l_analog_2'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'joystick_l_analog_3'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'joystick_l_analog_4'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'joystick_l_analog_5'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'joystick_r_analog_0'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'joystick_r_analog_1'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'joystick_r_analog_2'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'joystick_r_analog_3'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'joystick_r_analog_4'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'joystick_r_analog_5'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'paddle_0'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'paddle_1'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'paddle_2'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'paddle_3'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'paddle_4'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'paddle_5'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'spinner_0'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'spinner_1'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'spinner_2'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'spinner_3'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'spinner_4'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'spinner_5'"
+// Physical PS/2 pins are inactive with the default hps_io PS2DIV=0.
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'ps2_kbd_clk_out'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'ps2_kbd_data_out'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'ps2_kbd_clk_in'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'ps2_kbd_data_in'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'ps2_mouse_clk_out'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'ps2_mouse_data_out'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'ps2_mouse_clk_in'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'ps2_mouse_data_in'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'ps2_mouse'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'ps2_mouse_ext'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'direct_video'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'ioctl_upload'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'ioctl_rd'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'ioctl_file_ext'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'sdram_sz'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'TIMESTAMP'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'uart_mode'"
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'uart_speed'"
+
+// Project debug outputs are consumed by testbenches, not the MiSTer wrapper.
+lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'debug_*'"
+
 // Keep the MiSTer framework out of lint diagnostics while using its real
 // module interfaces for elaboration. Generic lint_off covers lint/style
 // warnings; the named diagnostics below need explicit exclusions.
@@ -8,6 +67,11 @@ lint_off -rule TIMESCALEMOD -file "sys/*"
 lint_off -rule SIMILARNAME -file "sys/*"
 lint_off -rule PROCASSWIRE -file "sys/*"
 lint_off -rule UNOPTFLAT -file "sys/*"
+
+// Focus lint on project RTL. Keep vendored modules loaded for connection
+// checks, but suppress their lint warnings, including in locally modified code.
+lint_off -file "rtl/acia/*"
+lint_off -file "rtl/disk/woz/*"
 
 // GHDL output is generated from the vendored VHDL and our T65 wrapper.
 lint_off -file "sim/gen/*"

@@ -1,8 +1,10 @@
 // Run from the repository root after make lint-prepare.
 // Match Quartus VERILOG_FILE parsing for .v sources.
 +1364-2005ext+v
+// Supply a default for modules without a timescale; preserve explicit ones.
+--timescale 1ns/1ps
 
-// Read exclusions before sources. These do not waive core RTL warnings.
+// Read the warning policy and dependency exclusions before sources.
 lint/exclusions.vlt
 +incdir+lint/gen
 +incdir+sys

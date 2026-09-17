@@ -135,19 +135,29 @@ verilator --lint-only -Wall --top-module emu -f lint/rtl.f
 For direct invocation, run `make lint-prepare` first and repeat it after any
 VHDL edits. `lint/rtl.f` lists the Verilog/SystemVerilog sources from `files.qip`;
 update both when adding synthesis sources. `.v` files are parsed as Verilog 2005.
+Modules without an explicit timescale use `1ns/1ps`.
 
 The MiSTer `sys/` modules are loaded to check their connections, with diagnostics
 suppressed by `lint/exclusions.vlt`. The GHDL-generated T65/VIA code and lint-only
 PLL stub are also excluded from diagnostics. Vendored Verilog in `rtl/acia/`
-and `rtl/disk/woz/` is included in linting; the formatter still excludes it.
+and `rtl/disk/woz/`, including local modifications, has lint warnings suppressed.
+Those modules remain loaded to check connections from project RTL. The formatter
+also excludes these directories. Diagnostics involving both project and excluded
+vendor code can also be suppressed, such as the disk engine's mixed-reset warning.
+
+The warning policy disables filename/case/shadowing style checks, explicitly
+disconnected-port warnings and declaration-initializer warnings (FPGA power-up
+values). Known unused HPS ports and project debug outputs have file/message
+waivers; missing required connections still warn. Width, multiple-driver,
+unused-signal, combinational-order and reset checks remain enabled.
 
 Lint uses the existing behavioral RAM/ROM branches and a port-only PLL stub,
 so it does not validate Intel primitives, PLL behavior or timing. No ROM image,
 Quartus build or MiSTer connection is needed. Generated files remain ignored.
 
 Warnings are fatal: existing RTL warnings currently make `make lint` fail.
-There is no blanket waiver or automatic fix for project RTL. This setup
-was validated with Verilator 5.052 and GHDL 6.0.0.
+The lint command does not change RTL. This setup was validated with
+Verilator 5.052 and GHDL 6.0.0.
 
 ## Testing
 
