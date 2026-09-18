@@ -117,7 +117,8 @@ Sources (abbreviations used below):
 * With native mode disabled, VM0/VM1/VM3 mean TEXT/MIXED/HIRES. TEXT overrides
   HIRES; otherwise HIRES selects 280-pixel monochrome and its absence selects
   40×48 lores from text-page nibbles. MIXED replaces scan lines 160–191 with
-  40-column text. RGB hires remains monochrome, as documented by Apple TA48103.
+  40-column text. RGB hires remains monochrome, as documented by Apple TA48103;
+  the NTSC output shows it in artifact colour. [Video sources](VIDEO_SOURCES.md)
 * 140-mode packs four seven-bit memory fragments into seven four-bit pixels,
   each four master dots wide. The second state starts at dot 14 of the group.
 * Text pages are in the S-bank at $0400/$0800; graphics pages are in physical bank 0

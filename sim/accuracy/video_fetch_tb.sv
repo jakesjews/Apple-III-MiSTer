@@ -263,12 +263,27 @@ module video_fetch_tb;
 		colour_group = {p4[6:0], p3[6:0], p2[6:0], p1[6:0]};
 	endfunction
 
+	// The bitmap byte shown before a column's own: the column to its left, or
+	// for column 0 the read of the previous line's extended state, which
+	// repeats that line's first column.
+	function automatic [7:0] byte_before(input integer base, input integer line, input integer column);
+		byte_before = (column == 0) ? peek(base + graphics_address(line - 1, 0)) :
+			peek(base + graphics_address(line, column - 1));
+	endfunction
+	// A bitmap byte with bit 7 set is shown one master dot late (BT1 through
+	// J3), opening with the last dot of whatever preceded it.
+	function automatic logic bitmap_dot(input logic [7:0] bitmap, input logic earlier, input integer dot,
+										input integer width);
+		if (!bitmap[7]) bitmap_dot = bitmap[dot/width];
+		else bitmap_dot = (dot == 0) ? earlier : bitmap[(dot-1)/width];
+	endfunction
+
 	// Expected {graphics palette, colour index} from the SRM mode descriptions
 	// and DESIGN.md, read straight from memory.
 	function automatic [4:0] reference_pixel(input integer line, input integer column, input integer dot);
 		integer text, base;
 		logic page2;
-		logic [7:0] first, second, colour, bitmap;
+		logic [7:0] first, second, colour, bitmap, left;
 		logic [27:0] group;
 		page2 = video_mode[2];
 		text  = text_address(line, column);
@@ -282,7 +297,8 @@ module video_fetch_tb;
 		end else if (!native_mode || video_mode[1:0] == 2'b00 && video_mode[3]) begin
 			// Apple ][ hires and native 280-dot monochrome keep page 2 at $2000.
 			bitmap          = peek((page2 ? 'h2000 : 0) + graphics_address(line, column));
-			reference_pixel = bitmap[dot/2] ? 5'h0f : 5'h00;
+			left            = byte_before(page2 ? 'h2000 : 0, line, column);
+			reference_pixel = bitmap_dot(bitmap, left[6], dot, 2) ? 5'h0f : 5'h00;
 		end else begin
 			case ({
 				video_mode[3], video_mode[1:0]
@@ -299,16 +315,21 @@ module video_fetch_tb;
 				3'b010, 3'b011: begin
 					first           = page2 ? peek(text + SISTER) : peek(text);
 					second          = page2 ? peek(text) : peek(text + SISTER);
-					reference_pixel = text_dot((dot < 7) ? first : second, line, dot % 7) ? 5'h0c : 5'h00;
+					// White on the colour lines; the RGB picture renders it green.
+					reference_pixel = text_dot((dot < 7) ? first : second, line, dot % 7) ? 5'h0f : 5'h00;
 				end
 				3'b101: begin
 					bitmap          = peek(base + graphics_address(line, column));
 					colour          = peek(base + PLANE + graphics_address(line, column));
-					reference_pixel = {1'b1, bitmap[dot/2] ? colour[7:4] : colour[3:0]};
+					left            = byte_before(base, line, column);
+					reference_pixel = {1'b1, bitmap_dot(bitmap, left[6], dot, 2) ? colour[7:4] : colour[3:0]};
 				end
 				3'b110: begin
-					bitmap          = peek(base + (dot < 7 ? 0 : PLANE) + graphics_address(line, column));
-					reference_pixel = bitmap[dot%7] ? 5'h0f : 5'h00;
+					// Each half of the state is late by its own byte's bit 7.
+					bitmap = peek(base + (dot < 7 ? 0 : PLANE) + graphics_address(line, column));
+					left = (dot < 7) ? byte_before(base + PLANE, line, column) :
+						peek(base + graphics_address(line, column));
+					reference_pixel = bitmap_dot(bitmap, left[6], dot % 7, 1) ? 5'h0f : 5'h00;
 				end
 				default: begin
 					group           = colour_group(base, line, column & ~1);

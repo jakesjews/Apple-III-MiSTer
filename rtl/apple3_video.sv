@@ -1,4 +1,4 @@
-// Apple /// RGB video generator.
+// Apple /// video generator.
 //
 // The scanner reads display memory in the video half of every horizontal
 // state, all 65 states of all 262 lines, as the motherboard does.  A processor
@@ -8,6 +8,11 @@
 // Address and pixel rules are derived from the service manual, video/mux
 // PROMs, Apple's US4383296/US4533909 patents, SOS console driver, and
 // diskhero; MAME is a secondary cross-check.
+//
+// Every picture the motherboard makes comes from the four colour lines
+// RGB8..RGB1 out of H3.  They are `colour` here; red, green and blue are the
+// XRGB connector as an RGB monitor shows it, and apple3_composite builds the
+// B/W and NTSC outputs from the same lines.
 
 module apple3_video (
 	input logic       clk,
@@ -31,6 +36,9 @@ module apple3_video (
 	output logic [7:0] red,
 	output logic [7:0] green,
 	output logic [7:0] blue,
+	output logic [3:0] colour,
+	output logic [1:0] colour_phase,
+	output logic       colour_burst,
 	output logic       hblank,
 	output logic       vblank,
 	output logic       hsync,
@@ -66,6 +74,10 @@ module apple3_video (
 	logic [2:0] glyph_row;
 	logic [2:0] glyph_column;
 	logic pixel_on, invert_pixel;
+	logic       green_text;
+	/* verilator lint_off UNUSEDSIGNAL */
+	logic [3:0] delayed_dot;  // a 280-dot mode uses the double-width dot number
+	/* verilator lint_on UNUSEDSIGNAL */
 	logic       second_char;
 	logic [2:0] char_dot;
 	logic [4:0] within_28;
@@ -249,6 +261,12 @@ module apple3_video (
 		graphics_palette = 1'b0;
 		pixel_on         = 1'b0;
 		invert_pixel     = 1'b0;
+		green_text       = 1'b0;
+		// BT1 is the serial bitmap one 14M clock late.  J3 selects it in
+		// place of BT0 while the byte on display has bit 7 set, in every
+		// DHIRES mode, which is the Apple II's half-dot shift.  The first dot
+		// of a late byte is still the last dot of the byte before it.
+		delayed_dot      = state_dot - 4'd1;
 		// The displayed column is h_state - 2, so h_state's parity is the
 		// column's and 140-colour groups still start on even columns.
 		// Dots 7..13 are the second character or byte: 7 + 1 wraps to dot 0.
@@ -289,27 +307,35 @@ module apple3_video (
 					pixel_on     = glyph[glyph_column];
 					invert_pixel = !char_code[7] && (!glyph[7] || flash_count[3]);
 					pixel_on     = pixel_on ^ invert_pixel;
-					colour_index = pixel_on ? 4'hc : 4'h0;
+					// The colour latch is off outside the colour modes and
+					// RP8/RP13 pull the lines to white on black.  The RGB
+					// picture keeps the green of a Monitor ///.
+					colour_index = pixel_on ? 4'hf : 4'h0;
+					green_text   = pixel_on;
 				end
 
 				4'd4: begin
 					bitmap_byte  = pixel_low;
-					bit_index    = state_dot[3:1];
-					colour_index = bitmap_byte[bit_index] ? 4'hf : 4'h0;
+					bit_index    = bitmap_byte[7] ? delayed_dot[3:1] : state_dot[3:1];
+					pixel_on     = (bitmap_byte[7] && state_dot == 4'd0) ? prev_low[6] : bitmap_byte[bit_index];
+					colour_index = pixel_on ? 4'hf : 4'h0;
 				end
 
 				4'd5: begin
 					bitmap_byte      = pixel_low;
 					colour_byte      = pixel_high;
-					bit_index        = state_dot[3:1];
-					colour_index     = bitmap_byte[bit_index] ? colour_byte[7:4] : colour_byte[3:0];
+					bit_index        = bitmap_byte[7] ? delayed_dot[3:1] : state_dot[3:1];
+					pixel_on         = (bitmap_byte[7] && state_dot == 4'd0) ? prev_low[6] : bitmap_byte[bit_index];
+					colour_index     = pixel_on ? colour_byte[7:4] : colour_byte[3:0];
 					graphics_palette = 1'b1;
 				end
 
 				4'd6: begin
-					bitmap_byte  = second_char ? pixel_high : pixel_low;
-					bit_index    = char_dot;
-					colour_index = bitmap_byte[bit_index] ? 4'hf : 4'h0;
+					bitmap_byte = second_char ? pixel_high : pixel_low;
+					bit_index   = bitmap_byte[7] ? char_dot - 3'd1 : char_dot;
+					if (bitmap_byte[7] && char_dot == 3'd0) pixel_on = second_char ? pixel_low[6] : prev_high[6];
+					else pixel_on = bitmap_byte[bit_index];
+					colour_index = pixel_on ? 4'hf : 4'h0;
 				end
 
 				4'd8: begin
@@ -341,10 +367,21 @@ module apple3_video (
 			endcase
 		end
 
-		rgb   = palette_rgb(colour_index, graphics_palette);
-		red   = rgb[23:16];
-		green = rgb[15:8];
-		blue  = rgb[7:0];
+		rgb    = palette_rgb(green_text ? 4'hc : colour_index, graphics_palette);
+		red    = rgb[23:16];
+		green  = rgb[15:8];
+		blue   = rgb[7:0];
+		colour = colour_index;
+
+		// L8 steps through the colour lines on C7M and C3.5M, four slots to a
+		// subcarrier cycle and 228 cycles to the 912-dot line.  A serial
+		// bitmap dot lands in the slot of its position in each group of four,
+		// as on an Apple II.  AHIRES instead holds a group in H3 from the
+		// clock that ends slot 1, so its pixels begin in slot 2.
+		colour_phase = h_count[1:0] + ((pixel_mode == 4'd7) ? 2'd2 : 2'd0);
+		// -COLRKL of the mode PROM (342-0032): Apple II graphics, mixed text
+		// included, and the three native colour modes carry a colour burst.
+		colour_burst = native_mode ? (video_mode[0] && (video_mode[3] || !video_mode[1])) : !video_mode[0];
 	end
 
 endmodule

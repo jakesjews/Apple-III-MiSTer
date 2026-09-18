@@ -6,6 +6,7 @@ A complete [Apple ///](https://en.wikipedia.org/wiki/Apple_III) core, and a very
 usable one: most software tried so far runs well.
 
 - 256 KiB RAM, every native video mode and the Apple II modes
+- RGB, color composite with Apple II artifact color, and monochrome composite
 - Four floppy drives: WOZ, DSK, DO, PO, NIB and 2MG, writable and formattable
 - A hard-disk card with two images, bootable without a floppy
 - Keyboard, joysticks, clock, audio and serial
@@ -95,6 +96,10 @@ as Solid Apple while it is down.
 **Keyboard** in the OSD selects the Apple /// Plus keyboard, which adds that
 machine's one extra key, DELETE, on the host Delete key.
 
+**Video** in the OSD selects the machine's RGB, NTSC color or black-and-white
+output. Apple II hires is in color only on **Color Composite**, as on the real
+machine. [Details](docs/VIDEO_SOURCES.md).
+
 Controller 1 is the joystick in port B, which SOS and Business BASIC read as
 joystick 0; **Joystick 1 on** in the OSD moves it to port A. Controller 2 uses
 the other port. Button 1 is the joystick's pushbutton, and each press of button
@@ -150,10 +155,11 @@ Existing partial implementations are noted where they provide a starting point.
       from it directly. Stock boot is unchanged.
       [Card and validation](docs/BLOCK_STORAGE.md).
 
-- [ ] **Video source modes.** Add monochrome-composite and color-composite modes
-      alongside the existing RGB output. Include Apple II artifact color, native
-      III composite behavior and the dedicated monochrome signal's grayscale
-      behavior.
+- [x] **Video source modes.** Color-composite and monochrome-composite
+      pictures alongside RGB, built from the schematic's two summing networks:
+      Apple II artifact color, the ///'s own NTSC colors and color killer, and
+      the monochrome output's sixteen-step gray scale.
+      [Signal model and tests](docs/VIDEO_SOURCES.md).
 
 - [ ] **III Plus model with authentic interlace.** Reuse the existing clock and
       keyboard work. Implement field timing and display-memory behavior rather

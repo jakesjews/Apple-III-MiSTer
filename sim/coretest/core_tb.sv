@@ -11,6 +11,8 @@ module core_tb #(
 	output wire         serial_dtr_n,
 	input  logic [10:0] ps2_key,
 	input  logic        plus_keymap,
+	// The OSD's Video option: 0 RGB, 1 colour composite, 2 mono composite.
+	input  logic [ 1:0] video_source,
 	input  logic [64:0] host_rtc,
 	input  logic [ 7:0] joy_a_x,
 	input  logic [ 7:0] joy_a_y,
@@ -76,6 +78,9 @@ module core_tb #(
 );
 
 	wire [7:0] video_r, video_g, video_b;
+	wire [3:0] video_colour;
+	wire [1:0] video_colour_phase;
+	wire       video_colour_burst;
 	wire hblank, hsync, vsync;
 	wire signed [15:0] audio;
 	wire [3:0] disk_active, disk_motors, disk_ready, disk_wp, disk_flux;
@@ -117,13 +122,30 @@ module core_tb #(
 		drives[0].woz.is_flux,
 		drives[0].woz.bit_count == 0
 	};
-	assign {frame_r, frame_g, frame_b} = {video_r, video_g, video_b};
-	assign frame_hblank = hblank;
-	assign track1 = drives[0].woz.track_id[7:2];
+	apple3_composite monitor (
+		.clk         (clk),
+		.source      (video_source),
+		.colour      (video_colour),
+		.colour_phase(video_colour_phase),
+		.colour_burst(video_colour_burst),
+		.rgb_in      ({video_r, video_g, video_b}),
+		.hblank_in   (hblank),
+		.vblank_in   (vblank),
+		.hsync_in    (hsync),
+		.vsync_in    (vsync),
+		.red         (frame_r),
+		.green       (frame_g),
+		.blue        (frame_b),
+		.hblank      (frame_hblank),
+		.vblank      (),
+		.hsync       (),
+		.vsync       ()
+	);
+	assign track1      = drives[0].woz.track_id[7:2];
 	assign track1_addr = drives[0].woz.bit_addr[12:0];
-	assign qtrack1 = drives[0].woz.track_id;
+	assign qtrack1     = drives[0].woz.track_id;
 	assign write_mode1 = disk_write_mode && disk_active[0];
-	assign valid1 = drives[0].woz.valid && drives[0].woz.ready && (drives[0].woz.bit_count != 0);
+	assign valid1      = drives[0].woz.valid && drives[0].woz.ready && (drives[0].woz.bit_count != 0);
 
 	// The block card sits in slot 1, as in the MiSTer top.
 	wire [15:0] slot_addr;
@@ -223,6 +245,9 @@ module core_tb #(
 		.video_vblank       (vblank),
 		.video_hsync        (hsync),
 		.video_vsync        (vsync),
+		.video_colour,
+		.video_colour_phase,
+		.video_colour_burst,
 		.audio,
 		.disk_activity,
 		.disk_active,

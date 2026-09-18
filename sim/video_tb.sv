@@ -15,6 +15,9 @@ module video_tb;
 	wire  [17:0] ram_addr;
 	logic [15:0] ram_q = 0;
 	wire [7:0] red, green, blue;
+	wire [3:0] colour;
+	wire [1:0] colour_phase;
+	wire       colour_burst;
 	wire hblank, vblank, hsync, vsync;
 
 	apple3_video dut (.*);
@@ -104,6 +107,80 @@ module video_tb;
 		if (hblank) $fatal(1, "last visible dot is blanked");
 		scan(0, 42, 0);
 		if (!hblank) $fatal(1, "dot after the last column is visible");
+
+		// 80-column text is white on the colour lines; only the RGB picture
+		// renders it green.
+		video_mode                       = 4'b0010;
+		dut.pixel_low                    = 8'hc1;
+		dut.character_ram[{7'h41, 3'd0}] = 8'h01;
+		sample (0, 0);
+		if (colour !== 4'hf || {red, green, blue} !== 24'h11dd00)
+			$fatal(1, "80-col colour=%x rgb=%06x", colour, {red, green, blue});
+
+		// A bitmap byte with bit 7 set is shown one 14M dot late, and its
+		// first dot is still the last dot of the byte before it.
+		video_mode    = 4'b1000;
+		dut.prev_low  = 8'h40;
+		dut.pixel_low = 8'h01;
+		sample (0, 0);
+		if (colour !== 4'hf) $fatal(1, "280 dot 0");
+		sample (0, 2);
+		if (colour !== 4'h0) $fatal(1, "280 dot 2");
+		dut.pixel_low = 8'h81;
+		sample (0, 0);
+		if (colour !== 4'hf) $fatal(1, "late 280 byte does not open with the previous byte's bit 6");
+		dut.prev_low = 8'h00;
+		sample (0, 0);
+		if (colour !== 4'h0) $fatal(1, "late 280 dot 0");
+		sample (0, 1);
+		if (colour !== 4'hf) $fatal(1, "late 280 dot 1");
+		sample (0, 2);
+		if (colour !== 4'hf) $fatal(1, "late 280 dot 2");
+		sample (0, 3);
+		if (colour !== 4'h0) $fatal(1, "late 280 dot 3");
+		// The colour latch is not delayed, only the dot that selects from it.
+		video_mode     = 4'b1001;
+		dut.pixel_high = 8'h21;
+		sample (0, 0);
+		if (colour !== 4'h1) $fatal(1, "late colour hires dot 0=%x", colour);
+		sample (0, 1);
+		if (colour !== 4'h2) $fatal(1, "late colour hires dot 1=%x", colour);
+		// 560 mode delays each half of the state by its own byte's bit 7.
+		video_mode     = 4'b1010;
+		dut.pixel_low  = 8'h40;
+		dut.pixel_high = 8'h81;
+		sample (0, 6);
+		if (colour !== 4'hf) $fatal(1, "560 first byte bit 6");
+		sample (0, 7);
+		if (colour !== 4'hf) $fatal(1, "late 560 byte does not open with the first byte's bit 6");
+		sample (0, 8);
+		if (colour !== 4'hf) $fatal(1, "late 560 bit 0");
+		sample (0, 9);
+		if (colour !== 4'h0) $fatal(1, "late 560 bit 1");
+
+		// Subcarrier slot: a bitmap dot's position in its group of four, and
+		// two slots on for AHIRES.  Byte 1 starts 14 dots in, at slot 2.
+		sample (0, 0);
+		if (colour_phase !== 2'd0) $fatal(1, "slot at column 0=%0d", colour_phase);
+		sample (1, 1);
+		if (colour_phase !== 2'd3) $fatal(1, "slot at column 1 dot 1=%0d", colour_phase);
+		video_mode = 4'b1011;
+		sample (0, 0);
+		if (colour_phase !== 2'd2) $fatal(1, "AHIRES slot=%0d", colour_phase);
+
+		// -COLRKL of 342-0032: the burst accompanies colour text, both colour
+		// graphics modes and all Apple II graphics, mixed text included.
+		for (int mode = 0; mode < 16; mode++) begin
+			video_mode  = mode[3:0];
+			native_mode = 1;
+			#1;
+			if (colour_burst !== (mode[0] && (mode[3] || !mode[1]))) $fatal(1, "native burst, mode %x", mode);
+			native_mode = 0;
+			#1;
+			if (colour_burst !== !mode[0]) $fatal(1, "emulation burst, mode %x", mode);
+		end
+		native_mode = 1;
+		video_mode  = 4'b0000;
 
 		screen_enable = 0;
 		sample (0, 0);

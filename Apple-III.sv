@@ -45,6 +45,7 @@ module emu (
 		"F2,ROMBIN,Load Boot ROM;",
 		"-;",
 		"O2,Aspect ratio,4:3,16:9;",
+		"ODE,Video,RGB,Color Composite,Mono Composite;",
 		"O35,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 		"O6,Write Protect 1,Off,On;",
 		"O7,Write Protect 2,Off,On;",
@@ -232,6 +233,9 @@ module emu (
 	wire               core_vblank;
 	wire               core_hsync;
 	wire               core_vsync;
+	wire        [ 3:0] core_colour;
+	wire        [ 1:0] core_colour_phase;
+	wire               core_colour_burst;
 	wire signed [15:0] core_audio;
 
 	genvar drive;
@@ -377,25 +381,44 @@ module emu (
 		.video_vblank      (core_vblank),
 		.video_hsync       (core_hsync),
 		.video_vsync       (core_vsync),
+		.video_colour      (core_colour),
+		.video_colour_phase(core_colour_phase),
+		.video_colour_burst(core_colour_burst),
 		.audio             (core_audio),
 		.disk_activity     (disk_activity),
 		.disk_active
 	);
 
-	// Register the video outputs in the machine-clock domain.  video_mixer
-	// samples them from CLK_VIDEO on ce_pix, and the phase of the free-running
-	// pixel divider relative to clk_14m is not controlled, so the crossing has
-	// to close within one 57.27 MHz cycle for every phase.  Only a
+	// The "Video" option chooses the monitor: the XRGB lines, the NTSC colour
+	// output or the B/W jack.  A reserved value shows RGB.
+	//
+	// The monitor's outputs are registers in the machine-clock domain.
+	// video_mixer samples them from CLK_VIDEO on ce_pix, and the phase of the
+	// free-running pixel divider relative to clk_14m is not controlled, so the
+	// crossing has to close within one 57.27 MHz cycle for every phase.  Only a
 	// register-to-register path can do that; the combinational pixel path was
 	// measured at 34 ns.
-	logic [7:0] core_r_q, core_g_q, core_b_q;
-	logic core_hblank_q, core_vblank_q, core_hsync_q, core_vsync_q;
-	always_ff @(posedge clk_14m) begin
-		{core_r_q, core_g_q, core_b_q} <= rom_loaded ? {core_r, core_g, core_b} : 24'd0;
-		{core_hblank_q, core_vblank_q, core_hsync_q, core_vsync_q} <= {
-			core_hblank, core_vblank, core_hsync, core_vsync
-		};
-	end
+	wire [7:0] core_r_q, core_g_q, core_b_q;
+	wire core_hblank_q, core_vblank_q, core_hsync_q, core_vsync_q;
+	apple3_composite monitor (
+		.clk         (clk_14m),
+		.source      (status[14:13]),
+		.colour      (rom_loaded ? core_colour : 4'd0),
+		.colour_phase(core_colour_phase),
+		.colour_burst(core_colour_burst),
+		.rgb_in      (rom_loaded ? {core_r, core_g, core_b} : 24'd0),
+		.hblank_in   (core_hblank),
+		.vblank_in   (core_vblank),
+		.hsync_in    (core_hsync),
+		.vsync_in    (core_vsync),
+		.red         (core_r_q),
+		.green       (core_g_q),
+		.blue        (core_b_q),
+		.hblank      (core_hblank_q),
+		.vblank      (core_vblank_q),
+		.hsync       (core_hsync_q),
+		.vsync       (core_vsync_q)
+	);
 
 	assign LED_USER  = disk_activity || block_activity;
 	assign AUDIO_L   = core_audio;

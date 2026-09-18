@@ -66,6 +66,11 @@ module apple3_core #(
 	output logic               video_vblank,
 	output logic               video_hsync,
 	output logic               video_vsync,
+	// The colour lines RGB8..RGB1 behind that picture, their subcarrier slot
+	// and the colour burst enable, for apple3_composite.
+	output logic        [ 3:0] video_colour,
+	output logic        [ 1:0] video_colour_phase,
+	output logic               video_colour_burst,
 	output logic signed [15:0] audio,
 	output logic               disk_activity,
 	output wire         [ 3:0] disk_active,
@@ -546,6 +551,9 @@ module apple3_core #(
 		.red          (video_r),
 		.green        (video_g),
 		.blue         (video_b),
+		.colour       (video_colour),
+		.colour_phase (video_colour_phase),
+		.colour_burst (video_colour_burst),
 		.hblank       (video_hblank),
 		.vblank       (video_vblank),
 		.hsync        (video_hsync),
