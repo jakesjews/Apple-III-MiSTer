@@ -77,11 +77,6 @@ lint_off -rule MULTIDRIVEN -file "rtl/apple3_rtc.sv" -match "*'irq_control'*Loca
 // value; both task call sites and host seeding belong to the same always_ff.
 lint_off -rule MULTIDRIVEN -file "rtl/apple3_rtc.sv" -match "*'year_bcd'*year_bcd*<= host_rtc[47:40];*Location of other write*year_bcd*<= bcd_increment(year_bcd);*"
 
-// Video requests span 0..79 and split into two 0..39 buffers. Visible text
-// reads have h_state < 40. Preserve diagnostics for other widths/expressions.
-lint_off -rule WIDTHTRUNC -file "rtl/apple3_video.sv" -match "*Bit extraction of array[39:0] requires 6 bit index, not 7 bits.*line_buffer_low[request_index_d]*"
-lint_off -rule WIDTHTRUNC -file "rtl/apple3_video.sv" -match "*Bit extraction of array[39:0] requires 6 bit index, not 7 bits.*line_buffer_high[request_index_d-7'd40]*"
-lint_off -rule WIDTHTRUNC -file "rtl/apple3_video.sv" -match "*Bit extraction of array[39:0] requires 6 bit index, not 7 bits.*line_buffer_*[h_state]*"
 // Comparing an unsigned divider with an integer constant safely extends it.
 lint_off -rule WIDTHEXPAND -file "rtl/apple3_rtc.sv" -match "*Operator LT expects 32 bits on the LHS, but LHS's VARREF 'millisecond_divider' generates 14 bits.*"
 // A multi-bit conditional deliberately tests whether any video effect is on.
@@ -120,16 +115,13 @@ lint_off -rule UNUSEDSIGNAL -file "rtl/apple3_rtc.sv" -match "*Bits of signal ar
 // The P6 sequencer derives its phase from clk_2m (Q3), not this legacy input.
 lint_off -rule UNUSEDSIGNAL -file "rtl/apple3_disk.sv" -match "*Signal is not used: 'phase_zero'*"
 
-// Visible buffer positions use six bits; 140-pixel grouping discards the two
-// subpixel bits. Packed graphics use seven data bits from each fetched byte.
-lint_off -rule UNUSEDSIGNAL -file "rtl/apple3_video.sv" -match "*Bits of signal are not used: 'h_state'[6]*"
+// 140-pixel grouping discards the two subpixel bits. Packed graphics use
+// seven data bits from each fetched byte.
 lint_off -rule UNUSEDSIGNAL -file "rtl/apple3_video.sv" -match "*Bits of signal are not used: 'within_28'[1:0]*"
 lint_off -rule UNUSEDSIGNAL -file "rtl/apple3_video.sv" -match "*Bits of signal are not used: 'p1'[7]*"
 lint_off -rule UNUSEDSIGNAL -file "rtl/apple3_video.sv" -match "*Bits of signal are not used: 'p2'[7]*"
 lint_off -rule UNUSEDSIGNAL -file "rtl/apple3_video.sv" -match "*Bits of signal are not used: 'p3'[7]*"
 lint_off -rule UNUSEDSIGNAL -file "rtl/apple3_video.sv" -match "*Bits of signal are not used: 'p4'[7]*"
-// Character reload visits exactly 64 screen-hole pairs.
-lint_off -rule UNUSEDSIGNAL -file "rtl/apple3_video.sv" -match "*Bits of signal are not used: 'char_slot'[6]*"
 // Non-MMU environment bits are consumed elsewhere. Bank addressing only uses
 // the low nibble, plus the extended-bank high bit for the system-map override.
 lint_off -rule UNUSEDSIGNAL -file "rtl/apple3_mmu.sv" -match "*Bits of signal are not used: 'environment'[7,5:4]*"

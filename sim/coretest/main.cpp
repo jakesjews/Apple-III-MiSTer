@@ -37,6 +37,9 @@ int main(int argc, char **argv) {
 	const bool disk_test = argc > 2;
 	bool key_test = false, warm_reset = false, to_menu = false, disk_trace = false, trace_all = false;
 	bool plus_keymap = false;  // Apple /// Plus keyboard: separate DELETE key
+	// --check-font: after --to-menu, the character generator must hold the set
+	// the console driver keeps at $0C00, loaded through the screen holes.
+	bool check_font = false;
 	// --keys=down,down,enter,wait5,enter typed once --keys-after=TEXT is on screen.
 	std::string keys, keys_after;
 	bool writable = false;  // mount images read-write, as Main does for writable sources
@@ -58,6 +61,7 @@ int main(int argc, char **argv) {
 		if (option.rfind("--drive2=", 0) == 0) drive2 = option.substr(9);
 		if (option == "--keytest") key_test = true;
 		if (option == "--plus-keymap") plus_keymap = true;
+		if (option == "--check-font") check_font = to_menu = true;
 		if (option == "--warm-reset") warm_reset = true;
 		if (option == "--to-menu") to_menu = true;
 		if (option == "--disk-trace") disk_trace = true;
@@ -96,6 +100,7 @@ int main(int argc, char **argv) {
 	top.ps2_key = 0;
 	top.plus_keymap = plus_keymap;
 	top.probe_addr = 0;
+	top.probe_font_addr = 0;
 	top.host_rtc[0] = top.host_rtc[1] = top.host_rtc[2] = 0;
 	if (rtc.size() == 13) {
 		auto bcd = [&](std::size_t at) { return unsigned(rtc[at] - '0') << 4 | unsigned(rtc[at + 1] - '0'); };
@@ -269,6 +274,14 @@ int main(int argc, char **argv) {
 			rows.push_back(text);
 		}
 		return rows;
+	};
+	// One byte of the system bank, through the sister-byte word layout.
+	auto read_system_byte = [&](unsigned offset) {
+		const unsigned byte_addr = 0x38000 + offset;
+		top.probe_addr = ((byte_addr >> 12) << 11) | ((((byte_addr >> 10) ^ (byte_addr >> 11)) & 1) << 10) |
+		                 (byte_addr & 0x3ff);
+		top.eval();
+		return ((byte_addr >> 11) & 1) ? (top.probe_word >> 8) & 0xff : top.probe_word & 0xff;
 	};
 	auto dump_screen = [&](const char *label) {
 		std::printf("screen (%s) vm=%X:\n", label, top.video_mode);
@@ -471,6 +484,19 @@ int main(int argc, char **argv) {
 		            reached_system_failure, system_failure_code);
 		dump_screen("final");
 	}
+	unsigned font_mismatches = 0;
+	if (check_font) {
+		for (unsigned entry = 0; entry < 1024; ++entry) {
+			top.probe_font_addr = entry;
+			top.eval();
+			const unsigned loaded = top.probe_font;
+			const unsigned expected = read_system_byte(0xc00 + entry);
+			if (loaded != expected && ++font_mismatches <= 8)
+				std::printf("font $%02X row %u: character RAM %02X, $0C00 set %02X\n", entry >> 3, entry & 7,
+				            loaded, expected);
+		}
+		std::printf("font: %u of 1024 character RAM bytes differ from the set at $0C00\n", font_mismatches);
+	}
 	if (disk_test)
 		std::printf("disk image=%s buffered=%u sd_reads=%u bootstrap_A000=%u boot_block_error=%u ext_fetch_ok=%u loader_return=%u "
 		            "loader_jump=%u interpreter=%u final_track=%u loader_io_error=%04X "
@@ -554,6 +580,10 @@ int main(int argc, char **argv) {
 	}
 	if (to_menu && !reached_menu && !reached_system_failure) {
 		std::fprintf(stderr, "FAIL: \"%s\" did not appear on screen\n", expect.c_str());
+		return 1;
+	}
+	if (check_font && font_mismatches) {
+		std::fprintf(stderr, "FAIL: the character generator does not hold the SOS character set\n");
 		return 1;
 	}
 	if (disk_test && reached_system_failure) {

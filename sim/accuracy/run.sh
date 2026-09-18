@@ -20,6 +20,7 @@ run_case() {
   fi
 }
 run_case video_accuracy rtl/apple3_video.sv
+run_case video_fetch rtl/apple3_timing.sv rtl/apple3_ram.sv rtl/apple3_video.sv
 run_case keyboard_accuracy rtl/apple3_keyboard.sv
 run_case disk_protection rtl/apple3_disk.sv rtl/disk/apple3_p6.sv rtl/disk/apple3_disk_sequencer.sv
 run_case rtc_accuracy rtl/apple3_rtc.sv

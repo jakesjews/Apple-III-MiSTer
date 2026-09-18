@@ -88,10 +88,10 @@ Existing partial implementations are noted where they provide a starting point.
       Apple state they drive, and an optional Apple /// Plus keymap with its
       DELETE key.
 
-- [ ] **Display-fetch and character-download timing.** Replace the current line
-      prefetch and batched character downloads with hardware-equivalent timing.
-      Add tests for writes during active display and around character-download
-      boundaries, extending the static rendering checks.
+- [x] **Display-fetch and character-download timing.** The scanner reads
+      display memory in the video slot of every state, and character downloads
+      follow the scan PROM's per-line windows. Tests cover writes during active
+      display, the download boundaries and rendering in every mode.
 
 - [ ] **All four Disk III drives.** Extend the current internal drive and one
       external drive to expose all four drives, retaining the Disk II-compatible

@@ -55,8 +55,10 @@ Sources (abbreviations used below):
   come from the scan-decode ROM [PROM 342-0030], `RRFSH`: 4 consecutive states per
   half-line where `H[4:2] == V[2:0]` during display, with additions and exclusions
   during VBL. The hardware vertical counter runs 256..511 then 250..255.
-  All 16,768 ordinary states per frame match the binary scan PROM; the extended
-  HPE state's refresh decode is outside that comparison.
+  All 16,768 ordinary states per frame match the binary scan PROM for `RRFSH`,
+  the character-write window `RTCWRT` and the display window `-RBL`
+  (`/H5·/VBL + /H3·/H4·/VBL`, H = 0-39). The extended HPE state's decode is
+  outside that comparison, and the RTL does not apply it there.
 * SOS switches to 1 MHz (env bit 7) around disk transfers. [SOS]
 * Machine reset does not stop the timing chain, so video sync continues through
   a reset. The counters start from zero when the FPGA is configured.
@@ -118,18 +120,42 @@ Sources (abbreviations used below):
   Confidence Program's "Apple ][ Hires (280 x 192), Page 2" test, which renders
   a fragmented image when page 2 is taken from $4000; MAME's `apple3_v.cpp`
   makes the same distinction. [MAME, Confidence Program]
+* Display fetch: the scanner reads memory in the video half of every state, all
+  65 states of all 262 lines. The text address is A9..A0 = V5..V3,
+  (H5..H3 + 5·V7..V6) mod 16, H2..H0, so each line reads 64 consecutive bytes of
+  its 128-byte block, starting with its 40-byte segment. In blanking (V7..V6 = 3)
+  that segment is the screen hole. The SRM describes the addressing as "much the
+  same as in the Apple ][. There is a minor difference in the Summing Circuit":
+  the Apple II's adder offsets H because its display starts at H = 24, and the
+  Apple /// counter's display starts at H = 0. The extended state repeats H = 0.
+  Graphics add the row within the cell, with any smooth-scroll offset, as
+  A12..A10. Vertical blanking forces the text map in every mode, because every
+  DHIRES term of 342-0032 has /VBL. [SRM p.2.6, PROM 342-0030/0032]
+* A pair read in state S is shifted out in state S + 2. A processor store in the
+  B slot of the state before a column's video slot shows on the line being drawn.
+  A store in the column's own state shows a frame later, or on the next scan line
+  for text, which is read again on every scan line of its row. The RGB blanking
+  and sync outputs trail the counter by the same 28 dots; E-VIA PB6 and VBL do
+  not. The FPGA RAM pairs A with A xor $0C00, which covers the text sister byte,
+  so a graphics state reads the other plane ($2000 away) with a second access in
+  the same video half.
 * Character generator = 1 KB RAM (128 chars × 8 rows), bit 7 of a font row = flash
   attribute. Screen byte bit 7 clear = inverse (or flashing when the font row's bit 7
   is set). Loaded by hardware from the text-page screen holes ($x78-$x7F of text rows
-  0-7) while $C0DB is enabled: font row = {V[4:3], H[2]}, code from the $08xx hole
-  byte, bitmap from the $04xx hole byte. [MAME, DH buildfont.s, SOS console driver]
-  The RTL prefetches display lines during HBL and batches character downloads at
-  line 261. Mid-frame writes and character-download timing are not yet equivalent
-  to the motherboard's distributed fetches.
+  0-7) while $C0DB is enabled: code from the $08xx hole byte, bitmap from the $04xx
+  hole byte. [MAME, DH buildfont.s, SOS console driver] The scan PROM's `RTCWRT`
+  selects the reads: VBL, H5..H3 = 0, H2 = VA and V1..V0 = VC..VB. That gives four
+  states on each of 18 blanking lines. Counter values 448-511 supply 16 of those
+  lines, and 254-255, after the counter wraps, read hole 7 again. The font row is
+  VC..VA, which the window makes {V[4:3], H[2]}. Every window is also a refresh
+  state, so the processor cannot take the slot. The 2114s are written in the video
+  half of the next state, `WE2114* = NAND(ENCWRT, TCWRT, C1M*, Q0)`, with $C0DB as
+  it stands at that point. One blanking interval loads all eight cells.
 * Smooth scroll: $C0D8/$C0D9 disable/enable; offset = disk stepper phase latch bits
   0-2 ($C0E0-$C0E5). The offset is added modulo 8 to the row-within-cell used for
   fetching graphics rows and character rows. [SRM ch.2, PROM 342-0055, MAME]
 * Screen enable (env bit 5) blanks the output and frees the video RAM slot.
+  Character downloads continue, since their windows are refresh states.
 * Blanking: HBL for the 25 non-display states, VBL for 70 lines. E-VIA PB6 = composite
   blanking (1 = blanking), CB1/CB2 = VBL (1 = in vertical blanking). [SOS kernel VIDEO
   routine counts BL pulses with T2; SOS interrupt table "E.CB2 VBL+, E.CB1 VBL-"]

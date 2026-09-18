@@ -186,7 +186,9 @@ image it follows SOS to the interpreter through the real track cache.
 `--sd-delay=71590` adds 5 ms of host latency per request. `--to-menu` keeps
 going past the interpreter until the System Utilities menu is on screen, and
 fails on any SOS system failure; use it for boot regressions, because a bad
-interpreter entry only shows up after the loader hands over. `--mount-delay=8
+interpreter entry only shows up after the loader hands over. `--check-font`
+does the same and then compares the character generator with the set SOS keeps
+at $0C00, which its console driver loads through the screen holes. `--mount-delay=8
 --reset-delay=3` reproduces an MGL start: no disk at power-on, a mount after
 each delay, then a reset. `--expect="Apple Writer"` waits for another title's
 screen text instead of the Utilities menu. `--sd-byte-clocks=16` slows the host

@@ -16,14 +16,16 @@ nonzero if any group failed.
 
 | Test | What it checks |
 |---|---|
-| `video_accuracy_tb.sv` | Equal 140-mode pixel widths; 49,152 graphics address and byte-lane checks across rows, scroll offsets, planes and pages; the Apple II TEXT, lores and mixed-region boundaries. |
+| `video_accuracy_tb.sv` | Equal 140-mode pixel widths; 49,152 graphics address and byte-lane checks across rows, scroll offsets, planes and pages; the text scanner in all 65 states of all 262 lines, including the screen-hole reads in blanking and the text map blanking forces in every mode; the Apple II TEXT, lores and mixed-region boundaries. |
+| `video_fetch_tb.sv` | The timing chain, video generator and RAM clocked together. Every dot of three lines for each of 21 native and emulation modes and pages, against a reference drawn from memory; stores just before and just after each column's video slot in 280- and 560-dot graphics and 40- and 80-column text; character downloads with $C0DB off, on, and switched part-way through blanking; stores just before and in each of the 64 hole-read slots; the $C0DB boundary at the write strobe; hole 7's repeated windows after the counter wraps; a download in a graphics mode with the screen off. |
 | `keyboard_accuracy_tb.sv` | Strobed NUL; independent left and right modifiers; held-key tracking, release ordering, host typematic suppression and repeat fallback; repeat activation ordering around the solid Apple line, the cursor keys' second contacts and the Apple /// Plus DELETE code. |
 | `disk_protection_tb.sv` | Each drive writes its track cache when writable and emits no writes when protected; the other drive is untouched. |
 | `rtc_accuracy_tb.sv` | GO rounds seconds correctly; the 10 Hz interrupt includes whole-second boundaries; rollover status behaves as the data sheet describes; machine reset preserves the clock. |
-| `timing_prom_tb.sv` | 134,144 A-slot PHASEN comparisons across RAM selection, screen enable and CPU speed, and 16,768 refresh reservations, compared with the original timing and scan PROM contents. |
+| `timing_prom_tb.sv` | 134,144 A-slot PHASEN comparisons across RAM selection, screen enable and CPU speed, and 16,768 states each of refresh reservation, character-generator write window (RTCWRT) and display window (-RBL), compared with the original timing and scan PROM contents. |
 
-The video test seeds the internal line and character memories so it can check
-pixel decoding independently of font loading and RAM fetch timing. The RTC test
+The video accuracy test seeds the pixel pipeline and character memory and runs
+no clock, so it checks decoding and addressing independently of fetch timing;
+the fetch test covers that timing, and takes about a minute. The RTC test
 accelerates milliseconds with the module's existing parameter. The disk test
 does not mount or modify disk files.
 
@@ -40,8 +42,9 @@ Expected SHA-256 hashes:
 
 The scan comparison covers all 64 ordinary horizontal states across 262 lines.
 It excludes the extended HPE state, where direct counter-pin interpretation is
-insufficient. The PHASEN sweep covers ordinary non-peripheral A-slots; it does
-not establish the delayed IOSTOP/ready waveform.
+insufficient; the RTL applies neither the refresh nor the character-write decode
+there. The PHASEN sweep covers ordinary non-peripheral A-slots; it does not
+establish the delayed IOSTOP/ready waveform.
 
 ## 6502 functional test
 

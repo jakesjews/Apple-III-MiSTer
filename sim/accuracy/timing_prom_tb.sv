@@ -6,7 +6,7 @@ module timing_prom_tb;
 	logic ram_cycle = 0;
 	always #5 clk_14m = ~clk_14m;
 	wire cpu_enable, via_rising, via_falling, q3, pixel_enable, hblank, vblank;
-	wire display_slot, refresh_slot, frame_tick;
+	wire display_slot, refresh_slot, character_slot, frame_tick;
 	wire [9:0] h_count;
 	wire [8:0] v_count;
 	wire [6:0] h_state;
@@ -18,6 +18,7 @@ module timing_prom_tb;
 	integer blank_mismatches = 0, visible_mismatches = 0, failures = 0;
 	integer missing_refresh = 0, extra_refresh = 0;
 	integer phase_checks = 0, phase_errors = 0, phase_address, ram_reserved;
+	integer character_mismatches = 0, character_windows = 0, window_mismatches = 0;
 	initial begin
 		if (!$value$plusargs("SCAN=%s", scan_path) || !$value$plusargs("TIMING=%s", timing_path))
 			$fatal(1, "supply +SCAN=<hex> +TIMING=<hex>");
@@ -90,6 +91,33 @@ module timing_prom_tb;
 					if (v_count >= 192) blank_mismatches++;
 					else visible_mismatches++;
 				end
+				// RTCWRT (D2) opens the character-generator write window; -RBL
+				// (D3) is high for the 40 displayed states of a visible line.
+				if (scan_prom[scan_address][2]) character_windows++;
+				if (character_slot !== scan_prom[scan_address][2]) begin
+					if (character_mismatches < 8)
+						$display(
+							"  RTCWRT mismatch V=%0d H=%0d PROM[%03x]=%b RTL=%b",
+							v_count,
+							h_state,
+							scan_address,
+							scan_prom[scan_address][2],
+							character_slot
+						);
+					character_mismatches++;
+				end
+				if (!(hblank || vblank) !== scan_prom[scan_address][3]) begin
+					if (window_mismatches < 8)
+						$display(
+							"  -RBL mismatch V=%0d H=%0d PROM[%03x]=%b RTL display=%b",
+							v_count,
+							h_state,
+							scan_address,
+							scan_prom[scan_address][3],
+							!(hblank || vblank)
+						);
+					window_mismatches++;
+				end
 			end
 		end
 		$display("refresh PROM: %0d/%0d mismatches (visible=%0d, blank=%0d)", mismatches, checked, visible_mismatches,
@@ -97,7 +125,12 @@ module timing_prom_tb;
 		$display("refresh differences: missing=%0d extra=%0d", missing_refresh, extra_refresh);
 		if (checked != 64 * 262) $fatal(1, "incomplete frame comparison: %0d", checked);
 		$display("A-slot PHASEN: %0d/%0d mismatches", phase_errors, phase_checks);
-		if (mismatches || failures || phase_errors) $fatal(1, "timing differs from motherboard PROMs");
+		$display("character write PROM: %0d/%0d mismatches (%0d windows)", character_mismatches, checked,
+				 character_windows);
+		$display("display window PROM: %0d/%0d mismatches", window_mismatches, checked);
+		if (character_windows != 72) $fatal(1, "expected 72 RTCWRT states per frame, PROM has %0d", character_windows);
+		if (mismatches || failures || phase_errors || character_mismatches || window_mismatches)
+			$fatal(1, "timing differs from motherboard PROMs");
 		$finish;
 	end
 endmodule

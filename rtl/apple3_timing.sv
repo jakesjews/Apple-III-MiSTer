@@ -21,6 +21,7 @@ module apple3_timing (
 	output logic       vblank,
 	output logic       display_slot,
 	output logic       refresh_slot,
+	output logic       character_slot,
 	output logic [9:0] h_count,
 	output logic [8:0] v_count,
 	output logic [6:0] h_state,
@@ -30,6 +31,7 @@ module apple3_timing (
 
 	logic       fast_a_slot;
 	logic [2:0] q_divider;
+	logic [4:0] scan_vertical;
 
 	// RRFSH output of Apple's 342-0030 scan-decode PROM. Kept as logic so
 	// the independently supplied binary PROM can verify the complete frame.
@@ -64,6 +66,27 @@ module apple3_timing (
 		end
 	endfunction
 
+	// RTCWRT output of the same PROM: the character-generator write window.
+	// Its eight product terms reduce to one condition, and the binary PROM
+	// confirms the reduction over the whole address space.
+	//
+	//   RTCWRT = /H2*/H3*/H4*/H5*/VA*/VB*/VC*/V0*/V1*VBL + (seven more)
+	//          = VBL * /H3 * /H4 * /H5 * (H2 == VA) * (V0 == VB) * (V1 == VC)
+	//
+	// The scanner is reading the text-page screen holes at those states, so
+	// each window transfers four of a hole's eight bytes into the character
+	// RAM.  Every one of them is also a refresh state, which is what keeps
+	// the processor from taking the slot the transfer needs.  Like RRFSH, the
+	// decode is not applied to the extended state.
+	function automatic logic scan_character(input logic [3:0] horizontal, input logic [4:0] vertical, input logic VBL);
+		logic H2, H3, H4, H5, VA, VB, VC, V0, V1;
+		begin
+			{H5, H4, H3, H2}     = horizontal;
+			{V1, V0, VC, VB, VA} = vertical;
+			scan_character       = VBL && !H3 && !H4 && !H5 && (H2 == VA) && (V0 == VB) && (V1 == VC);
+		end
+	endfunction
+
 	always_comb begin
 		hblank       = (h_count >= 10'd560);
 		vblank       = (v_count >= 9'd192);
@@ -71,10 +94,11 @@ module apple3_timing (
 
 		// The scan PROM adds refresh slots and suppresses others during VBL.
 		// Its vertical counter wraps from 511 to 250 for the final six lines.
-		refresh_slot = (h_state < 7'd64) &&
-			scan_refresh(h_state[5:2], (v_count < 9'd256) ? v_count[4:0] : v_count[4:0] - 5'd6, vblank);
-		display_slot = screen_enable && !vblank && (h_state < 7'd40);
-		fast_a_slot = !slow_mode && !peripheral_cycle && (!ram_cycle || (!display_slot && !refresh_slot));
+		scan_vertical  = (v_count < 9'd256) ? v_count[4:0] : v_count[4:0] - 5'd6;
+		refresh_slot   = (h_state < 7'd64) && scan_refresh(h_state[5:2], scan_vertical, vblank);
+		character_slot = (h_state < 7'd64) && scan_character(h_state[5:2], scan_vertical, vblank);
+		display_slot   = screen_enable && !vblank && (h_state < 7'd40);
+		fast_a_slot    = !slow_mode && !peripheral_cycle && (!ram_cycle || (!display_slot && !refresh_slot));
 
 		// Dot 6 is the optional A slot and dot 13 is the guaranteed B slot.
 		// Peripheral accesses run on the 1 MHz slot and are never doubled.

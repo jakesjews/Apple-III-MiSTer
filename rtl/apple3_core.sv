@@ -113,7 +113,7 @@ module apple3_core #(
 	logic [6:0] h_state;
 	logic [3:0] state_dot;
 	logic frame_tick, timing_hblank, timing_vblank;
-	logic display_slot, refresh_slot, pixel_enable;
+	logic display_slot, refresh_slot, character_slot, pixel_enable;
 	logic peripheral_cycle;
 
 	logic [7:0] key_code;
@@ -207,6 +207,7 @@ module apple3_core #(
 		.vblank       (timing_vblank),
 		.display_slot,
 		.refresh_slot,
+		.character_slot,
 		.h_count,
 		.v_count,
 		.h_state,
@@ -472,6 +473,7 @@ module apple3_core #(
 		.smooth_enable(smooth_scroll),
 		.smooth_offset(motor_phase[2:0]),
 		.character_write,
+		.character_slot,
 		.ram_addr     (video_ram_addr),
 		.ram_q        (video_ram_q),
 		.red          (video_r),

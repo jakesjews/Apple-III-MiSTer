@@ -5,13 +5,14 @@ module timing_tb;
 	logic slow_mode = 0, screen_enable = 0, peripheral_cycle = 0;
 	logic ram_cycle = 1;
 	wire cpu_enable, via_rising, via_falling, q3, pixel_enable;
-	wire hblank, vblank, display_slot, refresh_slot, frame_tick;
+	wire hblank, vblank, display_slot, refresh_slot, character_slot, frame_tick;
 	wire [9:0] h_count;
 	wire [8:0] v_count;
 	wire [6:0] h_state;
 	wire [3:0] state_dot;
 	integer cpu_count, rise_count, fall_count, refresh_count, q3_rise_count;
-	logic q3_old;
+	integer character_states, character_lines, character_refresh;
+	logic q3_old, line_had_character;
 
 	apple3_timing dut (.*);
 	always #5 clk_14m = ~clk_14m;
@@ -87,6 +88,34 @@ module timing_tb;
 		if (h_count != 10'd896) $fatal(1, "state 64 starts at dot %0d", h_count);
 		repeat (16) @(negedge clk_14m);
 		if (h_count != 10'd0) $fatal(1, "line length is not 912 clocks");
+
+		// Character-download windows: four states on each of the 18 blanking
+		// lines whose V1..V0 equal VC..VB, always inside a refresh slot.
+		while (v_count != 9'd0 || h_count != 10'd0) @(negedge clk_14m);
+		character_states  = 0;
+		character_lines   = 0;
+		character_refresh = 0;
+		for (integer line = 0; line < 262; line++) begin
+			line_had_character = 0;
+			for (integer dot = 0; dot < 912; dot++) begin
+				if (state_dot == 4'd6 && character_slot) begin
+					character_states++;
+					line_had_character = 1;
+					if (refresh_slot) character_refresh++;
+					if (!vblank || h_state > 7'd7) $fatal(1, "character slot at v=%0d h=%0d", v_count, h_state);
+				end
+				@(negedge clk_14m);
+			end
+			if (line_had_character) character_lines++;
+		end
+		if (character_states != 72 || character_lines != 18 || character_refresh != 72)
+			$fatal(
+				1,
+				"character slots=%0d lines=%0d refresh-covered=%0d",
+				character_states,
+				character_lines,
+				character_refresh
+			);
 
 		$display("PASS apple3_timing");
 		$finish;

@@ -14,17 +14,19 @@ module core_tb #(
 	input  logic [64:0] host_rtc,
 	input  logic [17:0] probe_addr,
 	output logic [15:0] probe_word,
+	input  logic [ 9:0] probe_font_addr,
+	output logic [ 7:0] probe_font,
 	input  logic [ 1:0] image_change,
 	input  logic [63:0] image_size,
 	input  logic        image_readonly,
-	output wire  [31:0] sd_lba        [2],
-	output wire  [ 5:0] sd_blk_cnt    [2],
+	output wire  [31:0] sd_lba         [2],
+	output wire  [ 5:0] sd_blk_cnt     [2],
 	output wire  [ 1:0] sd_rd,
 	sd_wr,
 	input  logic [ 1:0] sd_ack,
 	input  logic [13:0] sd_buff_addr,
 	input  logic [ 7:0] sd_buff_dout,
-	output wire  [ 7:0] sd_buff_din   [2],
+	output wire  [ 7:0] sd_buff_din    [2],
 	input  logic        sd_buff_wr,
 	output logic [15:0] cpu_addr,
 	output logic [15:0] pc,
@@ -162,7 +164,9 @@ module core_tb #(
 	);
 
 	// Simulation probe into the sister-byte RAM so the harness can decode the
-	// text page after injecting keystrokes.
+	// text page after injecting keystrokes, and into the character generator so
+	// it can compare the downloaded font with the set SOS keeps at $0C00.
 	assign probe_word = dut.ram.mem[probe_addr];
+	assign probe_font = dut.video.character_ram[probe_font_addr];
 
 endmodule
