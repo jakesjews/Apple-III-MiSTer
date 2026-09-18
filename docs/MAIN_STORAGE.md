@@ -17,13 +17,13 @@ controller and Disk III drive logic.
 | S1 | First external Disk III (.D2) | Native WOZ2 and sector-image writes; NIB read-only |
 | S2 | Second external Disk III (.D3) | Native WOZ2 and sector-image writes; NIB read-only |
 | S3 | Third external Disk III (.D4) | Native WOZ2 and sector-image writes; NIB read-only |
-| S4, S5 | Block-device assignments | Raw ProDOS-order payload, read-only |
+| S4, S5 | Block card drives 1 and 2 (.PROFILE and .PB2 with Problock3) | Raw ProDOS-order blocks written in place; DC42 and locked 2MG read-only |
 
-The FPGA exposes **S0 through S3**. S4/S5 are tested Main assignments for a
-future block-device interface; no ProFile or expansion-card controller is
-implemented. Older two-drive WOZ cores can use this Main build on S0/S1;
-four-drive cores require the matching Main build so S2/S3 are treated as
-floppies. The previous Main assigned its unused S2/S3 slots to block devices.
+The FPGA exposes **S0 through S5**. S4 and S5 feed the
+[virtual block-storage card](BLOCK_STORAGE.md) in slot 1. Older two-drive
+WOZ cores can use this Main build on S0/S1; four-drive cores require the
+matching Main build so S2/S3 are treated as floppies. The previous Main
+assigned its unused S2/S3 slots to block devices.
 
 Main recognizes Apple III only when its S0 format list advertises WOZ, preserving
 older cores' raw/NIB interface. The //e and IIgs retain their existing, different
@@ -78,7 +78,9 @@ mount assignments and write policies.
   Native writes reject metadata/out-of-file ranges and clear the CRC to the WOZ
   specification's zero/not-calculated value. Unknown chunks are preserved.
 - Block payloads use their declared lengths, excluding 2MG comments or DC42 tags.
-  Main never silently moves an image to another mount slot.
+  The block card's 512-byte writes go in place behind any 2MG header; a
+  write to a read-only image is acknowledged and dropped. Main never silently
+  moves an image to another mount slot.
 
 ## Build and install
 
@@ -112,8 +114,10 @@ From the Main checkout, run `tests/apple3/run.sh`. It builds the actual shared
 backend with file/SPI shims under address and undefined-behavior sanitizers.
 Tests cover four simultaneous mounts, independent write protection, writes and
 replacement/ejection, format/slot matching, DOS/PO/2MG equivalence, bit-packed GCR, NIB
-preservation, multi-block transfers, read-only enforcement and native WOZ writes
-that survive remount while preserving unrelated bytes. The ProDOS-order map is
+preservation, multi-block transfers, read-only enforcement, block-image writes
+behind a 2MG header with out-of-range writes ignored and protected images
+untouched, and native WOZ writes that survive remount while preserving
+unrelated bytes. The ProDOS-order map is
 pinned to block positions rather than to the codec's own inverse, and the
 protection key must appear only for an encrypted `SOS.INTERP`. Sector write-back tests
 save tracks block by block into DSK, PO and 2MG sources and check after every

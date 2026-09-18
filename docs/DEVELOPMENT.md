@@ -33,7 +33,9 @@ behaviour to its source.
 - A 6551 ACIA on the serial port, connected to MiSTer's HPS UART.
 - [Reusable slots 1–4](SLOTS.md): private I/O and ROM pages, per-card expansion
   ROM latches, individual IRQ status, VIA interrupt delivery and masked NMIs.
-  The shipped configuration has no cards installed.
+- A [virtual block-storage card](BLOCK_STORAGE.md) in slot 1: ProDOS
+  block-mode firmware and two hard-disk images, used by SOS through the
+  Problock3 driver and bootable with the soshdboot ROM. Slots 2–4 are empty.
 
 ## Boot ROM details
 
@@ -181,6 +183,7 @@ bash sim/accuracy/run.sh                # documentation-derived checks
 ./sim/disk/run.sh                       # P6, WOZ parser/writeback, drive timing
 ./sim/joystick/run.sh                   # joystick read methods at every position
 ./sim/timing/run.sh                     # CPU peripheral waits, RDY, RMW and NMI
+./sim/blockdev/run.sh                   # block card registers, firmware, real-CPU driver calls
 APPLE3_ROM=apple3.rom ./sim/run_core_boot.sh 30000000
 APPLE3_ROM=apple3.rom ./sim/run_core_boot.sh 400000000 system.woz --woz
 APPLE3_ROM=apple3.rom ./sim/run_core_boot.sh 1400000000 sysutils.woz --keytest
@@ -190,7 +193,9 @@ APPLE3_ROM=apple3.rom ./sim/run_core_boot.sh 1400000000 sysutils.woz --keytest
 reset, memory sizing, reconfiguration and the disk bootstrap happen. With a WOZ
 image it follows SOS to the interpreter through the real track cache.
 `--drive2=blank.woz`, `--drive3=blank.woz` and `--drive4=blank.woz`
-mount the three external drives on the shared transfer bus;
+mount the three external drives on the shared transfer bus, and
+`--hd1=hard.po`/`--hd2=hard.po` mount the block card's images
+([block storage tests](../sim/blockdev/README.md));
 `--sd-delay=71590` adds 5 ms of host latency per request. `--to-menu` keeps
 going past the interpreter until the System Utilities menu is on screen, and
 fails on any SOS system failure; use it for boot regressions, because a bad

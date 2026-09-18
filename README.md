@@ -2,11 +2,13 @@
 
 __Warning: This core is vibe coded.__
 
-Experimental Apple /// core with 256 KiB RAM, four floppy drives, joystick,
-audio and serial support. Tested with SOS 1.3 System Utilities and Business BASIC.
+Experimental Apple /// core with 256 KiB RAM, four floppy drives, a hard-disk
+card, joystick, audio and serial support. Tested with SOS 1.3 System Utilities and Business BASIC.
 The latest build also passes Confidence Program 1.1's RAM test and
-Seek/Read/Write/Align checks on all four drives.
-[Hardware validation](docs/PERIPHERAL_TIMING.md#confidence-program-11-on-2026-09-18).
+Seek/Read/Write/Align checks on all four drives, and boots SOS from a
+hard-disk image on its block-storage card.
+[Hardware validation](docs/PERIPHERAL_TIMING.md#confidence-program-11-on-2026-09-18) ·
+[Block storage](docs/BLOCK_STORAGE.md#results-2026-09-18).
 
 ## Setup
 
@@ -30,6 +32,11 @@ Seek/Read/Write/Align checks on all four drives.
 5. Put disk images in `/media/fat/games/Apple-III/`, launch the core, and use
    **Mount Drive 1** to select a boot disk. **Mount Drive 2–4** are the three
    external Disk III drives. Each drive has its own **Write Protect** option.
+   **Mount Hard Disk 1** and **2** take ProDOS-order images for the block
+   card in slot 1; SOS reaches them through the
+   [Problock3](https://github.com/robjustice/Problock3) driver, and the
+   [soshdboot](https://github.com/robjustice/soshdboot) ROM boots from them
+   without a floppy. [Details](docs/BLOCK_STORAGE.md).
 6. If SOS lists only two drives, use System Utilities → **System Configuration
    Program**: read your `SOS.DRIVER`, set **Change System Parameters → Number of
    Disk III Drives** to **4**, then **Generate New System** to save `SOS.DRIVER`
@@ -58,6 +65,11 @@ Supported: **WOZ, DSK, DO, PO, NIB and 2MG**.
   SOS protection key and synchronized tracks automatically. Deprotected disks,
   which is most of what circulates, are left without the key so SOS does not
   try to decrypt them.
+
+Hard-disk images for the block card are **PO, HDV or ProDOS-order 2MG**, any
+multiple of 512 bytes, written in place. Images beyond 32 MiB show their first
+65,535 blocks. A read-only file, a write-protected 2MG, a DC42 container or a
+zip member mounts read-only.
 
 Most Apple III software circulates as DSK, and most of the original-disk WOZ
 dumps on Asimov are WOZ1, so they mount read-only. To turn a DSK or NIB into a
@@ -133,18 +145,15 @@ Existing partial implementations are noted where they provide a starting point.
       stretches CPU, VIA and Q3 timing together and retains refresh arbitration.
       [Timing model and tests](docs/PERIPHERAL_TIMING.md).
 
-- [ ] **One virtual block-storage interface.** Add a virtual card modeled on the
-      Apple II core's hard-disk card, with its own ProDOS block-mode firmware,
-      so SOS uses it through the [Problock3](https://github.com/robjustice/Problock3)
-      driver and needs no new driver. It needs only one fixed slot's I/O and ROM
-      pages, not interrupts, `$C800` ROM or the rest of the slots work. Serve two
-      units from Main's block-image assignments with block reads and writes,
-      status, capacity from the image size and error handling, and add write
-      support to Main. Stock boot is unchanged; the
+- [x] **One virtual block-storage interface.** A ProDOS block-mode card in
+      slot 1, modeled on the Apple II core's hard-disk card with its own
+      firmware, serves two images from Main's block assignments with reads,
+      writes, status, capacity and error codes; Main writes the images in
+      place. SOS uses it through the
+      [Problock3](https://github.com/robjustice/Problock3) driver, and the
       [soshdboot](https://github.com/robjustice/soshdboot) ROM and kernel boot
-      directly from the card. Both are user-supplied, like the ROMs. Test the
-      card in simulation and an SOS boot with Problock3, using MAME's CFFA2 card
-      as a reference.
+      from it directly. Stock boot is unchanged.
+      [Card and validation](docs/BLOCK_STORAGE.md).
 
 - [ ] **Video source modes.** Add monochrome-composite and color-composite modes
       alongside the existing RGB output. Include Apple II artifact color, native

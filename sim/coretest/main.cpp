@@ -32,10 +32,17 @@ struct DiskReadEntry {
 int main(int argc, char **argv) {
 	Verilated::commandArgs(argc, argv);
 	Vcore_tb top;
-	std::vector<uint8_t> disk_image[4];
-	std::string drive_path[4];
-	if (argc > 2) drive_path[0] = argv[2];
+	// Images 0-3 are the floppy drives, 4 and 5 the block card's hard disks.
+	std::vector<uint8_t> disk_image[6];
+	std::string drive_path[6];
+	// A "-" in place of the drive 1 image boots with no floppy mounted.
+	if (argc > 2 && std::string(argv[2]) != "-") drive_path[0] = argv[2];
 	const bool disk_test = argc > 2;
+	// --block-boot: the boot ROM loads block 0 from the card (soshdboot), so
+	// the stock ROM's diagnostic and floppy milestones do not apply.
+	bool block_boot = false;
+	// --hd1-out=PATH: save hard disk 1 after the run for host-side checks.
+	std::string hd_out;
 	bool key_test = false, warm_reset = false, to_menu = false, disk_trace = false, trace_all = false;
 	bool plus_keymap = false;  // Apple /// Plus keyboard: separate DELETE key
 	// --check-font: after --to-menu, the character generator must hold the set
@@ -63,6 +70,10 @@ int main(int argc, char **argv) {
 		if (option.rfind("--sd-delay=", 0) == 0) sd_delay = std::strtoul(argv[i] + 11, nullptr, 10);
 		for (unsigned drive = 1; drive < 4; ++drive)
 			if (option.rfind("--drive" + std::to_string(drive + 1) + "=", 0) == 0) drive_path[drive] = option.substr(9);
+		if (option.rfind("--hd1=", 0) == 0) drive_path[4] = option.substr(6);
+		if (option.rfind("--hd2=", 0) == 0) drive_path[5] = option.substr(6);
+		if (option.rfind("--hd1-out=", 0) == 0) hd_out = option.substr(10);
+		if (option == "--block-boot") block_boot = true;
 		if (option == "--keytest") key_test = true;
 		if (option == "--plus-keymap") plus_keymap = true;
 		if (option == "--check-font") check_font = to_menu = true;
@@ -85,11 +96,18 @@ int main(int argc, char **argv) {
 		if (option.rfind("--mount-delay=", 0) == 0) mount_delay = std::strtod(argv[i] + 14, nullptr);
 		if (option.rfind("--reset-delay=", 0) == 0) reset_delay = std::strtod(argv[i] + 14, nullptr);
 	}
-	for (unsigned drive = 0; drive < 4; ++drive) {
+	for (unsigned drive = 0; drive < 6; ++drive) {
 		if (!disk_test || drive_path[drive].empty()) continue;
 		const char *path = drive_path[drive].c_str();
 		std::ifstream input(path, std::ios::binary);
 		disk_image[drive].assign(std::istreambuf_iterator<char>(input), {});
+		if (drive >= 4) {
+			// Main serves a hard disk as raw ProDOS blocks; a 2MG header is not stripped here.
+			if (disk_image[drive].empty() || disk_image[drive].size() % 512) {
+				std::fprintf(stderr, "FAIL: a hard disk image must be a whole number of blocks: %s\n", path); return 1;
+			}
+			continue;
+		}
 		if (disk_image[drive].size() < 12 || std::string(disk_image[drive].begin(),disk_image[drive].begin()+3) != "WOZ") {
 			std::fprintf(stderr,"FAIL: supply native WOZ or an image converted by Main: %s\n", path); return 1;
 		}
@@ -120,6 +138,7 @@ int main(int argc, char **argv) {
 		top.host_rtc[2] = 1;  // toggle bit: a new time has arrived
 	}
 	std::size_t sd_byte = 0, sd_transfer_bytes = 512, sd_start = 0;
+	unsigned hd_transfers = 0;
 	unsigned sd_disk = 0, sd_tick = 0, sd_wait_cycles = 0, sd_block_reads = 0;
 	bool sd_finishing = false, sd_transfer_read = false;
 	auto prepare_storage = [&]() {
@@ -137,6 +156,7 @@ int main(int argc, char **argv) {
 			sd_transfer_bytes = (top.sd_blk_cnt[sd_disk] + 1) * 512;
 			sd_start = static_cast<std::size_t>(top.sd_lba[sd_disk]) * 512;
 			if (sd_transfer_read) ++sd_block_reads;
+			if (sd_disk >= 4) ++hd_transfers;
 		}
 		if (top.sd_ack) {
 			const auto &data = disk_image[sd_disk];
@@ -165,7 +185,7 @@ int main(int argc, char **argv) {
 		const unsigned long long steps = static_cast<unsigned long long>(seconds * 2 * 14318181.0);
 		for (unsigned long long i = 0; i < steps; ++i) { prepare_storage(); top.clk ^= 1; top.eval(); finish_storage(); }
 	};
-	for (unsigned drive = 0; drive < 4; ++drive) {
+	for (unsigned drive = 0; drive < 6; ++drive) {
 		if (disk_image[drive].empty()) continue;
 		run_seconds(mount_delay);
 		top.image_size = disk_image[drive].size(); top.image_change = 1 << drive;
@@ -518,6 +538,13 @@ int main(int argc, char **argv) {
 		}
 		std::printf("font: %u of 1024 character RAM bytes differ from the set at $0C00\n", font_mismatches);
 	}
+	if (!hd_out.empty() && !disk_image[4].empty()) {
+		std::ofstream output(hd_out, std::ios::binary);
+		output.write(reinterpret_cast<const char *>(disk_image[4].data()), disk_image[4].size());
+		std::printf("hard disk 1 saved to %s\n", hd_out.c_str());
+	}
+	if (!disk_image[4].empty() || !disk_image[5].empty())
+		std::printf("block card: %u host transfers\n", hd_transfers);
 	if (disk_test)
 		std::printf("disk image=%s buffered=%u sd_reads=%u bootstrap_A000=%u boot_block_error=%u ext_fetch_ok=%u loader_return=%u "
 		            "loader_jump=%u interpreter=%u final_track=%u loader_io_error=%04X "
@@ -573,11 +600,11 @@ int main(int argc, char **argv) {
 		std::fprintf(stderr, "FAIL: reset vector started at %04X, expected F4EE\n", first_pcs[0]);
 		return 1;
 	}
-	if (!reached_bank_loop_exit || bank_changes < 4) {
+	if (!block_boot && (!reached_bank_loop_exit || bank_changes < 4)) {
 		std::fprintf(stderr, "FAIL: ROM did not discover the 256 KiB RAM banks\n");
 		return 1;
 	}
-	if (!reached_reconfigure || !reached_disk_boot) {
+	if (!block_boot && (!reached_reconfigure || !reached_disk_boot)) {
 		std::fprintf(stderr, "FAIL: ROM did not pass diagnostics and enter disk boot\n");
 		return 1;
 	}
@@ -585,7 +612,7 @@ int main(int argc, char **argv) {
 		std::fprintf(stderr, "FAIL: ROM did not read block 0 and jump to $A000\n");
 		return 1;
 	}
-	if (disk_test && !reached_interpreter) {
+	if (disk_test && !reached_interpreter && !block_boot) {
 		if (loader_io_error)
 			std::fprintf(stderr, "FAIL: SOS loader entered I/O ERROR path at $%04X\n",
 			             loader_io_error);

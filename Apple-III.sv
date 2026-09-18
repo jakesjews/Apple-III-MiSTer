@@ -40,6 +40,8 @@ module emu (
 		"S1,WOZDSKDO PO NIB2MG,Mount Drive 2;",
 		"S2,WOZDSKDO PO NIB2MG,Mount Drive 3;",
 		"S3,WOZDSKDO PO NIB2MG,Mount Drive 4;",
+		"S4,PO HDV2MG,Mount Hard Disk 1;",
+		"S5,PO HDV2MG,Mount Hard Disk 2;",
 		"F2,ROMBIN,Load Boot ROM;",
 		"-;",
 		"O2,Aspect ratio,4:3,16:9;",
@@ -89,17 +91,18 @@ module emu (
 	wire [ 10:0] ps2_key;
 	wire [ 64:0] host_rtc;
 
-	wire [ 3:0] img_mounted;
+	// S0-S3 are the Disk III drives; S4 and S5 are the block card's images.
+	wire [ 5:0] img_mounted;
 	wire        img_readonly;
 	wire [63:0] img_size;
-	wire [31:0] sd_lba       [4];
-	wire [ 5:0] sd_blk_cnt   [4];
-	wire [ 3:0] sd_rd;
-	wire [ 3:0] sd_wr;
-	wire [ 3:0] sd_ack;
+	wire [31:0] sd_lba       [6];
+	wire [ 5:0] sd_blk_cnt   [6];
+	wire [ 5:0] sd_rd;
+	wire [ 5:0] sd_wr;
+	wire [ 5:0] sd_ack;
 	wire [13:0] sd_buff_addr;
 	wire [ 7:0] sd_buff_dout;
-	wire [ 7:0] sd_buff_din  [4];
+	wire [ 7:0] sd_buff_din  [6];
 	wire        sd_buff_wr;
 
 	wire        ioctl_download;
@@ -115,7 +118,7 @@ module emu (
 	// the framework menu moves to the MiSTer convention of Win+F12.
 	hps_io #(
 		.CONF_STR (CONF_STR),
-		.VDNUM    (4),
+		.VDNUM    (6),
 		.F12KEYMOD(1)
 	) hps_io_inst (
 		.clk_sys           (clk_14m),
@@ -264,6 +267,58 @@ module emu (
 		end
 	endgenerate
 
+	// Slot 1 holds the virtual block-storage card, a ProDOS block-mode
+	// device that SOS reaches through the Problock3 driver or the soshdboot
+	// ROM. Its two drives are the hard-disk images on S4 and S5. Slots 2-4
+	// are empty.
+	/* verilator lint_off UNUSEDSIGNAL */
+	wire [15:0] slot_addr;  // the card decodes the page offset only
+	wire [3:0] slot_device_select, slot_io_select;  // slots 2-4 are empty
+	/* verilator lint_on UNUSEDSIGNAL */
+	wire [7:0] slot_data_out;
+	wire slot_cpu_read, slot_cycle, slot_reset;
+	wire [7:0] block_data;
+	wire block_oe, block_ready, block_activity;
+	wire [31:0] block_lba;
+	wire [1:0] block_rd, block_wr;
+	wire [7:0] block_din;
+
+	apple3_block_card block_card (
+		.clk           (clk_14m),
+		.reset         (slot_reset),
+		.cycle         (slot_cycle),
+		.addr          (slot_addr[7:0]),
+		.cpu_read      (slot_cpu_read),
+		.data_in       (slot_data_out),
+		.device_select (slot_device_select[0]),
+		.io_select     (slot_io_select[0]),
+		.data_out      (block_data),
+		.data_oe       (block_oe),
+		.ready         (block_ready),
+		.activity      (block_activity),
+		.image_change  (img_mounted[5:4]),
+		.image_size    (img_size),
+		.image_readonly(img_readonly),
+		.sd_lba        (block_lba),
+		.sd_rd         (block_rd),
+		.sd_wr         (block_wr),
+		.sd_ack        (sd_ack[5:4]),
+		.sd_buff_addr  (sd_buff_addr[8:0]),
+		.sd_buff_dout,
+		.sd_buff_din   (block_din),
+		.sd_buff_wr
+	);
+	// One request is outstanding at a time, so both images share the card's
+	// block number and buffer.
+	assign sd_lba[4]      = block_lba;
+	assign sd_lba[5]      = block_lba;
+	assign sd_blk_cnt[4]  = 6'd0;
+	assign sd_blk_cnt[5]  = 6'd0;
+	assign sd_rd[5:4]     = block_rd;
+	assign sd_wr[5:4]     = block_wr;
+	assign sd_buff_din[4] = block_din;
+	assign sd_buff_din[5] = block_din;
+
 	apple3_core machine (
 		.clk_14m           (clk_14m),
 		.reset             (core_reset),
@@ -288,19 +343,18 @@ module emu (
 		.joy_a_switch      (stick_switch[!port_b]),
 		.joy_b_button      (stick_button[port_b]),
 		.joy_b_switch      (stick_switch[port_b]),
-		// No expansion cards installed in this configuration.
-		.slot_data_in      (32'hffffffff),
-		.slot_data_oe      (4'b0000),
+		.slot_data_in      ({24'hffffff, block_data}),
+		.slot_data_oe      ({3'b000, block_oe}),
 		.slot_irq_n        (4'b1111),
 		.slot_nmi_n        (4'b1111),
-		.slot_ready        (4'b1111),
-		.slot_addr         (),
-		.slot_data_out     (),
-		.slot_cpu_read     (),
-		.slot_cycle        (),
-		.slot_reset        (),
-		.slot_device_select(),
-		.slot_io_select    (),
+		.slot_ready        ({3'b111, block_ready}),
+		.slot_addr         (slot_addr),
+		.slot_data_out     (slot_data_out),
+		.slot_cpu_read     (slot_cpu_read),
+		.slot_cycle        (slot_cycle),
+		.slot_reset        (slot_reset),
+		.slot_device_select(slot_device_select),
+		.slot_io_select    (slot_io_select),
 		.slot_io_strobe    (),
 		.slot_rom_deselect (),
 		.slot_bus_conflict (),
@@ -310,7 +364,7 @@ module emu (
 		.disk_ready        (disk_ready),
 		.disk_write_protect(disk_write_protect),
 		.disk_flux,
-		.disk_media_change (img_mounted),
+		.disk_media_change (img_mounted[3:0]),
 		.disk_motors,
 		.disk_phases,
 		.disk_write_mode,
@@ -343,7 +397,7 @@ module emu (
 		};
 	end
 
-	assign LED_USER  = disk_activity;
+	assign LED_USER  = disk_activity || block_activity;
 	assign AUDIO_L   = core_audio;
 	assign AUDIO_R   = core_audio;
 	assign AUDIO_S   = 1'b1;

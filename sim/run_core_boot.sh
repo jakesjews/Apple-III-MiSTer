@@ -20,7 +20,8 @@ sources=(
 	rtl/apple3_ram.sv rtl/apple3_rom.sv rtl/apple3_extaddr.sv
 	rtl/apple3_keyboard.sv rtl/apple3_io.sv rtl/apple3_rtc.sv
 	rtl/acia/gen_uart.v rtl/apple3_acia.sv rtl/apple3_disk.sv rtl/apple3_video.sv
-	rtl/apple3_slots.sv rtl/apple3_slot_rom.sv rtl/apple3_core.sv sim/coretest/main.cpp
+	rtl/apple3_slots.sv rtl/apple3_slot_rom.sv rtl/cards/apple3_block_card.sv rtl/apple3_core.sv
+	sim/coretest/main.cpp
 )
 
 verilator --cc --exe --build -j 4 -O2 --top-module core_tb \

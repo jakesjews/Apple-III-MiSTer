@@ -24,18 +24,20 @@ module core_tb #(
 	output logic [15:0] probe_word,
 	input  logic [ 9:0] probe_font_addr,
 	output logic [ 7:0] probe_font,
-	input  logic [ 3:0] image_change,
+	// Images 0-3 are the Disk III drives; 4 and 5 are the block card's.
+	input  logic [ 5:0] image_change,
 	input  logic [63:0] image_size,
 	input  logic        image_readonly,
-	output wire  [31:0] sd_lba         [4],
-	output wire  [ 5:0] sd_blk_cnt     [4],
-	output wire  [ 3:0] sd_rd,
+	output wire  [31:0] sd_lba         [6],
+	output wire  [ 5:0] sd_blk_cnt     [6],
+	output wire  [ 5:0] sd_rd,
 	sd_wr,
-	input  logic [ 3:0] sd_ack,
+	input  logic [ 5:0] sd_ack,
 	input  logic [13:0] sd_buff_addr,
 	input  logic [ 7:0] sd_buff_dout,
-	output wire  [ 7:0] sd_buff_din    [4],
+	output wire  [ 7:0] sd_buff_din    [6],
 	input  logic        sd_buff_wr,
+	output wire         block_activity,
 	output logic [15:0] cpu_addr,
 	output logic [15:0] pc,
 	output logic [ 7:0] environment,
@@ -106,6 +108,47 @@ module core_tb #(
 	assign write_mode1 = disk_write_mode && disk_active[0];
 	assign valid1      = drives[0].woz.valid && drives[0].woz.ready && (drives[0].woz.bit_count != 0);
 
+	// The block card sits in slot 1, as in the MiSTer top.
+	wire [15:0] slot_addr;
+	wire [7:0] slot_data_out, block_data, block_din;
+	wire slot_cpu_read, slot_cycle, slot_reset, block_oe, block_ready;
+	wire [3:0] slot_device_select, slot_io_select;
+	wire [31:0] block_lba;
+	wire [1:0] block_rd, block_wr;
+	apple3_block_card block_card (
+		.clk,
+		.reset        (slot_reset),
+		.cycle        (slot_cycle),
+		.addr         (slot_addr[7:0]),
+		.cpu_read     (slot_cpu_read),
+		.data_in      (slot_data_out),
+		.device_select(slot_device_select[0]),
+		.io_select    (slot_io_select[0]),
+		.data_out     (block_data),
+		.data_oe      (block_oe),
+		.ready        (block_ready),
+		.activity     (block_activity),
+		.image_change (image_change[5:4]),
+		.image_size,
+		.image_readonly,
+		.sd_lba       (block_lba),
+		.sd_rd        (block_rd),
+		.sd_wr        (block_wr),
+		.sd_ack       (sd_ack[5:4]),
+		.sd_buff_addr (sd_buff_addr[8:0]),
+		.sd_buff_dout,
+		.sd_buff_din  (block_din),
+		.sd_buff_wr
+	);
+	assign sd_lba[4]      = block_lba;
+	assign sd_lba[5]      = block_lba;
+	assign sd_blk_cnt[4]  = 6'd0;
+	assign sd_blk_cnt[5]  = 6'd0;
+	assign sd_rd[5:4]     = block_rd;
+	assign sd_wr[5:4]     = block_wr;
+	assign sd_buff_din[4] = block_din;
+	assign sd_buff_din[5] = block_din;
+
 	apple3_core #(
 		.ROM_INIT_FILE (ROM_FILE),
 		.ROM_INIT_START(4096)
@@ -129,19 +172,18 @@ module core_tb #(
 		.joy_a_switch,
 		.joy_b_button,
 		.joy_b_switch,
-		// No expansion cards installed in this configuration.
-		.slot_data_in       (32'hffffffff),
-		.slot_data_oe       (4'b0000),
+		.slot_data_in       ({24'hffffff, block_data}),
+		.slot_data_oe       ({3'b000, block_oe}),
 		.slot_irq_n         (4'b1111),
 		.slot_nmi_n         (4'b1111),
-		.slot_ready         (4'b1111),
-		.slot_addr          (),
-		.slot_data_out      (),
-		.slot_cpu_read      (),
-		.slot_cycle         (),
-		.slot_reset         (),
-		.slot_device_select (),
-		.slot_io_select     (),
+		.slot_ready         ({3'b111, block_ready}),
+		.slot_addr          (slot_addr),
+		.slot_data_out      (slot_data_out),
+		.slot_cpu_read      (slot_cpu_read),
+		.slot_cycle         (slot_cycle),
+		.slot_reset         (slot_reset),
+		.slot_device_select (slot_device_select),
+		.slot_io_select     (slot_io_select),
 		.slot_io_strobe     (),
 		.slot_rom_deselect  (),
 		.slot_bus_conflict  (),
@@ -151,7 +193,7 @@ module core_tb #(
 		.disk_ready         (disk_ready),
 		.disk_write_protect (disk_wp),
 		.disk_flux,
-		.disk_media_change  (image_change),
+		.disk_media_change  (image_change[3:0]),
 		.disk_motors,
 		.disk_phases,
 		.disk_write_mode,

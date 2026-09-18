@@ -28,6 +28,7 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_disk.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_video.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_slots.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_slot_rom.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/cards/apple3_block_card.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/apple3_core.sv
 
 set_global_assignment -name SDC_FILE Apple-III.sdc
