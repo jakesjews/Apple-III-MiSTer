@@ -27,6 +27,7 @@ module apple3_mmu #(
 	output logic        rom_read,
 	output logic [12:0] rom_addr,
 	output logic        io_select,
+	output logic        slot_rom_select,
 	output logic        via_d_select,
 	output logic        via_e_select
 );
@@ -117,6 +118,7 @@ module apple3_mmu #(
 		rom_addr          = {environment[1], cpu_addr[11:0]};
 		rom_read          = 1'b0;
 		io_select         = 1'b0;
+		slot_rom_select   = 1'b0;
 		via_d_select      = 1'b0;
 		via_e_select      = 1'b0;
 		ram_read          = cpu_read;
@@ -133,6 +135,7 @@ module apple3_mmu #(
 				ram_read          = 1'b0;
 				ram_write_allowed = 1'b0;
 				io_select         = (cpu_addr < 16'hc100);
+				slot_rom_select   = (cpu_addr >= 16'hc100);
 			end
 
 			// The VIA apertures sit above the ROM/RAM overlay and disappear in

@@ -20,6 +20,23 @@ module apple3_core #(
 	input logic        joy_b_button,
 	input logic        joy_b_switch,
 
+	// Synchronous expansion-card bus. Index 0 is physical slot 1. All cards
+	// use clk_14m; see docs/SLOTS.md for selects, read enables and reset rules.
+	input  logic [ 3:0][7:0] slot_data_in,
+	input  logic [ 3:0]      slot_data_oe,
+	input  logic [ 3:0]      slot_irq_n,
+	input  logic [ 3:0]      slot_nmi_n,
+	output logic [15:0]      slot_addr,
+	output logic [ 7:0]      slot_data_out,
+	output logic             slot_cpu_read,
+	output logic             slot_cycle,
+	output logic             slot_reset,
+	output logic [ 3:0]      slot_device_select,
+	output logic [ 3:0]      slot_io_select,
+	output logic             slot_io_strobe,
+	output logic             slot_rom_deselect,
+	output logic             slot_bus_conflict,
+
 	input  logic serial_rx,
 	input  logic serial_cts_n,
 	input  logic serial_dsr_n,
@@ -109,6 +126,9 @@ module apple3_core #(
 	logic [12:0] rom_addr;
 	logic [ 7:0] rom_q;
 	logic io_select, via_d_select, via_e_select;
+	logic slot_rom_select, slot_data_valid;
+	logic [7:0] slot_read_data;
+	logic slot_ca1, slot_ionmi_n;
 	logic       extended_active;
 	logic [7:0] extended_bank;
 
@@ -150,14 +170,25 @@ module apple3_core #(
 	assign zero_page   = (d_pb_o & d_pb_ddr) | ~d_pb_ddr;
 
 	assign native_mode   = !(e_pa_ddr[6] && !e_pa_o[6]);
-	assign e_pa_external = {cpu_irq_n, !solid_apple, 2'b11, 4'hf};
-	assign e_pb_i        = {1'b1, (timing_hblank || timing_vblank), 6'h3f};
+	assign e_pa_external = {cpu_irq_n, !solid_apple, slot_irq_n[2], slot_irq_n[3], 4'hf};
+	assign e_pb_i        = {slot_ionmi_n, (timing_hblank || timing_vblank), 6'h3f};
 	assign bank_register = (e_pa_o & e_pa_ddr) | (e_pa_external & ~e_pa_ddr);
 	assign e_pa_i        = bank_register;
 
 	assign machine_reset = reset || (environment[4] && reset_key && control_key);
 	assign cpu_irq_n = !(via_d_irq || via_e_irq || acia_irq);
-	assign cpu_nmi_n = !(environment[4] && reset_key && !control_key);
+	assign slot_ionmi_n = &slot_nmi_n;
+	assign cpu_nmi_n = !(environment[4] && ((reset_key && !control_key) || !slot_ionmi_n));
+	// J4 + D9 (sheet 5) gate IRQ1-4 with scanner H1. A held request
+	// retriggers the edge-sensitive VIA every four horizontal states.
+	assign slot_ca1 = !((&slot_irq_n) || h_state[1]);
+	// Sheet 9: Reset alone also resets cards in Apple II mode. Native
+	// Reset alone is an NMI; Control-Reset resets the whole machine.
+	assign slot_reset = machine_reset || (!native_mode && reset_key);
+	assign slot_addr = cpu_addr;
+	assign slot_data_out = cpu_dout;
+	assign slot_cpu_read = cpu_rwn;
+	assign slot_cycle = cpu_enable && !slot_reset;
 	assign peripheral_cycle = via_d_select || via_e_select ||
 		(io_select && ((cpu_addr[7:4] == 4'h7) ||
 					   ((cpu_addr[7:0] >= 8'hf0) && (cpu_addr[7:0] <= 8'hf3))));
@@ -169,6 +200,7 @@ module apple3_core #(
 		if (!cpu_rwn) cpu_din = cpu_dout;
 		else if (via_d_select) cpu_din = via_d_data;
 		else if (via_e_select) cpu_din = via_e_data;
+		else if (slot_data_valid) cpu_din = slot_read_data;
 		else if (io_select) cpu_din = io_data;
 		else if (rom_read) cpu_din = rom_q;
 		else if (ram_read) cpu_din = ram_cpu_data;
@@ -237,8 +269,26 @@ module apple3_core #(
 		.rom_read,
 		.rom_addr,
 		.io_select,
+		.slot_rom_select,
 		.via_d_select,
 		.via_e_select
+	);
+
+	apple3_slots slots (
+		.reset        (slot_reset),
+		.io_select,
+		.rom_select   (slot_rom_select),
+		.addr         (cpu_addr[11:4]),
+		.cpu_read     (cpu_rwn),
+		.card_data    (slot_data_in),
+		.card_data_oe (slot_data_oe),
+		.device_select(slot_device_select),
+		.io_rom_select(slot_io_select),
+		.io_strobe    (slot_io_strobe),
+		.rom_deselect (slot_rom_deselect),
+		.data_out     (slot_read_data),
+		.data_valid   (slot_data_valid),
+		.bus_conflict (slot_bus_conflict)
 	);
 
 	apple3_ram #(
@@ -296,7 +346,7 @@ module apple3_core #(
 		.port_b_o(d_pb_o),
 		.port_b_t(d_pb_ddr),
 		.port_b_i(d_pb_i),
-		.ca1_i   (1'b1),
+		.ca1_i   (slot_ca1),
 		.ca2_o   (),
 		.ca2_i   (margin_switch),
 		.ca2_t   (),
@@ -386,8 +436,8 @@ module apple3_core #(
 		.via_cb1_out  (via_d_cb1_out),
 		.via_cb2_drive(via_d_cb2_drive),
 		.via_cb2_out  (via_d_cb2_out),
-		.slot1_irq_n  (1'b1),
-		.slot2_irq_n  (1'b1),
+		.slot1_irq_n  (slot_irq_n[0]),
+		.slot2_irq_n  (slot_irq_n[1]),
 		.rtc_data,
 		.disk_data,
 		.acia_data,

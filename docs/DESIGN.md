@@ -184,7 +184,7 @@ Sources (abbreviations used below):
 | $C064/5, $C06C/D | slot IRQ status (bit 7, negative logic) |
 | $C066/E | A/D RAMP STOP (bit 7 = 1 while the capacitor is above the threshold) |
 | $C070-7F | MM58167 RTC, register selected by the zero page register |
-| $C090-CF | slots 1-4 device select (unpopulated) |
+| $C090-CF | slots 1-4 device select (reusable card bus; currently unpopulated) |
 | $C0D0-7 | drive select A0/A1, internal enable, side 2 |
 | $C0D8/9 | smooth scroll off/on |
 | $C0DA/B | character download off/on |
@@ -302,16 +302,21 @@ through a reset.
 ## VIAs
 
 D-VIA ($FFD0): PA = environment register, PB = zero page register (also RTC
-register select), CA1 = slot IRQ (OR of slots, active low), CA2 = port A's
+register select), CA1 = `!(IRQ1_n & IRQ2_n & IRQ3_n & IRQ4_n) & !H1`
+(repeated edges while any card requests service), CA2 = port A's
 button (SW1/MGNSW, the Silentype margin switch), CB1 = port A's switch (SW3/SCO,
 the Silentype clock), CB2 = Silentype serial data (SER).
 
-E-VIA ($FFE0): PA3..0 = bank register (outputs), PA4/PA5 = slot 1/2 IRQ inputs, PA6 =
+E-VIA ($FFE0): PA3..0 = bank register (outputs), PA4/PA5 = slot 4/3 IRQ inputs, PA6 =
 solid Apple key input / native-mode output (when configured as an output and driven
 low the VIAs disappear from $FFD0-$FFEF — Apple II emulation mode), PA7 = IRQ line
 status (0 = interrupt pending). PB5..0 = 6-bit sound DAC, PB6 = composite blanking
 input, PB7 = slot NMI input. CA1 = RTC interrupt, CA2 = keyboard data-ready strobe,
 CB1 = CB2 = VBL.
+
+The [slot interface](SLOTS.md) connects all four private I/O and ROM apertures,
+the shared expansion-ROM bus, IRQs and reset-masked NMIs. Cards own their ROM
+selection latches; native cards release on C02x, Apple II cards on CFFF.
 
 ## Keyboard
 

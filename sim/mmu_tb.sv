@@ -8,7 +8,7 @@ module mmu_tb;
 	wire [18:0] ram_byte_addr;
 	wire [17:0] ram_word_addr;
 	wire ram_lane, ram_select, ram_read, ram_write_allowed, rom_read, io_select;
-	wire via_d_select, via_e_select;
+	wire via_d_select, via_e_select, slot_rom_select;
 	wire    [12:0] rom_addr;
 	integer        checks = 0;
 

@@ -119,9 +119,10 @@ Existing partial implementations are noted where they provide a starting point.
       Disk II compatibility and shared disk-phase/fine-scroll behavior are
       retained. [Validation](docs/FOUR_DRIVES.md).
 
-- [ ] **Reusable slots 1–4.** Implement slot I/O, ROM selection/deselection and
-      per-slot interrupt routing. Add coprocessor bus ownership when the first
-      card needs it.
+- [x] **Reusable slots 1–4.** Slot I/O, per-card ROM selection/deselection and
+      individual IRQ/NMI routing are available through a reusable card bus.
+      [Interface and tests](docs/SLOTS.md). Coprocessor bus ownership will be
+      added when the first card needs it.
 
 - [ ] **Peripheral wait-state and boundary timing.** Implement and test delayed
       IOSTOP/ready behavior, and complete extended-horizontal-state timing beyond

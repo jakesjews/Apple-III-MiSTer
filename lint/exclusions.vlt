@@ -90,7 +90,7 @@ lint_off -rule UNUSEDSIGNAL -file "Apple-III.sv" -match "*Bits of signal are not
 lint_off -rule UNUSEDSIGNAL -file "Apple-III.sv" -match "*Bits of signal are not used: 'scanline_level'[2]*"
 
 // Unused CPU debug/VIA bits and observation outputs. The I/O soft switches
-// remain modeled; expansion routing and double-sided media are not implemented.
+// remain modeled; the Silentype connector and double-sided media are not implemented.
 lint_off -rule UNUSEDSIGNAL -file "rtl/apple3_core.sv" -match "*Bits of signal are not used: 'cpu_regs'[47:40]*"
 lint_off -rule UNUSEDSIGNAL -file "rtl/apple3_core.sv" -match "*Bits of signal are not used: 'e_pb_o'[7:6]*"
 lint_off -rule UNUSEDSIGNAL -file "rtl/apple3_core.sv" -match "*Bits of signal are not used: 'e_pb_ddr'[7:6]*"

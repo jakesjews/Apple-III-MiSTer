@@ -44,3 +44,4 @@ iverilog -g2012 -Wall -s acia_baud_tb -o sim/obj_dir/acia_baud_tb \
 vvp sim/obj_dir/acia_baud_tb
 
 ./sim/disk/run.sh
+./sim/slots/run.sh

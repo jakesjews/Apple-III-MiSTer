@@ -27,9 +27,12 @@ behaviour to its source.
   keys' second contacts and the optional /// Plus DELETE key, the MM58167
   clock, the joysticks' 9708 A/D converter, buttons and latching switches,
   speaker, bell and six-bit audio.
-- The Disk /// controller's P6 sequencer, internal drive and one external drive,
+- The Disk /// controller's P6 sequencer, internal drive and three external drives,
   including native WOZ bitstreams and quarter-track mapping.
 - A 6551 ACIA on the serial port, connected to MiSTer's HPS UART.
+- [Reusable slots 1–4](SLOTS.md): private I/O and ROM pages, per-card expansion
+  ROM latches, individual IRQ status, VIA interrupt delivery and masked NMIs.
+  The shipped configuration has no cards installed.
 
 ## Boot ROM details
 
