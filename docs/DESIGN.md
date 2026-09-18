@@ -33,11 +33,13 @@ Sources (abbreviations used below):
   912 clocks per line: the 65th state is stretched to 16 clocks). 262 lines per
   frame. [SRM ch.5, EDW]
 * Q3, the disk-state-machine clock, repeats every seven master clocks and is
-  high for four. HPE holds the Q shift register for the final two clocks of the
-  extended horizontal state. This preserves 130 Q3 cycles for 65 CPU cycles
-  while reproducing the physical once-per-line stretch. [SRM ch.5, schematics]
-* Each state has two 2 MHz slots. Slot B (second half) is always available to the
-  CPU (`C1M` high). Slot A is the video/refresh slot; the CPU may use it in 2 MHz
+  high for four. HPE holds the parallel-loaded Q register for two extra clocks
+  at the start of the extended state's A slot. Its CPU completions move from
+  dots 6/13 to 8/15 and the VIA falling edge from 7 to 9; Q3 has a six-clock
+  high pulse followed by its normal three-clock low pulse. There are still
+  130 Q3 cycles and 65 VIA cycles per line. [SRM ch.5, schematic sheet 10]
+* Each state has two 2 MHz slots. Slot B (second half) is available to the
+  CPU (`C1M` high), subject to peripheral waits. Slot A is the video/refresh slot; the CPU may use it in 2 MHz
   mode when nothing else needs RAM, or when the CPU access does not select RAM.
   RAM selection remains asserted for write-protected RAM writes. From the timing
   PROM [PROM 342-0046]:
@@ -52,17 +54,20 @@ Sources (abbreviations used below):
   `SEL2M` = env bit 7 clear (2 MHz selected), `FSPACE` = access to the VIAs, the
   ACIA or the clock chip ($C07x), `RAMEN` = the access goes to RAM, `DSPLY` = the
   video or the DRAM refresh needs this slot, `IOSTOPD` = FSPACE sampled at the C1M
-  rising edge (a wait state for VIA/ACIA/RTC accesses).
-  The current RTL uses one B-slot for peripheral accesses; the motherboard's
-  delayed IOSTOP/ready waveform still needs separate implementation/verification.
+  rising edge. An FSPACE address following an A completion misses that sampling
+  boundary, suppressing the first B completion. `CS6522` from the same PROM
+  prevents an early VIA access. The slow-mode bypass excludes the RTC.
+  Card RDY reaches T65 independently of its clock enables: reads wait, writes
+  finish and NMI detection continues. See [peripheral timing](PERIPHERAL_TIMING.md).
 * `DSPLY` = (screen enabled AND active display window) OR refresh. Refresh states
   come from the scan-decode ROM [PROM 342-0030], `RRFSH`: 4 consecutive states per
   half-line where `H[4:2] == V[2:0]` during display, with additions and exclusions
   during VBL. The hardware vertical counter runs 256..511 then 250..255.
-  All 16,768 ordinary states per frame match the binary scan PROM for `RRFSH`,
+  All 17,030 states per frame match the binary scan PROM for `RRFSH`,
   the character-write window `RTCWRT` and the display window `-RBL`
-  (`/H5·/VBL + /H3·/H4·/VBL`, H = 0-39). The extended HPE state's decode is
-  outside that comparison, and the RTL does not apply it there.
+  (`/H5·/VBL + /H3·/H4·/VBL`, H = 0-39). On entry to HPE, G10 retains the
+  preceding H=63 decode: refresh can remain asserted, while RTCWRT is low
+  and the HPE blanking gate prevents display.
 * SOS switches to 1 MHz (env bit 7) around disk transfers. [SOS]
 * Machine reset does not stop the timing chain, so video sync continues through
   a reset. The counters start from zero when the FPGA is configured.

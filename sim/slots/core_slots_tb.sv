@@ -31,6 +31,7 @@ module core_slots_tb;
 		.slot_data_oe,
 		.slot_irq_n,
 		.slot_nmi_n,
+		.slot_ready         (4'b1111),
 		.slot_addr,
 		.slot_data_out,
 		.slot_cpu_read,

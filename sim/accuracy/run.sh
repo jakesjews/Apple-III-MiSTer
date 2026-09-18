@@ -21,6 +21,7 @@ run_case() {
 }
 run_case video_accuracy rtl/apple3_video.sv
 run_case video_fetch rtl/apple3_timing.sv rtl/apple3_ram.sv rtl/apple3_video.sv
+run_case peripheral_timing rtl/apple3_timing.sv
 run_case keyboard_accuracy rtl/apple3_keyboard.sv
 run_case disk_protection rtl/apple3_disk.sv rtl/disk/apple3_p6.sv rtl/disk/apple3_disk_sequencer.sv
 run_case rtc_accuracy rtl/apple3_rtc.sv
@@ -31,16 +32,18 @@ proms=${APPLE3_PROM_DIR:-research/docs/bitsavers/A3PROMs}
 if [[ -f "$proms/341-0030.BIN" && -f "$proms/342-0046-A.BIN" ]]; then
   xxd -p -c 1 "$proms/341-0030.BIN" > "$out/scan.hex"
   xxd -p -c 1 "$proms/342-0046-A.BIN" > "$out/timing.hex"
-  if iverilog -g2012 -s timing_prom_tb -o "$out/timing_prom" \
-      rtl/apple3_timing.sv sim/accuracy/timing_prom_tb.sv > "$out/timing_prom.compile.log" 2>&1; then
-    if ! vvp "$out/timing_prom" "+SCAN=$out/scan.hex" "+TIMING=$out/timing.hex" > "$out/timing_prom.log" 2>&1; then
+  for name in timing_prom timing_control_prom; do
+    if iverilog -g2012 -s "${name}_tb" -o "$out/$name" \
+        rtl/apple3_timing.sv "sim/accuracy/${name}_tb.sv" > "$out/$name.compile.log" 2>&1; then
+      if ! vvp "$out/$name" "+SCAN=$out/scan.hex" "+TIMING=$out/timing.hex" > "$out/$name.log" 2>&1; then
+        failures=$((failures+1))
+      fi
+      cat "$out/$name.log"
+    else
+      cat "$out/$name.compile.log"
       failures=$((failures+1))
     fi
-    cat "$out/timing_prom.log"
-  else
-    cat "$out/timing_prom.compile.log"
-    failures=$((failures+1))
-  fi
+  done
 else
   echo "SKIP timing PROM comparison: set APPLE3_PROM_DIR to unpacked A3PROMs"
 fi

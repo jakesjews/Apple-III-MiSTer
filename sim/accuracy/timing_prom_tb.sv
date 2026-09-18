@@ -3,6 +3,8 @@
 // Input pin assignments: bitsavers A3PROMs decoded headers; SRM ch.5 counters.
 module timing_prom_tb;
 	logic clk_14m = 0, slow_mode = 0, screen_enable = 1, peripheral_cycle = 0;
+	logic rtc_cycle = 0;
+	wire  peripheral_select;
 	logic ram_cycle = 0;
 	always #5 clk_14m = ~clk_14m;
 	wire cpu_enable, via_rising, via_falling, q3, pixel_enable, hblank, vblank;
@@ -14,7 +16,7 @@ module timing_prom_tb;
 	apple3_timing dut (.*);
 	logic [7:0] scan_prom[0:2047], timing_prom[0:1023];
 	string scan_path, timing_path;
-	integer vertical, scan_address, checked = 0, mismatches = 0;
+	integer vertical, horizontal, scan_address, checked = 0, mismatches = 0;
 	integer blank_mismatches = 0, visible_mismatches = 0, failures = 0;
 	integer missing_refresh = 0, extra_refresh = 0;
 	integer phase_checks = 0, phase_errors = 0, phase_address, ram_reserved;
@@ -35,17 +37,18 @@ module timing_prom_tb;
 			$display("FAIL: fast non-RAM display A-slot: PROM PHASEN=%b, RTL CPU enable=%b", timing_prom['h0da][1],
 					 cpu_enable);
 		end
-		// Start a complete frame. Do not interpret the special HPE state: compare
-		// only the 64 ordinary horizontal states whose H pin mapping is direct.
+		// G10 retains H=63's decode on entry to HPE. Unlike a new ordinary
+		// state, the extended A completion is at dot 8.
 		wait (v_count == 0 && h_count == 0);
 		wait (h_count == 1);
 		for (integer clocks = 0; clocks < 912 * 262; clocks++) begin
 			@(negedge clk_14m);
-			if (state_dot == 6 && h_state < 64) begin
+			if (state_dot == ((h_state == 64) ? 8 : 6)) begin
 				// Vertical hardware counter runs 256..511 then 250..255.
 				vertical = (v_count < 256) ? v_count + 256 : v_count - 6;
+				horizontal = (h_state == 64) ? 63 : int'(h_state);
 				scan_address=(((vertical>>5)&1)&((vertical>>8)&1)) |
-		  ((h_state>>2)<<1) | ((vertical&7)<<5) |
+		  ((horizontal>>2)<<1) | ((vertical&7)<<5) |
 		  (((vertical>>3)&1)<<8) | (((vertical>>4)&1)<<9) |
 		  ((v_count>=192)<<10);
 				checked++;
@@ -123,7 +126,7 @@ module timing_prom_tb;
 		$display("refresh PROM: %0d/%0d mismatches (visible=%0d, blank=%0d)", mismatches, checked, visible_mismatches,
 				 blank_mismatches);
 		$display("refresh differences: missing=%0d extra=%0d", missing_refresh, extra_refresh);
-		if (checked != 64 * 262) $fatal(1, "incomplete frame comparison: %0d", checked);
+		if (checked != 65 * 262) $fatal(1, "incomplete frame comparison: %0d", checked);
 		$display("A-slot PHASEN: %0d/%0d mismatches", phase_errors, phase_checks);
 		$display("character write PROM: %0d/%0d mismatches (%0d windows)", character_mismatches, checked,
 				 character_windows);

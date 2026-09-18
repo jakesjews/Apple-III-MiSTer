@@ -9,6 +9,7 @@ entity t65_wrapper is
 		clk     : in  std_logic;
 		reset_n : in  std_logic;
 		enable  : in  std_logic;
+		ready   : in  std_logic;
 		irq_n   : in  std_logic;
 		nmi_n   : in  std_logic;
 		data_in : in  std_logic_vector(7 downto 0);
@@ -26,7 +27,7 @@ begin
 	cpu: entity work.T65
 		port map (
 			Mode => "00", BCD_en => '1', Res_n => reset_n,
-			Enable => enable, Clk => clk, Rdy => '1', Abort_n => '1',
+			Enable => enable, Clk => clk, Rdy => ready, Abort_n => '1',
 			IRQ_n => irq_n, NMI_n => nmi_n, SO_n => '1',
 			R_W_n => read_nwrite, Sync => sync,
 			EF => open, MF => open, XF => open, ML_n => open,

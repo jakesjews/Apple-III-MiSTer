@@ -16,18 +16,20 @@ module video_fetch_tb;
 	wire [6:0] h_state;
 	wire [3:0] state_dot;
 	apple3_timing timing (
-		.clk_14m(clk),
+		.clk_14m          (clk),
 		.slow_mode,
 		.screen_enable,
 		.peripheral_cycle,
+		.rtc_cycle        (1'b0),
+		.peripheral_select(),
 		.ram_cycle,
 		.cpu_enable,
 		.via_rising,
 		.via_falling,
 		.q3,
 		.pixel_enable,
-		.hblank (scan_hblank),
-		.vblank (scan_vblank),
+		.hblank           (scan_hblank),
+		.vblank           (scan_vblank),
 		.display_slot,
 		.refresh_slot,
 		.character_slot,

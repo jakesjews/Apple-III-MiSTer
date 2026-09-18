@@ -16,4 +16,5 @@ Reset and Control-Reset events to verify card reset and retained state.
 
 These synthetic cards are test fixtures, not installed peripherals. See
 [the card interface](../../docs/SLOTS.md) for the connection contract and
-hardware sources. Coprocessor ownership and RDY waits are separate work.
+hardware sources. Coprocessor ownership remains separate work. Card RDY waits
+are covered by [the CPU timing diagnostic](../timing/run.sh).

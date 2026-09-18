@@ -2,19 +2,21 @@
 //
 // The counters follow the Level 2 Service Reference Manual and the decoded
 // 342-0030/342-0046 PROMs: 64 ordinary 14-dot states plus one 16-dot state,
-// 262 lines, and one guaranteed CPU slot per state.  In fast mode the CPU may
-// also use the video/refresh slot when neither consumer needs RAM.
+// 262 lines, and a CPU slot in each state, subject to peripheral waits. In fast
+// mode the CPU may also use the video/refresh slot when neither needs RAM.
 
 module apple3_timing (
 	input logic clk_14m,
 	input logic slow_mode,
 	input logic screen_enable,
 	input logic peripheral_cycle,
+	input logic rtc_cycle,
 	input logic ram_cycle,
 
 	output logic       cpu_enable,
 	output logic       via_rising,
 	output logic       via_falling,
+	output logic       peripheral_select,
 	output logic       q3,
 	output logic       pixel_enable,
 	output logic       hblank,
@@ -30,7 +32,9 @@ module apple3_timing (
 );
 
 	logic       fast_a_slot;
-	logic [2:0] q_divider;
+	logic       iostop = 1'b0;
+	logic       extended_state;
+	logic [3:0] phase_dot;
 	logic [4:0] scan_vertical;
 
 	// RRFSH output of Apple's 342-0030 scan-decode PROM. Kept as logic so
@@ -76,8 +80,8 @@ module apple3_timing (
 	// The scanner is reading the text-page screen holes at those states, so
 	// each window transfers four of a hole's eight bytes into the character
 	// RAM.  Every one of them is also a refresh state, which is what keeps
-	// the processor from taking the slot the transfer needs.  Like RRFSH, the
-	// decode is not applied to the extended state.
+	// the processor from taking the slot the transfer needs. The decode held
+	// from H=63 during the extended state has RTCWRT low.
 	function automatic logic scan_character(input logic [3:0] horizontal, input logic [4:0] vertical, input logic VBL);
 		logic H2, H3, H4, H5, VA, VB, VC, V0, V1;
 		begin
@@ -95,20 +99,37 @@ module apple3_timing (
 		// The scan PROM adds refresh slots and suppresses others during VBL.
 		// Its vertical counter wraps from 511 to 250 for the final six lines.
 		scan_vertical  = (v_count < 9'd256) ? v_count[4:0] : v_count[4:0] - 5'd6;
-		refresh_slot   = (h_state < 7'd64) && scan_refresh(h_state[5:2], scan_vertical, vblank);
+		// G10 retains the preceding scan decode as the counters enter HPE.
+		// HPE forces blanking, but does not disable the refresh latch.
+		refresh_slot   = scan_refresh((h_state == 7'd64) ? 4'hf : h_state[5:2], scan_vertical, vblank);
 		character_slot = (h_state < 7'd64) && scan_character(h_state[5:2], scan_vertical, vblank);
 		display_slot   = screen_enable && !vblank && (h_state < 7'd40);
 		fast_a_slot    = !slow_mode && !peripheral_cycle && (!ram_cycle || (!display_slot && !refresh_slot));
 
-		// Dot 6 is the optional A slot and dot 13 is the guaranteed B slot.
-		// Peripheral accesses run on the 1 MHz slot and are never doubled.
-		cpu_enable  = (state_dot == 4'd13) || ((state_dot == 4'd6) && fast_a_slot);
-		via_rising  = (state_dot == 4'd0);
-		via_falling = (state_dot == 4'd7);
+		// HPE holds the parallel-loaded Q register at the START of the A
+		// slot. Every subsequent edge moves two dots, including the CPU and
+		// PRE1M edges; padding the end of the state gives the wrong bus timing.
+		extended_state = (h_state == 7'd64);
+		phase_dot      = extended_state ? ((state_dot < 4'd2) ? 4'd0 : state_dot - 4'd2) : state_dot;
+
+		// 342-0046 PHASEN. D11 samples FSPACE at C1M rising. A new address
+		// following an A-slot completion misses that edge (SRM 5.12), so the
+		// first B completion is suppressed. The next complete PRE1M cycle
+		// services the device. Slow VIA/ACIA cycles bypass this delay; C07x
+		// still requires IOSTOP even in slow mode.
+		cpu_enable = ((phase_dot == 4'd13) &&
+			(iostop || !peripheral_cycle || (slow_mode && !rtc_cycle))) ||
+			((phase_dot == 4'd6) && fast_a_slot);
+		// CS6522 from the same PROM. In particular the first PRE1M falling
+		// edge of a late fast access must not write/acknowledge the VIA.
+		peripheral_select = (iostop && peripheral_cycle) ||
+			((phase_dot < 4'd7) && peripheral_cycle) || ((phase_dot >= 4'd7) && iostop);
+		via_rising = (state_dot == 4'd0);
+		via_falling = (phase_dot == 4'd7);
 		// Q3 is the asymmetric 2.045 MHz disk/state-machine clock: four
 		// master clocks high and three low.  HPE freezes the shift register
-		// for the final two clocks of each 912-clock scan line.
-		q3          = (q_divider < 3'd4);
+		// for two extra clocks at the start of the extended A slot.
+		q3 = (phase_dot < 4'd4) || ((phase_dot >= 4'd7) && (phase_dot < 4'd11));
 	end
 
 	// The timing chain starts at zero when the FPGA is configured and is not
@@ -119,15 +140,13 @@ module apple3_timing (
 		v_count   = 9'd0;
 		h_state   = 7'd0;
 		state_dot = 4'd0;
-		q_divider = 3'd0;
 	end
 
 	always_ff @(posedge clk_14m) begin
 		frame_tick <= 1'b0;
-		if (!((h_state == 7'd64) && (state_dot >= 4'd14))) begin
-			if (q_divider == 3'd6) q_divider <= 3'd0;
-			else q_divider <= q_divider + 1'b1;
-		end
+		// Sample before T65 presents its next A-slot address. On the board
+		// that address has not settled at D11's C1M edge yet (SRM 5.12).
+		if (phase_dot == 4'd6) iostop <= peripheral_cycle;
 
 		if (((h_state == 7'd64) && (state_dot == 4'd15)) || ((h_state != 7'd64) && (state_dot == 4'd13))) begin
 			state_dot <= 4'd0;

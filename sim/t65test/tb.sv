@@ -17,6 +17,7 @@ module tb (
 		.clk        (clk),
 		.reset_n    (rst_n),
 		.enable     (1'b1),
+		.ready      (1'b1),
 		.irq_n      (1'b1),
 		.nmi_n      (1'b1),
 		.data_in    (DI),

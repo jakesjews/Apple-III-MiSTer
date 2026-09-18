@@ -26,6 +26,7 @@ module apple3_core #(
 	input  logic [ 3:0]      slot_data_oe,
 	input  logic [ 3:0]      slot_irq_n,
 	input  logic [ 3:0]      slot_nmi_n,
+	input  logic [ 3:0]      slot_ready,
 	output logic [15:0]      slot_addr,
 	output logic [ 7:0]      slot_data_out,
 	output logic             slot_cpu_read,
@@ -99,8 +100,9 @@ module apple3_core #(
 	logic [ 7:0] cpu_dout;
 	logic [63:0] cpu_regs;
 	logic        cpu_enable;
-	logic        cpu_irq_n;
-	logic        cpu_nmi_n;
+	logic cpu_clock_enable, cpu_ready;
+	logic cpu_irq_n;
+	logic cpu_nmi_n;
 
 	logic [7:0] d_pa_o, d_pa_ddr, d_pa_i;
 	logic [7:0] d_pb_o, d_pb_ddr, d_pb_i;
@@ -138,7 +140,7 @@ module apple3_core #(
 	logic [3:0] state_dot;
 	logic frame_tick, timing_hblank, timing_vblank;
 	logic display_slot, refresh_slot, character_slot, pixel_enable;
-	logic peripheral_cycle;
+	logic peripheral_cycle, rtc_cycle, peripheral_select;
 
 	logic [7:0] key_code;
 	logic key_strobe, any_key_down, shift_key, control_key, alpha_lock;
@@ -189,9 +191,13 @@ module apple3_core #(
 	assign slot_data_out = cpu_dout;
 	assign slot_cpu_read = cpu_rwn;
 	assign slot_cycle = cpu_enable && !slot_reset;
+	assign cpu_ready = (&slot_ready) || machine_reset;
+	// RDY holds NMOS 6502 reads; writes, including both RMW writes, finish.
+	// Keep clock enables reaching T65 while waiting so it can capture NMI.
+	assign cpu_enable = cpu_clock_enable && (cpu_ready || !cpu_rwn);
+	assign rtc_cycle = io_select && (cpu_addr[7:4] == 4'h7);
 	assign peripheral_cycle = via_d_select || via_e_select ||
-		(io_select && ((cpu_addr[7:4] == 4'h7) ||
-					   ((cpu_addr[7:0] >= 8'hf0) && (cpu_addr[7:0] <= 8'hf3))));
+		rtc_cycle || (io_select && (cpu_addr[7:0] >= 8'hf0) && (cpu_addr[7:0] <= 8'hf3));
 
 	assign ram_cpu_data = ram_lane ? ram_q[15:8] : ram_q[7:0];
 	assign sister_data  = ram_lane ? ram_q[7:0] : ram_q[15:8];
@@ -210,12 +216,13 @@ module apple3_core #(
 		audio     = $signed({1'b0, dac_value, 9'b000000000}) - 16'sd16384 + (speaker ? 16'sd4096 : 16'sd0);
 	end
 
-	assign phase_zero = (state_dot >= 4'd7);
+	assign phase_zero = (state_dot >= ((h_state == 7'd64) ? 4'd9 : 4'd7));
 
 	t65_wrapper cpu (
 		.clk        (clk_14m),
 		.reset_n    (!machine_reset),
-		.enable     (cpu_enable),
+		.enable     (cpu_clock_enable),
+		.ready      (cpu_ready),
 		.irq_n      (cpu_irq_n),
 		.nmi_n      (cpu_nmi_n),
 		.data_in    (cpu_din),
@@ -231,10 +238,12 @@ module apple3_core #(
 		.slow_mode    (environment[7]),
 		.screen_enable(environment[5]),
 		.peripheral_cycle,
+		.rtc_cycle,
 		.ram_cycle    (ram_select),
-		.cpu_enable,
+		.cpu_enable   (cpu_clock_enable),
 		.via_rising,
 		.via_falling,
+		.peripheral_select,
 		.q3           (clk_2m),
 		.pixel_enable,
 		.hblank       (timing_hblank),
@@ -335,8 +344,8 @@ module apple3_core #(
 		.falling (via_falling),
 		.reset   (machine_reset),
 		.addr    (cpu_addr[3:0]),
-		.wen     (via_d_select && !cpu_rwn),
-		.ren     (via_d_select && cpu_rwn),
+		.wen     (via_d_select && peripheral_select && !cpu_rwn),
+		.ren     (via_d_select && peripheral_select && cpu_rwn),
 		.data_in (cpu_dout),
 		.data_out(via_d_data),
 		.phi2_ref(),
@@ -365,8 +374,8 @@ module apple3_core #(
 		.falling (via_falling),
 		.reset   (machine_reset),
 		.addr    (cpu_addr[3:0]),
-		.wen     (via_e_select && !cpu_rwn),
-		.ren     (via_e_select && cpu_rwn),
+		.wen     (via_e_select && peripheral_select && !cpu_rwn),
+		.ren     (via_e_select && peripheral_select && cpu_rwn),
 		.data_in (cpu_dout),
 		.data_out(via_e_data),
 		.phi2_ref(),

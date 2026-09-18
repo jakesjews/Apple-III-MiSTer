@@ -24,6 +24,7 @@ All card logic uses `clk_14m`. Vector index 0 is physical slot 1, through index
 | `slot_data_in[n][7:0]` | Card's read data returned to the core |
 | `slot_data_oe[n]` | Card is driving read data for this address |
 | `slot_irq_n[n]`, `slot_nmi_n[n]` | Card's active-low interrupt requests; tie unused inputs high |
+| `slot_ready[n]` | 0 holds CPU reads through the shared RDY line; tie unused inputs high |
 | `slot_bus_conflict` | More than one card is driving the shared read bus |
 
 Selects and read data remain valid between CPU enables. Qualify register
@@ -31,6 +32,14 @@ writes, read acknowledgements and ROM-latch changes with `slot_cycle`; do not
 repeat them on every master clock. A combinational ROM works directly; a
 registered ROM must provide its byte before the completion edge. A 6502
 read/modify/write instruction has two separate write cycles, both delivered.
+
+A card needing more time must drive `slot_ready[n]` low from its address/select
+or registered request state before the CPU completion edge. Keep it low until
+the read data is valid, then release it. Do not derive RDY from `slot_cycle`:
+that signal is suppressed during a read wait. The 6502 ignores RDY on writes,
+so a card must accept writes when `slot_cycle` is asserted. Video, VIA timers
+and interrupt detection continue while the CPU waits. A card must release RDY
+on reset. [Timing details and tests](PERIPHERAL_TIMING.md).
 
 | Slot | Device select | I/O/ROM select | IRQ status, low = pending |
 |---|---|---|---|
@@ -95,9 +104,8 @@ keyboard NMI. Power-on/core reset and native Control-Reset reset every card.
 Reset alone in native mode leaves the cards intact and requests NMI. In Apple
 II mode Reset alone also asserts the card reset line, per sheet 9.
 
-Coprocessor/DMA ownership, memory inhibit and card-requested RDY waits are not
-part of this interface yet. Ownership will be added with the first card that
-needs it; peripheral wait-state timing remains its separate README item.
+Coprocessor/DMA ownership and memory inhibit are not part of this interface
+yet. Ownership will be added with the first card that needs it.
 
 ## Sources
 

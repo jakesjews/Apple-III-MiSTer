@@ -14,6 +14,7 @@ module cpu_functional_tb;
 		.clk        (clk),
 		.reset_n    (reset_n),
 		.enable     (1'b1),
+		.ready      (1'b1),
 		.irq_n      (1'b1),
 		.nmi_n      (1'b1),
 		.data_in    (ram[address]),

@@ -4,6 +4,9 @@ __Warning: This core is vibe coded.__
 
 Experimental Apple /// core with 256 KiB RAM, four floppy drives, joystick,
 audio and serial support. Tested with SOS 1.3 System Utilities and Business BASIC.
+The latest build also passes Confidence Program 1.1's RAM test and
+Seek/Read/Write/Align checks on all four drives.
+[Hardware validation](docs/PERIPHERAL_TIMING.md#confidence-program-11-on-2026-09-18).
 
 ## Setup
 
@@ -124,9 +127,11 @@ Existing partial implementations are noted where they provide a starting point.
       [Interface and tests](docs/SLOTS.md). Coprocessor bus ownership will be
       added when the first card needs it.
 
-- [ ] **Peripheral wait-state and boundary timing.** Implement and test delayed
-      IOSTOP/ready behavior, and complete extended-horizontal-state timing beyond
-      the existing scan counters and Q3 hold.
+- [x] **Peripheral wait-state and boundary timing.** Delayed IOSTOP and VIA
+      selects align onboard peripheral accesses; card RDY holds reads while
+      allowing writes and interrupt detection. The extended horizontal state
+      stretches CPU, VIA and Q3 timing together and retains refresh arbitration.
+      [Timing model and tests](docs/PERIPHERAL_TIMING.md).
 
 - [ ] **One virtual block-storage interface.** Add a virtual card modeled on the
       Apple II core's hard-disk card, with its own ProDOS block-mode firmware,

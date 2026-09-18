@@ -22,7 +22,9 @@ nonzero if any group failed.
 | `disk_protection_tb.sv` | Each drive writes its track cache when writable and emits no writes when protected; the other drive is untouched. |
 | `rtc_accuracy_tb.sv` | GO rounds seconds correctly; the 10 Hz interrupt includes whole-second boundaries; rollover status behaves as the data sheet describes; machine reset preserves the clock. |
 | `joystick_accuracy_tb.sv` | The 9708 A/D converter against its data sheet and the schematic's component values: ground, reference, battery and unconnected channels; each axis on its channel, linear at 8 VIA ticks per step; short charges reading low; the input sampled only during the charge; slow settling to a lower input; RAMP STOP through the charge and the ramp; a reset leaving the capacitor charged; the four switches and their VIA lines; the Silentype outputs on port A. |
-| `timing_prom_tb.sv` | 134,144 A-slot PHASEN comparisons across RAM selection, screen enable and CPU speed, and 16,768 states each of refresh reservation, character-generator write window (RTCWRT) and display window (-RBL), compared with the original timing and scan PROM contents. |
+| `timing_prom_tb.sv` | 136,240 A-slot PHASEN comparisons across RAM selection, screen enable and CPU speed, and all 17,030 states of refresh reservation, character-generator write window (RTCWRT) and display window (-RBL), including the HPE state's retained decode. |
+| `timing_control_prom_tb.sv` | PHASEN and CS6522 against the original timing PROM for 96 combinations of previous/current FSPACE, RTC selection, slot, speed, RAM and screen enable. |
+| `peripheral_timing_tb.sv` | Peripheral entry from A and B in all 65 horizontal states; exactly one select per access; CPU, VIA and Q3 edges throughout a complete frame, including the stretched A slot. |
 
 The video accuracy test seeds the pixel pipeline and character memory and runs
 no clock, so it checks decoding and addressing independently of fetch timing;
@@ -41,11 +43,12 @@ Expected SHA-256 hashes:
 342-0046-A.BIN 8ca7d9e76627a1f4cf9f5592b378c4e51bdaa4ea4ad3d4c66ca6c000ae93af1b
 ```
 
-The scan comparison covers all 64 ordinary horizontal states across 262 lines.
-It excludes the extended HPE state, where direct counter-pin interpretation is
-insufficient; the RTL applies neither the refresh nor the character-write decode
-there. The PHASEN sweep covers ordinary non-peripheral A-slots; it does not
-establish the delayed IOSTOP/ready waveform.
+The scan comparison covers all 65 horizontal states across 262 lines. For HPE
+it uses the H=63 decode retained by G10, and checks the A completion at dot 8.
+The control-PROM test independently checks delayed and current FSPACE values.
+The arrival test verifies complete bus intervals. `sim/timing/run.sh`, also
+included in the unit runner, checks the real T65, VIAs, ACIA and RTC with a
+self-checking program and four independently driven card RDY inputs.
 
 ## 6502 functional test
 

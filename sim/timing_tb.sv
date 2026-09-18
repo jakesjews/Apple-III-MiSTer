@@ -3,6 +3,8 @@
 module timing_tb;
 	logic clk_14m = 0;
 	logic slow_mode = 0, screen_enable = 0, peripheral_cycle = 0;
+	logic rtc_cycle = 0;
+	wire  peripheral_select;
 	logic ram_cycle = 1;
 	wire cpu_enable, via_rising, via_falling, q3, pixel_enable;
 	wire hblank, vblank, display_slot, refresh_slot, character_slot, frame_tick;

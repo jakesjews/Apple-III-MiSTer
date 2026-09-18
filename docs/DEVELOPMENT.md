@@ -14,7 +14,8 @@ behaviour to its source.
 ## Hardware implemented
 
 - 6502 with the Apple /// 1 MHz and 2 MHz cycle scheduling and video and
-  refresh contention.
+  refresh contention, delayed onboard peripheral accesses, card RDY and
+  [extended-state timing](PERIPHERAL_TIMING.md).
 - The stock 256 KiB memory board with the bank register, relocatable zero page
   and stack, sister-byte reads, write protection and extended addressing.
 - 4 KiB boot ROM in either motherboard bank, or an 8 KiB dual-bank image.
@@ -179,6 +180,7 @@ whole machine. The boot tests read the ROM from `APPLE3_ROM`.
 bash sim/accuracy/run.sh                # documentation-derived checks
 ./sim/disk/run.sh                       # P6, WOZ parser/writeback, drive timing
 ./sim/joystick/run.sh                   # joystick read methods at every position
+./sim/timing/run.sh                     # CPU peripheral waits, RDY, RMW and NMI
 APPLE3_ROM=apple3.rom ./sim/run_core_boot.sh 30000000
 APPLE3_ROM=apple3.rom ./sim/run_core_boot.sh 400000000 system.woz --woz
 APPLE3_ROM=apple3.rom ./sim/run_core_boot.sh 1400000000 sysutils.woz --keytest

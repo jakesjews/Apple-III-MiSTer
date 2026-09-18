@@ -134,6 +134,7 @@ module core_tb #(
 		.slot_data_oe       (4'b0000),
 		.slot_irq_n         (4'b1111),
 		.slot_nmi_n         (4'b1111),
+		.slot_ready         (4'b1111),
 		.slot_addr          (),
 		.slot_data_out      (),
 		.slot_cpu_read      (),
