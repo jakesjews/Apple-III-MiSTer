@@ -83,9 +83,6 @@ multiple of 512 bytes, written in place. Images beyond 32 MiB show their first
 65,535 blocks. A read-only file, a write-protected 2MG, a DC42 container or a
 zip member mounts read-only.
 
-Most Apple III software circulates as DSK, and most of the original-disk WOZ
-dumps on Asimov are WOZ1, so they mount read-only. To turn a DSK or NIB into a
-writable WOZ2, see the [conversion instructions](docs/MAIN_STORAGE.md#tests-and-conversion-utility).
 A2R flux captures are not supported; export them to WOZ with the free
 [Applesauce client](https://applesaucefdc.com/software/), which runs on macOS
 without the Applesauce hardware.
