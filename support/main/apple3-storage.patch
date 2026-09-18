@@ -1,9 +1,9 @@
 diff --git a/support/a2/APPLE_III_STORAGE.md b/support/a2/APPLE_III_STORAGE.md
 new file mode 100644
-index 0000000..8f424ae
+index 0000000..a5499ca
 --- /dev/null
 +++ b/support/a2/APPLE_III_STORAGE.md
-@@ -0,0 +1,59 @@
+@@ -0,0 +1,61 @@
 +# Apple III profile
 +
 +`iigs_disk` also handles WOZ-capable Apple-III cores (S0 advertises WOZ).
@@ -11,9 +11,11 @@ index 0000000..8f424ae
 +
 +- S0: internal Disk III (.D1).
 +- S1: first external Disk III (.D2).
-+- S2/S3: raw block-device payloads, read-only. The current FPGA exposes only
-+  S0/S1; these assignments reserve the block-device interface without treating
-+  S1 as the Apple //e hard-disk slot.
++- S2: second external Disk III (.D3).
++- S3: third external Disk III (.D4).
++- S4/S5: raw block-device payloads, read-only, reserved for a future FPGA
++  block interface. Earlier two-drive WOZ cores use S0/S1 unchanged; the
++  four-drive FPGA requires this Main layout instead of the old S2/S3 block slots.
 +
 +The shared 5.25 encoder uses proper 10-bit sync words. Apple III's profile adds
 +its standard synchronized track rotation to sector sources, and writes 51,424
@@ -64,7 +66,7 @@ index 0000000..8f424ae
 +regressions. The Apple III core's simulator exercises the real-time disk path
 +using the same converted WOZ output.
 diff --git a/support/a2/iigs_disk.cpp b/support/a2/iigs_disk.cpp
-index a1830f0..889acdc 100644
+index a1830f0..90dfd08 100644
 --- a/support/a2/iigs_disk.cpp
 +++ b/support/a2/iigs_disk.cpp
 @@ -1,4 +1,4 @@
@@ -110,10 +112,10 @@ index a1830f0..889acdc 100644
  		if (index == 0 || index == 2) return 2;   // 5.25" drive 1 / drive 2
  		return -1;
 +	case 3:
-+		// Apple ///: internal D1 and external D2. Block devices have their
-+		// own assignments; never apply the //e S1-hard-disk convention here.
-+		if (index == 0 || index == 1) return 2;
-+		if (index == 2 || index == 3) return 0;
++		// Apple ///: internal D1 and three external Disk III drives.
++		// Reserve separate assignments for the future block interface.
++		if (index >= 0 && index < 4) return 2;
++		if (index == 4 || index == 5) return 0;
 +		return -1;
  	default:
  		return -1;
@@ -467,7 +469,7 @@ index a1830f0..889acdc 100644
 +	for (int i = 0; i < size; i += 512) converted_write(disk, f, lba + i / 512, chunk + i);
 +}
 diff --git a/support/a2/iigs_disk.h b/support/a2/iigs_disk.h
-index d50fc80..247668d 100644
+index d50fc80..0a4679f 100644
 --- a/support/a2/iigs_disk.h
 +++ b/support/a2/iigs_disk.h
 @@ -1,12 +1,15 @@
@@ -482,7 +484,7 @@ index d50fc80..247668d 100644
  //
  // Slots: IIgs (Apple-IIgs.sv, VDNUM=4): S0,S1 = hard disk; S2 = 3.5"; S3 = 5.25".
  //        //e  (Apple-II.sv,   VDNUM=3): S0,S2 = 5.25" drives; S1 = hard disk.
-+//        ///  (Apple-III.sv): S0,S1 = Disk III; S2,S3 = block devices.
++//        ///  (Apple-III.sv): S0-S3 = Disk III; S4,S5 = block devices.
 +// Apple /// persists native WOZ2 track writes, and for converted sector images
 +// writes back only checksum-verified sectors; NIB and block payloads are read-only.
  
@@ -1094,10 +1096,10 @@ index 53ab2a1..a2b0f96 100644
  }
 diff --git a/tests/apple3/README.md b/tests/apple3/README.md
 new file mode 100644
-index 0000000..6d32908
+index 0000000..593137b
 --- /dev/null
 +++ b/tests/apple3/README.md
-@@ -0,0 +1,25 @@
+@@ -0,0 +1,29 @@
 +# Apple III storage regression tests
 +
 +Run `tests/apple3/run.sh` from Main. The test links the production shared
@@ -1105,7 +1107,7 @@ index 0000000..6d32908
 +It runs on macOS and Linux and does not require ROMs, copyrighted disk images,
 +or a MiSTer. Fixtures are generated from deterministic byte patterns.
 +
-+Coverage includes Apple III S0/S1 floppies and S2/S3 read-only block assignments;
++Coverage includes Apple III S0-S3 floppies and S4/S5 read-only block assignments;
 +DOS/ProDOS/2MG conversion equivalence; 10-bit sync and bitstream GCR round-trips;
 +NIB address-field preservation; the ProDOS-order sector map pinned to block
 +positions; SOS protection-key reconstruction only for an encrypted SOS.INTERP; full 16 KiB transfers; partial final reads;
@@ -1123,6 +1125,10 @@ index 0000000..6d32908
 +```
 +
 +This utility uses Main's converter. There is no independent test-only encoder.
++
++Four-drive coverage mounts S0-S3 together with distinct data and permissions,
++checks shared transfer tags, writes D4 while D3 is protected, replaces D2 and
++remounts the saved D4 image. Future read-only block assignments are S4/S5.
 diff --git a/tests/apple3/compat.h b/tests/apple3/compat.h
 new file mode 100644
 index 0000000..d44d3d3
@@ -1152,10 +1158,10 @@ index 0000000..921147a
 +"$out/storage_test" "$@"
 diff --git a/tests/apple3/storage_test.cpp b/tests/apple3/storage_test.cpp
 new file mode 100644
-index 0000000..f4d3255
+index 0000000..8a23b01
 --- /dev/null
 +++ b/tests/apple3/storage_test.cpp
-@@ -0,0 +1,240 @@
+@@ -0,0 +1,274 @@
 +#include "../../file_io.h"
 +#include "../../user_io.h"
 +#include "../../support/a2/iigs_fmt.h"
@@ -1353,16 +1359,50 @@ index 0000000..f4d3255
 +  auto bad=w; bad.back()^=1; source(f,bad); assert(iigs_mount(0,"broken.woz",&f,&writable)==IIGS_REJECT);
 +  bad=w; put32(bad.data()+8,0); put32(bad.data()+16,0x7fffffff); source(f,bad); assert(iigs_mount(0,"broken.woz",&f,&writable)==IIGS_REJECT);
 +  puts("PASS native WOZ: full bursts, CRC, partial EOF, metadata guards, persistence and write protection");
++  // Four simultaneous Disk III mounts use separate buffers, permissions and
++  // write-back state, including when another drive is replaced or ejected.
++  fileTYPE drives[4];
++  std::vector<uint8_t> originals[4], mounted[4];
++  for (int drive=0; drive<4; ++drive) {
++    originals[drive]=dsk;
++    for (auto &b:originals[drive]) b ^= uint8_t(drive*57);
++    can_write=drive!=2;
++    mounted[drive]=mount_serve(drives[drive],originals[drive],"disk.dsk",drive,can_write);
++  }
++  can_write=true;
++  for (int drive=0; drive<4; ++drive) {
++    assert(serve(drive,drives[drive])==mounted[drive]);
++    save_track(drive,drives[drive],mounted[drive],1,1,[]{});
++    assert(bytes(drives[drive])==originals[drive]);
++  }
++  // Writable D4 persists a whole new track; protected D3 rejects the same data.
++  auto new_d4=originals[3];
++  std::copy(originals[3].begin()+4096,originals[3].begin()+8192,new_d4.begin());
++  std::vector<uint8_t> encoded(512*1024);
++  encoded.resize(a2_dsk_to_woz525_ex(encoded.data(),encoded.size(),new_d4.data(),1,254));
++  save_track(3,drives[3],encoded,0,0,[]{});
++  assert(bytes(drives[3])==new_d4);
++  save_track(2,drives[2],encoded,0,0,[]{});
++  assert(bytes(drives[2])==originals[2]);
++  iigs_unmount(1);
++  auto replacement=mount_serve(drives[1],w,"replacement.woz",1,true);
++  assert(replacement==w);
++  assert(serve(2,drives[2])==mounted[2]);
++  assert(bytes(drives[3])==new_d4);
++  assert(serve(0,drives[0])==mounted[0]);
++  // Remount the saved source: data must survive losing the in-memory cache.
++  assert(mount_serve(drives[3],new_d4,"disk.dsk",3,true)==encoded);
++  puts("PASS four simultaneous Disk III mounts: independent buffers, protection, writes and remounts");
 +  // Block slots use the header's payload length, not trailing comments/tags.
 +  std::vector<uint8_t> block(2048); for(unsigned i=0;i<block.size();i++) block[i]=i;
 +  std::vector<uint8_t> bm(128+block.size()+99); twomg_build(bm.data(),bm.size(),block.data(),block.size(),1);
 +  memmove(bm.data()+128,bm.data()+64,block.size()); put32(bm.data()+24,128);
-+  assert(mount_serve(f,bm,"block.2mg",2)==block); assert(f.size==2048);
-+  from_fpga.assign(512,0xa5); auto before=bytes(f); iigs_write(2,&f,0,0x300); assert(bytes(f)==before);
-+  assert(mount_serve(f,block,"block.hdv",3)==block);
-+  source(f,w); assert(iigs_mount(2,"floppy.woz",&f,&writable)==IIGS_REJECT);
++  assert(mount_serve(f,bm,"block.2mg",4)==block); assert(f.size==2048);
++  from_fpga.assign(512,0xa5); auto before=bytes(f); iigs_write(4,&f,0,0x500); assert(bytes(f)==before);
++  assert(mount_serve(f,block,"block.hdv",5)==block);
++  source(f,w); assert(iigs_mount(4,"floppy.woz",&f,&writable)==IIGS_REJECT);
 +  source(f,block); assert(iigs_mount(0,"hard.hdv",&f,&writable)==IIGS_REJECT);
-+  source(f,bm); bm[12]=3; source(f,bm); assert(iigs_mount(2,"bad.2mg",&f,&writable)==IIGS_REJECT);
++  source(f,bm); bm[12]=3; source(f,bm); assert(iigs_mount(4,"bad.2mg",&f,&writable)==IIGS_REJECT);
 +  core="Apple-II"; source(f,dsk); assert(iigs_mount(2,"disk.dsk",&f,&writable)==IIGS_HANDLED && writable);
 +  auto a2w=serve(2,f); assert(a2_woz525_to_dsk(back.data(),a2w.data(),a2w.size()) && back==dsk);
 +  source(f,block); assert(iigs_mount(1,"disk.po",&f,&writable)==IIGS_PASSTHRU);
@@ -1390,7 +1430,7 @@ index 0000000..f4d3255
 +  source(f,flux); assert(iigs_mount(0,"flux.woz",&f,&writable)==IIGS_HANDLED && !writable); assert(serve(0,f)==flux);
 +  // A recognizable malformed container must not fall back to a raw block image.
 +  auto overflow=bm; put32(overflow.data()+12,1); put32(overflow.data()+20,0xffffffff); put32(overflow.data()+28,0);
-+  source(f,overflow); assert(iigs_mount(2,"bad.2mg",&f,&writable)==IIGS_REJECT);
++  source(f,overflow); assert(iigs_mount(4,"bad.2mg",&f,&writable)==IIGS_REJECT);
 +  puts("PASS II/IIgs write-back and codec compatibility, native archive/permission/FLUX protection");
 +  core="Apple-III"; modern=false; assert(!iigs_is_core()); modern=true; assert(iigs_is_core());
 +  for(int i=0;i<16;i++) iigs_unmount(i);

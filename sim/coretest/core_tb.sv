@@ -24,17 +24,17 @@ module core_tb #(
 	output logic [15:0] probe_word,
 	input  logic [ 9:0] probe_font_addr,
 	output logic [ 7:0] probe_font,
-	input  logic [ 1:0] image_change,
+	input  logic [ 3:0] image_change,
 	input  logic [63:0] image_size,
 	input  logic        image_readonly,
-	output wire  [31:0] sd_lba         [2],
-	output wire  [ 5:0] sd_blk_cnt     [2],
-	output wire  [ 1:0] sd_rd,
+	output wire  [31:0] sd_lba         [4],
+	output wire  [ 5:0] sd_blk_cnt     [4],
+	output wire  [ 3:0] sd_rd,
 	sd_wr,
-	input  logic [ 1:0] sd_ack,
+	input  logic [ 3:0] sd_ack,
 	input  logic [13:0] sd_buff_addr,
 	input  logic [ 7:0] sd_buff_dout,
-	output wire  [ 7:0] sd_buff_din    [2],
+	output wire  [ 7:0] sd_buff_din    [4],
 	input  logic        sd_buff_wr,
 	output logic [15:0] cpu_addr,
 	output logic [15:0] pc,
@@ -68,10 +68,10 @@ module core_tb #(
 	wire [7:0] video_r, video_g, video_b;
 	wire hblank, hsync, vsync;
 	wire signed [15:0] audio;
-	wire [1:0] disk_active, disk_motors, disk_ready, disk_wp, disk_flux;
+	wire [3:0] disk_active, disk_motors, disk_ready, disk_wp, disk_flux;
 	wire [3:0] disk_phases;
 	wire disk_write_mode, disk_write_bit, disk_write_strobe;
-	for (genvar i = 0; i < 2; i++) begin : drives
+	for (genvar i = 0; i < 4; i++) begin : drives
 		apple3_woz_drive woz (
 			.clk,
 			.reset,
@@ -150,8 +150,7 @@ module core_tb #(
 		.video_vsync        (vsync),
 		.audio,
 		.disk_activity,
-		.disk1_active       (disk_active[0]),
-		.disk2_active       (disk_active[1]),
+		.disk_active,
 		.debug_pc           (pc),
 		.debug_cpu_addr     (cpu_addr),
 		.debug_environment  (environment),

@@ -38,11 +38,16 @@ module emu (
 		"-;",
 		"S0,WOZDSKDO PO NIB2MG,Mount Drive 1;",
 		"S1,WOZDSKDO PO NIB2MG,Mount Drive 2;",
+		"S2,WOZDSKDO PO NIB2MG,Mount Drive 3;",
+		"S3,WOZDSKDO PO NIB2MG,Mount Drive 4;",
 		"F2,ROMBIN,Load Boot ROM;",
 		"-;",
 		"O2,Aspect ratio,4:3,16:9;",
 		"O35,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
-		"O67,Write Protect,None,Drive 1,Drive 2,Both;",
+		"O6,Write Protect 1,Off,On;",
+		"O7,Write Protect 2,Off,On;",
+		"OB,Write Protect 3,Off,On;",
+		"OC,Write Protect 4,Off,On;",
 		"O8,Keyboard,Apple ///,/// Plus;",
 		"O9,Serial CTS,Always ready,Host RTS;",
 		"OA,Joystick 1 on,Port B,Port A;",
@@ -84,17 +89,17 @@ module emu (
 	wire [ 10:0] ps2_key;
 	wire [ 64:0] host_rtc;
 
-	wire [ 1:0] img_mounted;
+	wire [ 3:0] img_mounted;
 	wire        img_readonly;
 	wire [63:0] img_size;
-	wire [31:0] sd_lba       [2];
-	wire [ 5:0] sd_blk_cnt   [2];
-	wire [ 1:0] sd_rd;
-	wire [ 1:0] sd_wr;
-	wire [ 1:0] sd_ack;
+	wire [31:0] sd_lba       [4];
+	wire [ 5:0] sd_blk_cnt   [4];
+	wire [ 3:0] sd_rd;
+	wire [ 3:0] sd_wr;
+	wire [ 3:0] sd_ack;
 	wire [13:0] sd_buff_addr;
 	wire [ 7:0] sd_buff_dout;
-	wire [ 7:0] sd_buff_din  [2];
+	wire [ 7:0] sd_buff_din  [4];
 	wire        sd_buff_wr;
 
 	wire        ioctl_download;
@@ -110,7 +115,7 @@ module emu (
 	// the framework menu moves to the MiSTer convention of Win+F12.
 	hps_io #(
 		.CONF_STR (CONF_STR),
-		.VDNUM    (2),
+		.VDNUM    (4),
 		.F12KEYMOD(1)
 	) hps_io_inst (
 		.clk_sys           (clk_14m),
@@ -210,11 +215,12 @@ module emu (
 	wire core_reset = RESET || status[0] || hps_buttons[1] || !pll_locked || rom_download || !rom_loaded;
 
 	// Main is the only image-format backend: all floppy mounts arrive as
-	// native or converted WOZ. Converted sources are always write-protected.
-	wire [1:0] disk_ready, disk_write_protect, disk_flux, disk_motors;
+	// native or converted WOZ, with independent mount and write-protect state.
+	wire [3:0] disk_ready, disk_write_protect, disk_flux, disk_motors, disk_active;
+	wire [3:0] disk_protect = {status[12:11], status[7:6]};
 	wire [3:0] disk_phases;
 	wire disk_write_mode, disk_write_bit, disk_write_strobe;
-	wire disk_activity, disk1_active, disk2_active;
+	wire disk_activity;
 
 	wire        [ 7:0] core_r;
 	wire        [ 7:0] core_g;
@@ -227,7 +233,7 @@ module emu (
 
 	genvar drive;
 	generate
-		for (drive = 0; drive < 2; drive = drive + 1) begin : woz_drives
+		for (drive = 0; drive < 4; drive = drive + 1) begin : woz_drives
 			apple3_woz_drive woz (
 				.clk           (clk_14m),
 				.reset         (core_reset),
@@ -235,8 +241,8 @@ module emu (
 				.enabled       (1'b1),
 				.image_size    (img_size),
 				.image_readonly(img_readonly),
-				.protect       (status[6+drive]),
-				.active        (drive == 0 ? disk1_active : disk2_active),
+				.protect       (disk_protect[drive]),
+				.active        (disk_active[drive]),
 				.motor_on      (disk_motors[drive]),
 				.phases        (disk_phases),
 				.write_mode    (disk_write_mode),
@@ -303,8 +309,7 @@ module emu (
 		.video_vsync       (core_vsync),
 		.audio             (core_audio),
 		.disk_activity     (disk_activity),
-		.disk1_active      (disk1_active),
-		.disk2_active      (disk2_active)
+		.disk_active
 	);
 
 	// Register the video outputs in the machine-clock domain.  video_mixer

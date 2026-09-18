@@ -35,3 +35,6 @@ for version in 1 2 2-large; do
 done
 build drive rtl/disk/woz/flux_drive.v rtl/disk/woz/woz_cell525.sv
 "$out/drive/Vdrive_tb"
+build four_drive rtl/disk/apple3_woz_drive.sv rtl/disk/woz/flux_drive.v rtl/disk/woz/woz_cell525.sv rtl/disk/woz/woz_bram.sv rtl/disk/woz/woz_floppy_controller.sv
+"$out/four_drive/Vfour_drive_tb" > "$out/four_drive.log" 2>&1 || { cat "$out/four_drive.log"; exit 1; }
+rg '^PASS' "$out/four_drive.log"

@@ -7,6 +7,9 @@ Run `./sim/disk/run.sh` from the repository root. This checks:
 - WOZ1/WOZ2 parsing with immediate SD acknowledgement and sparse data strobes,
   exact cached track bytes, quarter-track mapping, empty tracks and reset.
   A 40-block allocation checks splitting across the 16 KiB host-buffer limit.
+- Four WOZ drives on one host bus: overlapping mount requests, distinct cached
+  contents, independent phase/write gates, file and OSD write protection,
+  ejection/replacement and reset with media retained.
 - Rejection of invalid signatures, out-of-range TMAP indices and oversized tracks.
 - WOZ2 writeback: exact changed byte, preserved surrounding disk contents including the unchanged header. Main tests cover CRC invalidation. WOZ1 reports write protection.
 - WOZ timing metadata, standard 4 us cells over two complete revolutions, cache validity, protected
@@ -21,7 +24,8 @@ The broader register and drive-selection tests remain in `sim/run_tests.sh` and
 ./sim/run_core_boot.sh 800000000 system.woz --drive2=blank.woz --sd-delay=71590
 ```
 
-`--warm-reset` also tests a reset after both mounts while host I/O is active.
+`--drive3=blank.woz` and `--drive4=blank.woz` mount the other external drives.
+`--warm-reset` also tests a reset after all mounts while host I/O is active.
 `--to-menu` continues past the interpreter milestone to the System Utilities
 menu and fails on a SOS system failure. `--mount-delay=<s>` and
 `--reset-delay=<s>` reproduce an MGL start, where the machine powers on with no

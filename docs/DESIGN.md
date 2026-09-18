@@ -194,6 +194,10 @@ Sources (abbreviations used below):
 
 Drive selection [SOS disk3 driver]: .D1 = $C0EA (internal I/O select) + $C0D4;
 .D2 = $C0EB + A1=0,A0=1; .D3 = $C0EB + A1=1,A0=0; .D4 = $C0EB + A1=1,A0=1.
+All four have independent media, track caches, write protection and disk-change
+latches. External address 00 selects no drive. Apple II mode uses D1/D2 and
+disables D3/D4, ignoring the native motor-select latches. The four shared phase
+bits still feed the video fine-scroll offset, even with all drives deselected.
 
 The disk conditioner executes logic equivalent to all 256 entries of the
 341-0028 P6 PROM on Q3*. Its 74LS323 model clears, holds, shifts or loads as

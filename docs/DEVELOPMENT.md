@@ -184,7 +184,8 @@ APPLE3_ROM=apple3.rom ./sim/run_core_boot.sh 1400000000 sysutils.woz --keytest
 `run_core_boot.sh` runs the stock ROM on the integrated machine and checks that
 reset, memory sizing, reconfiguration and the disk bootstrap happen. With a WOZ
 image it follows SOS to the interpreter through the real track cache.
-`--drive2=blank.woz` mounts a second drive on the shared transfer bus;
+`--drive2=blank.woz`, `--drive3=blank.woz` and `--drive4=blank.woz`
+mount the three external drives on the shared transfer bus;
 `--sd-delay=71590` adds 5 ms of host latency per request. `--to-menu` keeps
 going past the interpreter until the System Utilities menu is on screen, and
 fails on any SOS system failure; use it for boot regressions, because a bad

@@ -32,8 +32,9 @@ struct DiskReadEntry {
 int main(int argc, char **argv) {
 	Verilated::commandArgs(argc, argv);
 	Vcore_tb top;
-	std::vector<uint8_t> disk_image[2];
-	std::string drive2;
+	std::vector<uint8_t> disk_image[4];
+	std::string drive_path[4];
+	if (argc > 2) drive_path[0] = argv[2];
 	const bool disk_test = argc > 2;
 	bool key_test = false, warm_reset = false, to_menu = false, disk_trace = false, trace_all = false;
 	bool plus_keymap = false;  // Apple /// Plus keyboard: separate DELETE key
@@ -60,7 +61,8 @@ int main(int argc, char **argv) {
 	for (int i = 3; i < argc; ++i) {
 		std::string option = argv[i];
 		if (option.rfind("--sd-delay=", 0) == 0) sd_delay = std::strtoul(argv[i] + 11, nullptr, 10);
-		if (option.rfind("--drive2=", 0) == 0) drive2 = option.substr(9);
+		for (unsigned drive = 1; drive < 4; ++drive)
+			if (option.rfind("--drive" + std::to_string(drive + 1) + "=", 0) == 0) drive_path[drive] = option.substr(9);
 		if (option == "--keytest") key_test = true;
 		if (option == "--plus-keymap") plus_keymap = true;
 		if (option == "--check-font") check_font = to_menu = true;
@@ -83,9 +85,9 @@ int main(int argc, char **argv) {
 		if (option.rfind("--mount-delay=", 0) == 0) mount_delay = std::strtod(argv[i] + 14, nullptr);
 		if (option.rfind("--reset-delay=", 0) == 0) reset_delay = std::strtod(argv[i] + 14, nullptr);
 	}
-	for (unsigned drive = 0; drive < 2; ++drive) {
-		if (!disk_test || (drive == 1 && drive2.empty())) continue;
-		const char *path = drive ? drive2.c_str() : argv[2];
+	for (unsigned drive = 0; drive < 4; ++drive) {
+		if (!disk_test || drive_path[drive].empty()) continue;
+		const char *path = drive_path[drive].c_str();
 		std::ifstream input(path, std::ios::binary);
 		disk_image[drive].assign(std::istreambuf_iterator<char>(input), {});
 		if (disk_image[drive].size() < 12 || std::string(disk_image[drive].begin(),disk_image[drive].begin()+3) != "WOZ") {
@@ -128,7 +130,7 @@ int main(int argc, char **argv) {
 			if (sd_wait_cycles++ < sd_delay + (top.sd_wr ? sd_write_delay : 0)) return;
 			sd_wait_cycles = 0;
 			unsigned requests = top.sd_rd | top.sd_wr;
-			sd_disk = (requests & 1) ? 0 : 1;
+			for (sd_disk = 0; !(requests & (1 << sd_disk)); ++sd_disk) {}
 			top.sd_ack = 1 << sd_disk;
 			sd_transfer_read = top.sd_rd & (1 << sd_disk);
 			sd_byte = 0; sd_tick = 0;
@@ -163,7 +165,7 @@ int main(int argc, char **argv) {
 		const unsigned long long steps = static_cast<unsigned long long>(seconds * 2 * 14318181.0);
 		for (unsigned long long i = 0; i < steps; ++i) { prepare_storage(); top.clk ^= 1; top.eval(); finish_storage(); }
 	};
-	for (unsigned drive = 0; drive < 2; ++drive) {
+	for (unsigned drive = 0; drive < 4; ++drive) {
 		if (disk_image[drive].empty()) continue;
 		run_seconds(mount_delay);
 		top.image_size = disk_image[drive].size(); top.image_change = 1 << drive;

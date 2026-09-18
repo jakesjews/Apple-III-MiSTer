@@ -15,11 +15,15 @@ controller and Disk III drive logic.
 |---|---|---|
 | S0 | Internal Disk III (.D1) | Native WOZ2 and sector-image writes; NIB read-only |
 | S1 | First external Disk III (.D2) | Native WOZ2 and sector-image writes; NIB read-only |
-| S2, S3 | Block-device assignments | Raw ProDOS-order payload, read-only |
+| S2 | Second external Disk III (.D3) | Native WOZ2 and sector-image writes; NIB read-only |
+| S3 | Third external Disk III (.D4) | Native WOZ2 and sector-image writes; NIB read-only |
+| S4, S5 | Block-device assignments | Raw ProDOS-order payload, read-only |
 
-The present FPGA exposes **S0 and S1 only**. S2/S3 are tested Main assignments
-for a future block-device interface; this change does not add a ProFile or
-expansion-card controller to the Apple III hardware.
+The FPGA exposes **S0 through S3**. S4/S5 are tested Main assignments for a
+future block-device interface; no ProFile or expansion-card controller is
+implemented. Older two-drive WOZ cores can use this Main build on S0/S1;
+four-drive cores require the matching Main build so S2/S3 are treated as
+floppies. The previous Main assigned its unused S2/S3 slots to block devices.
 
 Main recognizes Apple III only when its S0 format list advertises WOZ, preserving
 older cores' raw/NIB interface. The //e and IIgs retain their existing, different
@@ -45,7 +49,7 @@ mount assignments and write policies.
 - NIB is packed directly into a bitstream without a sector decode/re-encode.
   Standard FF sync gaps acquire ten-bit spacing; data/address bytes stay intact.
 - Native WOZ is fully validated (signature, chunks, track bounds, optional CRC)
-  and served from RAM without normalization. Both drives keep separate buffers.
+  and served from RAM without normalization. All four drives keep separate buffers.
 - WOZ1, FLUX, NIB, archived and write-protected images are read-only. Writable
   WOZ2 persists only existing track allocations. It cannot allocate an unmapped
   track or resize tracks.
@@ -99,14 +103,15 @@ main=MiSTer_AppleIII
 
 MiSTer selects that binary only for Apple III and returns to the normal Main
 when loading Menu or another core. Keep the paired Main and RBF together.
-For an MGL, mount files with `type="s"`, indexes 0 and 1. The validation MGL
+For an MGL, mount files with `type="s"`, indexes 0 through 3. The validation MGL
 uses eight-second mount delays and a three-second reset delay (units are seconds).
 
 ## Tests and conversion utility
 
 From the Main checkout, run `tests/apple3/run.sh`. It builds the actual shared
 backend with file/SPI shims under address and undefined-behavior sanitizers.
-Tests cover format/slot matching, DOS/PO/2MG equivalence, bit-packed GCR, NIB
+Tests cover four simultaneous mounts, independent write protection, writes and
+replacement/ejection, format/slot matching, DOS/PO/2MG equivalence, bit-packed GCR, NIB
 preservation, multi-block transfers, read-only enforcement and native WOZ writes
 that survive remount while preserving unrelated bytes. The ProDOS-order map is
 pinned to block positions rather than to the codec's own inverse, and the
@@ -114,8 +119,7 @@ protection key must appear only for an encrypted `SOS.INTERP`. Sector write-back
 save tracks block by block into DSK, PO and 2MG sources and check after every
 block that each sector holds either its old or its new contents; a bad data
 checksum, a lost data prologue and another track's address fields must all leave
-the affected sectors untouched. The tests live in the patch and are not part of
-the Main branch.
+the affected sectors untouched. The tests are included in both the Main branch and the patch.
 
 After that build, use the same backend to save an explicit WOZ2 copy of a sector
 image or a NIB (a native WOZ is served unchanged, so a WOZ1 stays WOZ1):

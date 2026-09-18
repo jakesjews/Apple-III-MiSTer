@@ -2,7 +2,7 @@
 
 __Warning: This core is vibe coded.__
 
-Experimental Apple /// core with 256 KiB RAM, two floppy drives, joystick,
+Experimental Apple /// core with 256 KiB RAM, four floppy drives, joystick,
 audio and serial support. Tested with SOS 1.3 System Utilities and Business BASIC.
 
 ## Setup
@@ -25,11 +25,17 @@ audio and serial support. Tested with SOS 1.3 System Utilities and Business BASI
    | `apple3.rom` | 4096 | `1af7ec42` | `8043f914ebdcdab9838dbb78f8a2ee3867d210d2` |
 
 5. Put disk images in `/media/fat/games/Apple-III/`, launch the core, and use
-   **Mount Drive 1** to select a boot disk. **Mount Drive 2** is the external drive.
+   **Mount Drive 1** to select a boot disk. **Mount Drive 2–4** are the three
+   external Disk III drives. Each drive has its own **Write Protect** option.
+6. If SOS lists only two drives, use System Utilities → **System Configuration
+   Program**: read your `SOS.DRIVER`, set **Change System Parameters → Number of
+   Disk III Drives** to **4**, then **Generate New System** to save `SOS.DRIVER`
+   on your boot disk and reboot. Apple II emulation uses drives 1 and 2.
 
 Use matching core and Main builds. The custom Main is selected only for this
 core. The supplied `MiSTer_AppleIII` binary comes from
-[jakesjews/Main_MiSTer, branch `apple3-disk-storage`](https://github.com/jakesjews/Main_MiSTer/tree/apple3-disk-storage).
+[jakesjews/Main_MiSTer](https://github.com/jakesjews/Main_MiSTer), with the complete
+matching source changes included in this repository's Main patch.
 [Build instructions and Main patch](docs/MAIN_STORAGE.md).
 
 ## Disk images
@@ -108,10 +114,10 @@ Existing partial implementations are noted where they provide a starting point.
       Tests run SOS's timer method and the polling loops of the emulation
       disk, a game and the boot ROM at every position.
 
-- [ ] **All four Disk III drives.** Extend the current internal drive and one
-      external drive to expose all four drives, retaining the Disk II-compatible
-      option. Preserve shared disk-phase/fine-scroll behavior and independent
-      mounting, write protection and media-change state.
+- [x] **All four Disk III drives.** The internal drive and three external
+      drives have independent mounts, write protection and media-change state.
+      Disk II compatibility and shared disk-phase/fine-scroll behavior are
+      retained. [Validation](docs/FOUR_DRIVES.md).
 
 - [ ] **Reusable slots 1–4.** Implement slot I/O, ROM selection/deselection and
       per-slot interrupt routing. Add coprocessor bus ownership when the first
