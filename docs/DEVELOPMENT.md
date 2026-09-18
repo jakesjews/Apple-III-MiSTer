@@ -188,7 +188,9 @@ going past the interpreter until the System Utilities menu is on screen, and
 fails on any SOS system failure; use it for boot regressions, because a bad
 interpreter entry only shows up after the loader hands over. `--check-font`
 does the same and then compares the character generator with the set SOS keeps
-at $0C00, which its console driver loads through the screen holes. `--mount-delay=8
+at $0C00, which its console driver loads through the screen holes;
+`--font-dump=01,02` prints chosen glyphs from the character generator at the
+end of a run. `--mount-delay=8
 --reset-delay=3` reproduces an MGL start: no disk at power-on, a mount after
 each delay, then a reset. `--expect="Apple Writer"` waits for another title's
 screen text instead of the Utilities menu. `--sd-byte-clocks=16` slows the host
@@ -209,7 +211,9 @@ runs the machine with the Apple /// Plus keyboard selected. A `--keys` script
 also prints each strobed encoder byte the guest reads at $C000, which is what
 tells one key code from another when the screen shows the same glyph. See
 [sim/accuracy/README.md](../sim/accuracy/README.md) for the PROM-based timing
-comparison and the 6502 functional test.
+comparison and the 6502 functional test, and
+[sim/hwtest/README.md](../sim/hwtest/README.md) for boot disks that check the
+character-download windows and display fetch timing by eye on a MiSTer.
 
 See [Main storage integration](MAIN_STORAGE.md) for the companion Main patch and
 [Disk III validation](DISK_FIDELITY_2026-09-16.md) for the tested hardware build.

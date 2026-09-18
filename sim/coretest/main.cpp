@@ -40,6 +40,8 @@ int main(int argc, char **argv) {
 	// --check-font: after --to-menu, the character generator must hold the set
 	// the console driver keeps at $0C00, loaded through the screen holes.
 	bool check_font = false;
+	// --font-dump=01,02: print these codes' character generator rows at the end.
+	std::vector<unsigned> font_dump;
 	// --keys=down,down,enter,wait5,enter typed once --keys-after=TEXT is on screen.
 	std::string keys, keys_after;
 	bool writable = false;  // mount images read-write, as Main does for writable sources
@@ -62,6 +64,11 @@ int main(int argc, char **argv) {
 		if (option == "--keytest") key_test = true;
 		if (option == "--plus-keymap") plus_keymap = true;
 		if (option == "--check-font") check_font = to_menu = true;
+		if (option.rfind("--font-dump=", 0) == 0)
+			for (std::size_t at = 12; at < option.size(); at = option.find(',', at) + 1) {
+				font_dump.push_back(std::strtoul(option.c_str() + at, nullptr, 16) & 0x7f);
+				if (option.find(',', at) == std::string::npos) break;
+			}
 		if (option == "--warm-reset") warm_reset = true;
 		if (option == "--to-menu") to_menu = true;
 		if (option == "--disk-trace") disk_trace = true;
@@ -483,6 +490,16 @@ int main(int argc, char **argv) {
 		std::printf("to-menu: menu=%u sysfail=%u code=%02X\n", reached_menu,
 		            reached_system_failure, system_failure_code);
 		dump_screen("final");
+	}
+	for (unsigned code : font_dump) {
+		std::printf("glyph $%02X:\n", code);
+		for (unsigned row = 0; row < 8; ++row) {
+			top.probe_font_addr = code * 8 + row;
+			top.eval();
+			std::printf("  row %u  %02X  ", row, top.probe_font);
+			for (unsigned dot = 0; dot < 7; ++dot) std::putchar((top.probe_font >> dot) & 1 ? '#' : '.');
+			std::putchar('\n');
+		}
 	}
 	unsigned font_mismatches = 0;
 	if (check_font) {
