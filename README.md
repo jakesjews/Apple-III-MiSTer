@@ -53,6 +53,9 @@ Supported: **WOZ, DSK, DO, PO, NIB and 2MG**.
 Most Apple III software circulates as DSK, and most of the original-disk WOZ
 dumps on Asimov are WOZ1, so they mount read-only. To turn a DSK or NIB into a
 writable WOZ2, see the [conversion instructions](docs/MAIN_STORAGE.md#tests-and-conversion-utility).
+A2R flux captures are not supported; export them to WOZ with the free
+[Applesauce client](https://applesaucefdc.com/software/), which runs on macOS
+without the Applesauce hardware.
 
 ## Controls
 
@@ -110,12 +113,22 @@ Existing partial implementations are noted where they provide a starting point.
       option. Preserve shared disk-phase/fine-scroll behavior and independent
       mounting, write protection and media-change state.
 
-- [ ] **One virtual block-storage interface.** Use a single interface in place of
-      separate historical storage-card projects, with compatible SOS driver and
-      firmware support. Main already has read-only block-image assignments, but
-      the core has no block controller. Add block reads/writes, status, capacity
-      and error handling, and a known working SOS configuration. Keep optional
-      direct hard-disk boot separate from stock boot behavior.
+- [ ] **Reusable slots 1–4.** Implement slot I/O, ROM selection/deselection and
+      per-slot interrupt routing. Add coprocessor bus ownership when the first
+      card needs it.
+
+- [ ] **One virtual block-storage interface.** Add a virtual card modeled on the
+      Apple II core's hard-disk card, with its own ProDOS block-mode firmware,
+      so SOS uses it through the [Problock3](https://github.com/robjustice/Problock3)
+      driver and needs no new driver. It needs only one fixed slot's I/O and ROM
+      pages, not interrupts, `$C800` ROM or the rest of the slots work. Serve two
+      units from Main's block-image assignments with block reads and writes,
+      status, capacity from the image size and error handling, and add write
+      support to Main. Stock boot is unchanged; the
+      [soshdboot](https://github.com/robjustice/soshdboot) ROM and kernel boot
+      directly from the card. Both are user-supplied, like the ROMs. Test the
+      card in simulation and an SOS boot with Problock3, using MAME's CFFA2 card
+      as a reference.
 
 - [ ] **Video source modes.** Add monochrome-composite and color-composite modes
       alongside the existing RGB output. Include Apple II artifact color, native
@@ -125,10 +138,6 @@ Existing partial implementations are noted where they provide a starting point.
 - [ ] **III Plus model with authentic interlace.** Reuse the existing clock and
       keyboard work. Implement field timing and display-memory behavior rather
       than simply doubling lines.
-
-- [ ] **Reusable slots 1–4.** Implement slot I/O, ROM selection/deselection and
-      per-slot interrupt routing. Add coprocessor bus ownership when the first
-      card needs it.
 
 - [ ] **Peripheral wait-state and boundary timing.** Implement and test delayed
       IOSTOP/ready behavior, and complete extended-horizontal-state timing beyond
