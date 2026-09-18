@@ -38,6 +38,14 @@ module core_tb #(
 	output wire  [ 7:0] sd_buff_din    [6],
 	input  logic        sd_buff_wr,
 	output wire         block_activity,
+	// Rendered picture for --frame-out.
+	output wire  [ 7:0] frame_r,
+	frame_g,
+	frame_b,
+	output wire         frame_hblank,
+	// Drive 1's write-protect terms for --wp-trace: host read-only, WOZ INFO
+	// flag, not ready, flux track, and no track data.
+	output wire  [ 4:0] wp_terms1,
 	output logic [15:0] cpu_addr,
 	output logic [15:0] pc,
 	output logic [ 7:0] environment,
@@ -102,11 +110,20 @@ module core_tb #(
 			.sd_buff_wr
 		);
 	end
-	assign track1      = drives[0].woz.track_id[7:2];
+	assign wp_terms1 = {
+		drives[0].woz.readonly,
+		drives[0].woz.info_wp,
+		!drives[0].woz.ready,
+		drives[0].woz.is_flux,
+		drives[0].woz.bit_count == 0
+	};
+	assign {frame_r, frame_g, frame_b} = {video_r, video_g, video_b};
+	assign frame_hblank = hblank;
+	assign track1 = drives[0].woz.track_id[7:2];
 	assign track1_addr = drives[0].woz.bit_addr[12:0];
-	assign qtrack1     = drives[0].woz.track_id;
+	assign qtrack1 = drives[0].woz.track_id;
 	assign write_mode1 = disk_write_mode && disk_active[0];
-	assign valid1      = drives[0].woz.valid && drives[0].woz.ready && (drives[0].woz.bit_count != 0);
+	assign valid1 = drives[0].woz.valid && drives[0].woz.ready && (drives[0].woz.bit_count != 0);
 
 	// The block card sits in slot 1, as in the MiSTer top.
 	wire [15:0] slot_addr;

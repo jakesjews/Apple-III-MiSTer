@@ -70,3 +70,29 @@ The tested RBF SHA-256 is
 `8e89ed823b8e3e51709e156202086a40e5c128bd98a20db3f8b2cbb1d895e3b5`.
 The paired Main SHA-256 is
 `ac0688117c185bc5d7d67cc5c6cddd781997ac8f12f1f75c987329a8ffd696f2`.
+
+## Revalidation with the block card installed — 2026-09-18
+
+Repeated on the build that adds the [block-storage card](BLOCK_STORAGE.md), so
+six images share Main's transfer bus: four floppies and two hard disks.
+
+- SOS's own `UNITSEL` was read against the controller again: `.D2` is
+  $C0D2 + $C0D1, `.D3` is $C0D3 + $C0D0, `.D4` is $C0D3 + $C0D1, the internal
+  drive selects and deselects at $C0D4/$C0D5, and `EXTDESEL` leaves address 00.
+- `sim/disk/run.sh` and the unit suite pass. SOS boots in simulation with four
+  WOZ images, MGL-style mount and reset timing and 5 ms host delays: the menu
+  appears with no address, read, retry or recalibration errors and all 1,024
+  downloaded font bytes match.
+- On the MiSTer, SOS boots with all four floppies and a 16 MiB hard-disk image
+  mounted together, and **List devices** shows `/III.UTILS.01` on .D1 and the
+  three `/BLANK` volumes on .D2 to .D4. **Copy one volume onto another** from
+  .D1 to .D4 reports success; the destination image pulled from the SD card
+  matches the source in all 560 sectors except the one holding the new volume
+  name, and the other four images are unchanged.
+  ![SOS lists four floppies and the hard-disk driver](disk/2026-09-18-devices-with-hard-disk.png)
+- Confidence Program 1.1 with the hard disk also mounted: **Make Ext. Drive
+  Test Diskette** prepared a test disk, copies went into .D2 to .D4, and
+  **Seek/Read/Write/Align** passes every row on all four drives.
+- After the upstream Main merge a NIB image in .D2 takes a full volume copy:
+  all 35 tracks are stored and the decoded NIB matches the source volume
+  except the renamed header sector.

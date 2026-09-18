@@ -43,6 +43,14 @@ int main(int argc, char **argv) {
 	bool block_boot = false;
 	// --hd1-out=PATH: save hard disk 1 after the run for host-side checks.
 	std::string hd_out;
+	// --wp-trace: print each write-protect sense read ($C0EE) with the drive state.
+	bool wp_trace = false;
+	// --frame-out=PATH: after the run, write the next displayed frame as a
+	// 560x192 PPM, the picture the core produces rather than text memory.
+	std::string frame_out;
+	// --dump-mem=ADDR,LEN (hex): hex dump of system-bank memory ($0000-$1FFF or
+	// $A000-$FFFF) at the end of the run, for disassembling a loaded program.
+	unsigned dump_addr = 0, dump_len = 0;
 	bool key_test = false, warm_reset = false, to_menu = false, disk_trace = false, trace_all = false;
 	bool plus_keymap = false;  // Apple /// Plus keyboard: separate DELETE key
 	// --check-font: after --to-menu, the character generator must hold the set
@@ -74,6 +82,13 @@ int main(int argc, char **argv) {
 		if (option.rfind("--hd2=", 0) == 0) drive_path[5] = option.substr(6);
 		if (option.rfind("--hd1-out=", 0) == 0) hd_out = option.substr(10);
 		if (option == "--block-boot") block_boot = true;
+		if (option == "--wp-trace") wp_trace = true;
+		if (option.rfind("--frame-out=", 0) == 0) frame_out = option.substr(12);
+		if (option.rfind("--dump-mem=", 0) == 0) {
+			dump_addr = std::strtoul(argv[i] + 11, nullptr, 16);
+			const char *comma = std::strchr(argv[i] + 11, ',');
+			dump_len = comma ? std::strtoul(comma + 1, nullptr, 16) : 0x100;
+		}
 		if (option == "--keytest") key_test = true;
 		if (option == "--plus-keymap") plus_keymap = true;
 		if (option == "--check-font") check_font = to_menu = true;
@@ -436,6 +451,17 @@ int main(int argc, char **argv) {
 				if (top.cpu_sync && top.cpu_addr == 0xF214) std::printf("tl %10.2f ms  RDADR ok  trk=%u sec=%u vol=%02X\n", ms,
 				    zero_page_values[0x99], zero_page_values[0x98], zero_page_values[0x9a]);
 			}
+			static double motor_off_at = -1, motor_on_at = -1;
+			if (wp_trace && top.cpu_addr == 0xc0e8) motor_off_at = static_cast<double>(half_cycle / 2) / second;
+			if (wp_trace && top.cpu_addr == 0xc0e9) motor_on_at = static_cast<double>(half_cycle / 2) / second;
+			if (wp_trace && top.cpu_rwn && top.cpu_addr == 0xc0ee) {
+				static unsigned shown = 0;
+				if (shown++ < 200)
+					std::printf("wp sense t=%.3f (motor on at %.3f, off at %.3f) pc=%04X data=%02X drive_active=%u drive1 readonly/info/notready/flux/nodata=%u%u%u%u%u\n",
+					            static_cast<double>(half_cycle / 2) / second, motor_on_at, motor_off_at, top.pc, top.cpu_din, top.disk_activity,
+					            (top.wp_terms1 >> 4) & 1, (top.wp_terms1 >> 3) & 1, (top.wp_terms1 >> 2) & 1,
+					            (top.wp_terms1 >> 1) & 1, top.wp_terms1 & 1);
+			}
 			if (!top.cpu_rwn && top.cpu_addr < 0x100)
 				zero_page_values[top.cpu_addr] = top.cpu_dout;
 			if (top.cpu_rwn && top.cpu_addr == 0xc0ec) {
@@ -537,6 +563,31 @@ int main(int argc, char **argv) {
 				            loaded, expected);
 		}
 		std::printf("font: %u of 1024 character RAM bytes differ from the set at $0C00\n", font_mismatches);
+	}
+	if (!frame_out.empty()) {
+		auto clock = [&]() { prepare_storage(); top.clk ^= 1; top.eval(); finish_storage(); };
+		while (!top.vblank) clock();
+		while (top.vblank) clock();
+		std::vector<uint8_t> frame;
+		unsigned lines = 0, width = 0, line_width = 0;
+		bool in_line = false;
+		while (!top.vblank) {
+			clock();
+			if (!top.clk) continue;
+			if (!top.frame_hblank) {
+				frame.push_back(top.frame_r); frame.push_back(top.frame_g); frame.push_back(top.frame_b);
+				++line_width; in_line = true;
+			} else if (in_line) { in_line = false; ++lines; width = line_width; line_width = 0; }
+		}
+		std::ofstream output(frame_out, std::ios::binary);
+		output << "P6\n" << width << " " << lines << "\n255\n";
+		output.write(reinterpret_cast<const char *>(frame.data()), static_cast<std::streamsize>(width) * lines * 3);
+		std::printf("frame %ux%u saved to %s\n", width, lines, frame_out.c_str());
+	}
+	if (dump_len) {
+		std::printf("memory %04X:", dump_addr);
+		for (unsigned i = 0; i < dump_len; ++i) std::printf(" %02X", read_system_byte((dump_addr + i) & 0x7fff));
+		std::printf("\n");
 	}
 	if (!hd_out.empty() && !disk_image[4].empty()) {
 		std::ofstream output(hd_out, std::ios::binary);

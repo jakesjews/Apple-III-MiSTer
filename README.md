@@ -1,14 +1,23 @@
-# [Apple ///](https://en.wikipedia.org/wiki/Apple_III) for MiSTer
+# Apple /// for MiSTer
 
 __Warning: This core is vibe coded.__
 
-Experimental Apple /// core with 256 KiB RAM, four floppy drives, a hard-disk
-card, joystick, audio and serial support. Tested with SOS 1.3 System Utilities and Business BASIC.
-The latest build also passes Confidence Program 1.1's RAM test and
-Seek/Read/Write/Align checks on all four drives, and boots SOS from a
-hard-disk image on its block-storage card.
+A complete [Apple ///](https://en.wikipedia.org/wiki/Apple_III) core, and a very
+usable one: most software tried so far runs well. That includes SOS 1.3 and its
+System Utilities, Business BASIC, Apple Writer III, Selector /// booted from a
+hard-disk image, and the Apple II emulation disk. Apple's Confidence Program
+passes its memory, interrupt and four-drive disk tests.
+
+- 256 KiB RAM, every native video mode and the Apple II modes
+- Four floppy drives: WOZ, DSK, DO, PO, NIB and 2MG, writable and formattable
+- A hard-disk card with two images, bootable without a floppy
+- Keyboard, joysticks, clock, audio and serial
+
 [Hardware validation](docs/PERIPHERAL_TIMING.md#confidence-program-11-on-2026-09-18) ·
-[Block storage](docs/BLOCK_STORAGE.md#results-2026-09-18).
+[Four drives](docs/FOUR_DRIVES.md) · [Hard disk](docs/BLOCK_STORAGE.md#results-2026-09-18)
+
+For something to play, [apple-iii-games](https://github.com/jakesjews/apple-iii-games)
+has native Apple /// games as ready-to-mount disk images.
 
 ## Setup
 
@@ -52,15 +61,18 @@ matching source changes included in this repository's Main patch.
 
 Supported: **WOZ, DSK, DO, PO, NIB and 2MG**.
 
-- **DSK, DO, PO and 2MG** are writable, and SOS can format them. Saves go
+- **DSK, DO, PO, NIB and 2MG** are writable, and SOS can format the sector
+  images. A NIB track is saved only when all sixteen of its sectors read back
+  cleanly. Saves go
   straight into the image you mounted, so keep a copy of anything you want to
   preserve, or make the file read-only on the SD card to protect it.
 - **WOZ2** is writable. Writes require existing track allocations; formatting
   cannot create missing tracks.
-- WOZ1, flux-encoded WOZ, NIB, NIB-payload 2MG and images inside a zip are
-  **read-only**.
-- Raw `.dsk`/`.do` files use DOS sector order; `.po` uses ProDOS order.
-  For 2MG files, the header determines the order.
+- WOZ1, flux-encoded WOZ and images inside a zip are **read-only**.
+- A raw 140K image's sector order is detected from its SOS/ProDOS directory
+  or DOS 3.3 VTOC, so a ProDOS-order file named `.dsk` works. Without either,
+  `.dsk`/`.do` mean DOS order and `.po` ProDOS order. For 2MG files, the header
+  determines the order.
 - Sector dumps of copy-protected originals (an encrypted `SOS.INTERP`) get the
   SOS protection key and synchronized tracks automatically. Deprotected disks,
   which is most of what circulates, are left without the key so SOS does not

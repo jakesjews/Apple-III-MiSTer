@@ -47,6 +47,26 @@ controller shows as its port's BUTTON while it is held; each press of button 2
 flips SWITCH. GROUND reads 00 and REFERENCE FF: the 2.26 V reference lies above
 the joystick window.
 
+## `wpsense.po`: write-protect sense
+
+Reads the internal drive's write-protect sense (Q6H, then Q7L) in eight drive
+states and shows each byte in hex; bit 7 set means protected. Mount it
+writable. The expected line is `00 00 FF FF 00 00 00 00`:
+
+| Column | Drive state | Reads |
+|---|---|---|
+| A | Motor on, drive selected, after 1.3 s | 00 |
+| B | 0.3 s after motor off, inside the enable timeout | 00 |
+| C | 1.6 s after motor off | FF: no drive is enabled |
+| D | Motor on, internal drive deselected | FF |
+| E, F | Reselected, at once and 0.3 s later | 00 |
+| G, H | Straight after a ROM block read, and 0.3 s later | 00 |
+
+With the disk write-protected every column reads FF. The character at the
+right of the third line changes on each pass. The same readings come from
+`./sim/run_core_boot.sh 700000000 wpsense.woz --writable --keys=wait16,dump
+--keys-after="WP SENSE"`.
+
 ## diskhero: mode changes between display fetches
 
 Paul Hagstrom's [diskhero](https://github.com/paulhagstrom/diskhero) (2022,

@@ -137,3 +137,28 @@ test media; three separate image copies were mounted on .D2, .D3 and .D4.
 
 [RAM test, pass 3](timing/2026-09-18-confidence-memory.png) ·
 [All four disk drives](timing/2026-09-18-confidence-four-drives.png)
+
+## Revalidation with the block card installed — 2026-09-18
+
+Repeated on the build that adds the [block-storage card](BLOCK_STORAGE.md) in
+slot 1, the first configuration in which a card drives the shared RDY line on
+hardware.
+
+- The regression, accuracy, joystick and serial suites pass, including the
+  PROM comparisons (17,030 scan states, 136,240 A-slot decisions, 96 delayed
+  PHASEN/CS6522 combinations) and the T65 RDY diagnostic. T65's own RDY gating
+  matches the wrapper: writes ignore it and NMI is still detected.
+- Confidence Program 1.1's **Machine Configuration**, not covered before, now
+  completes on the MiSTer: the memory map reports 256K, all four drives are
+  online, and every interrupt check passes for both VIAs (clear, set, flags,
+  timer 1, timer 2, shift register) as well as IRQ, the I/O NMI line and the
+  ACIA. The early September core hung on this screen. Its write-protect row
+  follows the OSD: clear for writable images, set for drive 1 alone with
+  **Write Protect 1** on. The memory test again reaches pass 3 without errors.
+  [Configuration screen](timing/2026-09-18-confidence-configuration.png) ·
+  [Four drives with the hard disk mounted](timing/2026-09-18-confidence-four-drives-block-card.png)
+- The write-protect sense was checked separately with the
+  [`wpsense`](../sim/hwtest/README.md) boot disk, which reads it in eight
+  drive states. Hardware and simulation agree on every reading: clear while
+  the drive is enabled, including straight after a ROM block read, and set
+  once the motor-off timeout expires or the drive is deselected.

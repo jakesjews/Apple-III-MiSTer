@@ -3,7 +3,7 @@
 This core requires the companion Main changes in
 [`support/main/apple3-storage.patch`](../support/main/apple3-storage.patch).
 The patch applies to MiSTer-devel/Main_MiSTer commit
-`f80abdc79e76bfc63799d028f2337c4d762b5e50`.
+`5b3ae644069761ef54b92aaa35178771d0d69fec`.
 
 The changes extend `support/a2/iigs_disk.{cpp,h}`, `iigs_fmt.{cpp,h}` and the
 existing `SD_TYPE_IIGS` dispatch in `user_io.cpp`. There is one shared codec;
@@ -13,10 +13,10 @@ controller and Disk III drive logic.
 
 | Main mount | Apple III assignment | Policy |
 |---|---|---|
-| S0 | Internal Disk III (.D1) | Native WOZ2 and sector-image writes; NIB read-only |
-| S1 | First external Disk III (.D2) | Native WOZ2 and sector-image writes; NIB read-only |
-| S2 | Second external Disk III (.D3) | Native WOZ2 and sector-image writes; NIB read-only |
-| S3 | Third external Disk III (.D4) | Native WOZ2 and sector-image writes; NIB read-only |
+| S0 | Internal Disk III (.D1) | Native WOZ2, sector-image and NIB writes |
+| S1 | First external Disk III (.D2) | Native WOZ2, sector-image and NIB writes |
+| S2 | Second external Disk III (.D3) | Native WOZ2, sector-image and NIB writes |
+| S3 | Third external Disk III (.D4) | Native WOZ2, sector-image and NIB writes |
 | S4, S5 | Block card drives 1 and 2 (.PROFILE and .PB2 with Problock3) | Raw ProDOS-order blocks written in place; DC42 and locked 2MG read-only |
 
 The FPGA exposes **S0 through S5**. S4 and S5 feed the
@@ -31,8 +31,11 @@ mount assignments and write policies.
 
 ## Formats and transport
 
-- Raw DSK/DO uses DOS order; PO uses ProDOS order. 2MG's format, data offset,
-  payload length and volume flags take precedence. Invalid headers are rejected.
+- A raw 140K image's sector order is detected from its SOS/ProDOS volume
+  directory (12 or 13 entries per block) or DOS 3.3 VTOC, read in either order;
+  this is upstream's detector. When neither is present, DSK/DO mean DOS order
+  and PO ProDOS order. 2MG's format, data offset, payload length and volume
+  flags take precedence. Invalid headers are rejected.
 - 140K ProDOS-order images use the standard sector map: block 2, the volume
   directory, is DOS sectors 11 and 10. The map inherited from upstream Main
   placed only sectors 0 and 15 correctly, so real `.po` images did not boot.
@@ -50,7 +53,7 @@ mount assignments and write policies.
   Standard FF sync gaps acquire ten-bit spacing; data/address bytes stay intact.
 - Native WOZ is fully validated (signature, chunks, track bounds, optional CRC)
   and served from RAM without normalization. All four drives keep separate buffers.
-- WOZ1, FLUX, NIB, archived and write-protected images are read-only. Writable
+- WOZ1, FLUX, archived and write-protected images are read-only. Writable
   WOZ2 persists only existing track allocations. It cannot allocate an unmapped
   track or resize tracks.
 - DSK, DO, PO and sector-order 2MG images are written in place. The drive saves
@@ -64,6 +67,13 @@ mount assignments and write policies.
   never reaches the file, and Main shows how many were not saved. The
   reconstructed SOS address-field key is not stored, because sector images have
   no address fields.
+- NIB sources (`.nib` and 2MG NIB payloads) are writable through upstream's
+  NIB write-back, adapted for the Apple III. A NIB track cannot be patched a
+  sector at a time, so a saved track is stored only when all sixteen sectors
+  verify. It is re-nibblized to the canonical 6,656-byte layout, keeps each
+  sector's address-field volume byte, which is where SOS's protection key
+  lives, and goes to the file in one write. Main reports a track it could not
+  store.
 - Converted Apple III tracks hold 51,424 cells read at 3.875 us (INFO timing
   31), not the bare 50,304 at 4 us. The drive model consumes one cell per bit
   the machine writes, so a track's cell count is what the machine's own
@@ -89,7 +99,7 @@ its patch:
 
 ```sh
 git clone https://github.com/MiSTer-devel/Main_MiSTer.git ../Main_MiSTer-AppleIII
-git -C ../Main_MiSTer-AppleIII checkout f80abdc79e76bfc63799d028f2337c4d762b5e50
+git -C ../Main_MiSTer-AppleIII checkout 5b3ae644069761ef54b92aaa35178771d0d69fec
 git -C ../Main_MiSTer-AppleIII apply ../Apple-III-MiSTer/support/main/apple3-storage.patch
 ```
 
@@ -114,7 +124,8 @@ From the Main checkout, run `tests/apple3/run.sh`. It builds the actual shared
 backend with file/SPI shims under address and undefined-behavior sanitizers.
 Tests cover four simultaneous mounts, independent write protection, writes and
 replacement/ejection, format/slot matching, DOS/PO/2MG equivalence, bit-packed GCR, NIB
-preservation, multi-block transfers, read-only enforcement, block-image writes
+preservation, NIB write-back of whole verified tracks with their volume bytes,
+multi-block transfers, read-only enforcement, block-image writes
 behind a 2MG header with out-of-range writes ignored and protected images
 untouched, and native WOZ writes that survive remount while preserving
 unrelated bytes. The ProDOS-order map is

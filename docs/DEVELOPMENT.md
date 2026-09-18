@@ -1,8 +1,8 @@
 # Development notes
 
 > The core, tests and documentation were developed with AI assistance under
-> human direction and tested on a DE10-Nano. Broad compatibility is still
-> being established.
+> human direction and tested on a DE10-Nano. Most software tried so far runs
+> well; the README lists what has been checked.
 
 The core is an original hardware model. It was built from Apple's Level 2
 Service Reference Manual and motherboard schematics, decoded logic PROMs,
@@ -195,7 +195,12 @@ image it follows SOS to the interpreter through the real track cache.
 `--drive2=blank.woz`, `--drive3=blank.woz` and `--drive4=blank.woz`
 mount the three external drives on the shared transfer bus, and
 `--hd1=hard.po`/`--hd2=hard.po` mount the block card's images
-([block storage tests](../sim/blockdev/README.md));
+([block storage tests](../sim/blockdev/README.md)). `--frame-out=frame.ppm`
+saves the rendered 560x192 picture at the end of a run, which is what a
+MiSTer screenshot shows; the text dumps decode display memory instead.
+`--wp-trace` logs each write-protect sense read with the motor timing and
+drive 1's protect terms, and `--dump-mem=A000,2000` prints system-bank memory
+for disassembling a loaded program;
 `--sd-delay=71590` adds 5 ms of host latency per request. `--to-menu` keeps
 going past the interpreter until the System Utilities menu is on screen, and
 fails on any SOS system failure; use it for boot regressions, because a bad

@@ -159,3 +159,13 @@ Results on 2026-09-18:
   images mounted and leaves every image unchanged. Card behavior is verified
   by the populated simulations and synthesis fixture; this hardware boot has
   no expansion cards installed.
+
+Revalidated on 2026-09-18 with a card installed. The slot and timing suites
+pass unchanged with the [block-storage card](BLOCK_STORAGE.md) in slot 1, and
+SOS's interrupt receiver was read against the wiring again: it polls slot 1 at
+$C065, slot 2 at $C064 and slots 3 and 4 on E-VIA PA5 and PA4. The MiSTer
+build now boots with that card populated; it uses slot 1's device and ROM
+pages and the shared RDY line, the first hardware exercise of the card bus.
+Confidence Program 1.1's Machine Configuration screen, which checks both VIAs'
+interrupt flags, timers and shift registers, IRQ, the I/O NMI line and the
+ACIA, passes every interrupt check on this build.

@@ -237,8 +237,10 @@ block protocol. It contains no sector-to-GCR converter. Main preserves native
 WOZ bits and metadata, bounds writes to allocated track blocks, and clears the
 CRC before the first write. Writes to a converted DSK, DO, PO or 2MG are decoded
 from the saved track by Main, and only sectors whose address and data fields
-fully verify are stored back into the source file; NIB sources and block images
-are read-only. WOZ1, FLUX and unmapped tracks are protected in the drive as well.
+fully verify are stored back into the source file. A NIB source is stored a
+whole track at a time, only when all sixteen sectors verify, keeping its
+address-field volume bytes; block images are written in place. WOZ1, FLUX and
+unmapped tracks are protected in the drive as well.
 See `docs/MAIN_STORAGE.md` for the mount assignments and companion Main build.
 `sim/disk` tests P6, cache transfers and physical timing; the Main repository's
 `tests/apple3` tests formats, transport, write policy and file persistence.
