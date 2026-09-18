@@ -108,6 +108,8 @@ int main(int argc, char **argv) {
 	top.plus_keymap = plus_keymap;
 	top.probe_addr = 0;
 	top.probe_font_addr = 0;
+	top.joy_a_x = top.joy_a_y = top.joy_b_x = top.joy_b_y = 0x80;
+	top.joy_a_button = top.joy_a_switch = top.joy_b_button = top.joy_b_switch = 0;
 	top.host_rtc[0] = top.host_rtc[1] = top.host_rtc[2] = 0;
 	if (rtc.size() == 13) {
 		auto bcd = [&](std::size_t at) { return unsigned(rtc[at] - '0') << 4 | unsigned(rtc[at + 1] - '0'); };

@@ -37,6 +37,16 @@ window has about nine lines of slack. `./sim/run_core_boot.sh 130000000
 char_window.woz --font-dump=01,02` shows the same glyphs in simulation after
 converting the disk with Main's `storage_test --convert`.
 
+## `joystick.po`: joystick readings
+
+Reads both joystick ports continuously with SOS 1.3's GET_ANALOG timing,
+through the ROM's own ANALOG routine, and shows the readings in hex with the
+buttons and switches (1 = closed). With the sticks at rest X reads 80 and Y 7F;
+the full travel reads 00 to FF, with Y increasing upward. Button 1 of a
+controller shows as its port's BUTTON while it is held; each press of button 2
+flips SWITCH. GROUND reads 00 and REFERENCE FF: the 2.26 V reference lies above
+the joystick window.
+
 ## diskhero: mode changes between display fetches
 
 Paul Hagstrom's [diskhero](https://github.com/paulhagstrom/diskhero) (2022,

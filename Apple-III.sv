@@ -45,9 +45,12 @@ module emu (
 		"O67,Write Protect,None,Drive 1,Drive 2,Both;",
 		"O8,Keyboard,Apple ///,/// Plus;",
 		"O9,Serial CTS,Always ready,Host RTS;",
+		"OA,Joystick 1 on,Port B,Port A;",
 		"-;",
 		"R0,Reset;",
-		"J,Button 1,Button 2;",
+		"J,Button,Switch;",
+		"jn,A,B;",
+		"jp,Y,B;",
 		"V,v",
 		`BUILD_DATE
 	};
@@ -171,13 +174,26 @@ module emu (
 		else controller_axis = analog_value ^ 8'h80;
 	endfunction
 
-	wire [7:0] joy_a_x = controller_axis(joystick_analog_0[7:0], joystick_0[1], joystick_0[0]);
-	wire [7:0] joy_a_y = controller_axis(joystick_analog_0[15:8], joystick_0[3], joystick_0[2]);
-	wire [7:0] joy_b_x = controller_axis(joystick_analog_1[7:0], joystick_1[1], joystick_1[0]);
-	wire [7:0] joy_b_y = controller_axis(joystick_analog_1[15:8], joystick_1[3], joystick_1[2]);
-
-	// Apple /// SW0..SW3 are physically split across the two joystick ports.
-	wire [3:0] joy_buttons = {joystick_0[5], joystick_0[4], joystick_1[4], joystick_1[5]};
+	// An Apple /// joystick has two axes, a pushbutton and a toggle switch.
+	// Controller 1 plugs into port B, which SOS and Business BASIC read as
+	// joystick 0, or into port A with the "Joystick 1 on" option; controller 2
+	// takes the other port.  Y reads higher toward the top, the direction of
+	// the graphics driver's Y axis.  Button 2 flips the switch, which keeps its
+	// position through a reset.
+	wire [7:0] stick_x[2], stick_y[2];
+	assign stick_x[0] = controller_axis(joystick_analog_0[7:0], joystick_0[1], joystick_0[0]);
+	assign stick_y[0] = ~controller_axis(joystick_analog_0[15:8], joystick_0[3], joystick_0[2]);
+	assign stick_x[1] = controller_axis(joystick_analog_1[7:0], joystick_1[1], joystick_1[0]);
+	assign stick_y[1] = ~controller_axis(joystick_analog_1[15:8], joystick_1[3], joystick_1[2]);
+	wire  [1:0] stick_button = {joystick_1[4], joystick_0[4]};
+	wire  [1:0] switch_button = {joystick_1[5], joystick_0[5]};
+	logic [1:0] switch_button_q = 2'b00;
+	logic [1:0] stick_switch = 2'b00;
+	always_ff @(posedge clk_14m) begin
+		switch_button_q <= switch_button;
+		stick_switch    <= stick_switch ^ (switch_button & ~switch_button_q);
+	end
+	wire port_b = status[10];  // the controller in port B
 
 	// The boot ROM is not part of the bitstream.  MiSTer sends
 	// games/Apple-III/boot.rom with index 0 when the core starts, and the OSD
@@ -258,11 +274,14 @@ module emu (
 		.serial_rts_n      (UART_RTS),
 		.serial_dtr_n      (UART_DTR),
 		.host_rtc          (host_rtc),
-		.joy_a_x           (joy_a_x),
-		.joy_a_y           (joy_a_y),
-		.joy_b_x           (joy_b_x),
-		.joy_b_y           (joy_b_y),
-		.joy_buttons       (joy_buttons),
+		.joy_a_x           (stick_x[!port_b]),
+		.joy_a_y           (stick_y[!port_b]),
+		.joy_b_x           (stick_x[port_b]),
+		.joy_b_y           (stick_y[port_b]),
+		.joy_a_button      (stick_button[!port_b]),
+		.joy_a_switch      (stick_switch[!port_b]),
+		.joy_b_button      (stick_button[port_b]),
+		.joy_b_switch      (stick_switch[port_b]),
 		.rom_we            (rom_write),
 		.rom_host_addr     (ioctl_addr[12:0]),
 		.rom_host_data     (ioctl_dout),

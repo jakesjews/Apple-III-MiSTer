@@ -22,6 +22,10 @@ Sources (abbreviations used below):
 * **[RTC]** National Semiconductor [AN-353, MM58167B Real Time Clock Design Guide](https://bitsavers.org/components/national/_appNotes/AN-0353.pdf), especially pp. 8, 16–17 and figure 23.
 * **[PLUS]** Apple /// Plus addendum to the Standard Device Drivers manual (1983),
   appendix A keyboard codes.
+* **[MB4053]** Fujitsu MB4053 data sheet (DS04-13103), the second source for the
+  9708 A/D converter ("compatible with MC14443 and µA9708").
+* **[OG]** Apple /// Owner's Guide appendix C, port specifications, and Tech Info
+  Library article 13, "Apple III: Game Paddles".
 
 ## Clocks and CPU speed
 
@@ -174,17 +178,17 @@ Sources (abbreviations used below):
 | $C050-57 | VM0..VM3 clear/set |
 | $C058/9 | A/D select 0 |
 | $C05A/B | A/D select 2 |
-| $C05C/D | A/D ramp charge / start timeout |
+| $C05C/D | A/D RAMP START (PDLEN): low charges, high starts the ramp |
 | $C05E/F | A/D select 1 |
-| $C060-3 / $C068-B | joystick switches 0-3 (bit 7) |
+| $C060-3 / $C068-B | bit 7: port B switch, port A button, port B button, port A switch |
 | $C064/5, $C06C/D | slot IRQ status (bit 7, negative logic) |
-| $C066/E | A/D timeout (bit 7 = 1 while ramping) |
+| $C066/E | A/D RAMP STOP (bit 7 = 1 while the capacitor is above the threshold) |
 | $C070-7F | MM58167 RTC, register selected by the zero page register |
 | $C090-CF | slots 1-4 device select (unpopulated) |
 | $C0D0-7 | drive select A0/A1, internal enable, side 2 |
 | $C0D8/9 | smooth scroll off/on |
 | $C0DA/B | character download off/on |
-| $C0DC-F | ENSEL/ENSIO (Silentype serial port, not implemented) |
+| $C0DC-F | ENSEL/ENSIO: Silentype outputs on port A (only their effect on the joystick inputs) |
 | $C0E0-EF | Disk II style controller (phases, motor, int/ext, Q6, Q7) |
 | $C0F0-3 | 6551 ACIA |
 
@@ -230,15 +234,73 @@ See `docs/MAIN_STORAGE.md` for the mount assignments and companion Main build.
 `sim/disk` tests P6, cache transfers and physical timing; the Main repository's
 `tests/apple3` tests formats, transport, write policy and file persistence.
 
-A/D channel codes (A/D2,A/D1,A/D0) from Service Reference Manual table 9 and
-the SOS 1.3 joystick driver: 001 = port B X, 010 = port B Y, 011 = port A X,
-100 = port A Y, 101 = clock battery, 110 = not connected, 111 = reference.
+## Joysticks and A/D converter
+
+Channels (A/D2,A/D1,A/D0): 000 ground, 001 port B X, 010 port B Y, 011 port A X,
+100 port A Y, 101 clock battery, 110 not connected, 111 reference. [SRM table 9,
+SOS GET_ANALOG]
+
+The converter is a 9708 (M9), second-sourced by Fujitsu as the MB4053. PDLEN is
+its RAMP START input. $C05C takes it low and the selected input charges the
+ramp capacitor C15, 0.01 uF, to the input voltage plus a diode drop; the input
+is sampled only while PDLEN is low. $C05D takes it high and a constant current
+discharges C15. R39 sets that current: 1.2 Mohm from +12 V to RREF, which the
+chip holds at VREF, gives 8.11 uA and a ramp of 0.811 V/ms. VREF is +12 V
+divided by R37 and R38 (4.3K and 1K), 2.264 V: channel 7 and the top of the
+0 to 2.2 V joystick input range. RAMP STOP, open collector at $C066 bit 7, is
+high whenever C15 is above the comparator threshold, through the charge as
+well as the ramp. [schematic 050-0039-H sheet 8, MB4053, OG]
+
+The acquisition current, at least 150 uA, charges C15 about twenty times as
+fast as the ramp: a full-scale input settles in about 150 us, inside the
+500 us the manual asks software to allow. Only the discharge current lowers
+C15, so a move to a lower input during the charge settles at the ramp rate.
+Reset clears PDLEN and the channel bits in the 9334 at H6 but leaves C15 alone.
+Two values are nominal: a ground conversion lasts about 30 us (the boot ROM's
+self-test needs it under 32 passes of an 11-cycle loop), and a finished ramp
+leaves C15 about 0.45 V below the threshold, 28 us of charge away. An
+unconnected input floats to the top of the input range, VCC - 2 V, and so does
+the clock's battery of three AA cells; both ramp for about 3.7 ms, the
+reference for 2.8 ms. [MB4053, SRM 10.5, ROM, SRM 7.11]
+
+SOS 1.3's GET_ANALOG ($64) charges for 500 ticks of the D VIA's timer 2, then
+times the ramp with the boot ROM's ANALOG routine: 360 ticks to step 0 and
+8 ticks, 112.25 master clocks, per step. The emulation disk's PREAD charges
+for 800 us, waits 370 us and counts 16 cycles per two steps at 1 MHz; Atomic
+Defense has its own 1 MHz loop of 17 cycles per step. The modeled joystick
+spans GET_ANALOG's window: position p ramps for 354 + 8p ticks, 0.26 V to
+1.88 V. ANALOG's 2 MHz loop sees the end of the ramp up to six ticks late, so
+GET_ANALOG reads every position exactly, with under a tick of margin either
+way, and PREAD, which samples later, reads one or two steps low. GET_ANALOG
+rounds half up and turns 256 into 0: a joystick that overshot the window by
+half a step would read 0 at full deflection. [SOS, SRM 10.19-10.20, ROM]
+
+Each joystick has a momentary pushbutton and a toggle switch, both closing to
++5 V. The 74LS251 at L7 reads SW0 (port B switch), SW1 (port A button), SW2
+(port B button) and SW3 (port A switch) into bit 7 of $C060-$C063. SW1/MGNSW,
+pulled up by R85, is also the D VIA's CA2, and SW3/SCO its CB1. [SRM 7.5, OG,
+schematic sheets 5 and 8]
+
+Port A is also the Silentype port. ENSEL ($C0DD) drives AXCO onto Y1/XCO and
+connects SW3/SCO to the printer instead of the switch, so that line follows the
+VIA's shift clock. ENSIO ($C0DF) drives the VIA's serial data, CB2, onto
+X1/SER. The converter then measures those levels instead of the joystick, which
+is why GET_ANALOG turns both off first. [schematic sheet 8, SOS]
+
+MiSTer controller 1 plugs into port B, which SOS and Business BASIC call
+joystick 0; the "Joystick 1 on" option moves it to port A, where Apple II
+emulation's PDL(0) is. Controller 2 takes the other port. An axis spans the
+whole travel, with Y increasing upward like the graphics driver's Y axis, as
+MAME also has it; digital directions reach the ends. Button 1 is the
+pushbutton. Each press of button 2 flips the switch, which keeps its position
+through a reset.
 
 ## VIAs
 
 D-VIA ($FFD0): PA = environment register, PB = zero page register (also RTC
-register select), CA1 = slot IRQ (OR of slots, active low), CA2 = joystick switch 1
-(margin switch), CB1/CB2 = Silentype serial port.
+register select), CA1 = slot IRQ (OR of slots, active low), CA2 = port A's
+button (SW1/MGNSW, the Silentype margin switch), CB1 = port A's switch (SW3/SCO,
+the Silentype clock), CB2 = Silentype serial data (SER).
 
 E-VIA ($FFE0): PA3..0 = bank register (outputs), PA4/PA5 = slot 1/2 IRQ inputs, PA6 =
 solid Apple key input / native-mode output (when configured as an output and driven

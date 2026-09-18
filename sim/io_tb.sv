@@ -8,7 +8,8 @@ module io_tb;
 	logic key_strobe = 1, any_key_down = 1, shift = 0, control_key = 1;
 	logic alpha_lock = 0, open_apple = 1, solid_apple = 0;
 	logic [7:0] joy_a_x = 8'h10, joy_a_y = 8'h20, joy_b_x = 8'h30, joy_b_y = 8'h40;
-	logic [3:0] joy_buttons = 4'b0101;
+	logic joy_a_button = 0, joy_a_switch = 1, joy_b_button = 0, joy_b_switch = 1;
+	logic via_cb1_drive = 0, via_cb1_out = 0, via_cb2_drive = 0, via_cb2_out = 0;
 	logic slot1_irq_n = 1, slot2_irq_n = 0;
 	logic [7:0] rtc_data = 8'h12, disk_data = 8'ha5, acia_data = 8'h10;
 	wire clear_key_strobe, rtc_read, rtc_write, disk_strobe, acia_read, acia_write;
@@ -16,6 +17,7 @@ module io_tb;
 	wire [7:0] data_out;
 	wire [3:0] video_mode;
 	wire smooth_scroll, character_write, external_select, serial_enable, speaker;
+	wire margin_switch, serial_clock;
 	wire [2:0] analog_select;
 
 	apple3_io dut (.*);

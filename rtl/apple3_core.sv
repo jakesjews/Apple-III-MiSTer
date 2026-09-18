@@ -15,7 +15,10 @@ module apple3_core #(
 	input logic [ 7:0] joy_a_y,
 	input logic [ 7:0] joy_b_x,
 	input logic [ 7:0] joy_b_y,
-	input logic [ 3:0] joy_buttons,
+	input logic        joy_a_button,
+	input logic        joy_a_switch,
+	input logic        joy_b_button,
+	input logic        joy_b_switch,
 
 	input  logic serial_rx,
 	input  logic serial_cts_n,
@@ -89,6 +92,8 @@ module apple3_core #(
 	logic [7:0] e_pb_o, e_pb_ddr, e_pb_i;
 	logic [7:0] via_d_data, via_e_data;
 	logic via_d_irq, via_e_irq;
+	logic via_d_cb1_out, via_d_cb1_drive, via_d_cb2_out, via_d_cb2_drive;
+	logic margin_switch, serial_clock;
 	logic via_rising, via_falling;
 	logic native_mode;
 	logic [7:0] environment, zero_page, bank_register;
@@ -296,14 +301,14 @@ module apple3_core #(
 		.port_b_i(d_pb_i),
 		.ca1_i   (1'b1),
 		.ca2_o   (),
-		.ca2_i   (!joy_buttons[2]),
+		.ca2_i   (margin_switch),
 		.ca2_t   (),
-		.cb1_o   (),
-		.cb1_i   (1'b1),
-		.cb1_t   (),
-		.cb2_o   (),
+		.cb1_o   (via_d_cb1_out),
+		.cb1_i   (serial_clock),
+		.cb1_t   (via_d_cb1_drive),
+		.cb2_o   (via_d_cb2_out),
 		.cb2_i   (1'b1),
-		.cb2_t   (),
+		.cb2_t   (via_d_cb2_drive),
 		.irq     (via_d_irq)
 	);
 
@@ -356,17 +361,17 @@ module apple3_core #(
 	);
 
 	apple3_io io (
-		.clk         (clk_14m),
-		.reset       (machine_reset),
-		.cycle_strobe(cpu_enable),
-		.select      (io_select),
-		.cpu_read    (cpu_rwn),
-		.addr        (cpu_addr[7:0]),
-		.rtc_register(zero_page[4:0]),
+		.clk          (clk_14m),
+		.reset        (machine_reset),
+		.cycle_strobe (cpu_enable),
+		.select       (io_select),
+		.cpu_read     (cpu_rwn),
+		.addr         (cpu_addr[7:0]),
+		.rtc_register (zero_page[4:0]),
 		.key_code,
 		.key_strobe,
 		.any_key_down,
-		.shift       (shift_key),
+		.shift        (shift_key),
 		.control_key,
 		.alpha_lock,
 		.open_apple,
@@ -376,9 +381,16 @@ module apple3_core #(
 		.joy_a_y,
 		.joy_b_x,
 		.joy_b_y,
-		.joy_buttons,
-		.slot1_irq_n (1'b1),
-		.slot2_irq_n (1'b1),
+		.joy_a_button,
+		.joy_a_switch,
+		.joy_b_button,
+		.joy_b_switch,
+		.via_cb1_drive(via_d_cb1_drive),
+		.via_cb1_out  (via_d_cb1_out),
+		.via_cb2_drive(via_d_cb2_drive),
+		.via_cb2_out  (via_d_cb2_out),
+		.slot1_irq_n  (1'b1),
+		.slot2_irq_n  (1'b1),
 		.rtc_data,
 		.disk_data,
 		.acia_data,
@@ -388,13 +400,15 @@ module apple3_core #(
 		.disk_strobe,
 		.acia_read,
 		.acia_write,
-		.data_out    (io_data),
+		.data_out     (io_data),
 		.video_mode,
 		.smooth_scroll,
 		.character_write,
 		.external_select,
 		.serial_enable,
 		.analog_select,
+		.margin_switch,
+		.serial_clock,
 		.speaker
 	);
 

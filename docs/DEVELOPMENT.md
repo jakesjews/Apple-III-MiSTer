@@ -25,7 +25,8 @@ behaviour to its source.
   selection, screen blanking and smooth vertical scrolling.
 - Both 6522 VIAs, the keyboard encoder with its two repeat rates, the cursor
   keys' second contacts and the optional /// Plus DELETE key, the MM58167
-  clock, joystick switches and analog inputs, speaker, bell and six-bit audio.
+  clock, the joysticks' 9708 A/D converter, buttons and latching switches,
+  speaker, bell and six-bit audio.
 - The Disk /// controller's P6 sequencer, internal drive and one external drive,
   including native WOZ bitstreams and quarter-track mapping.
 - A 6551 ACIA on the serial port, connected to MiSTer's HPS UART.
@@ -174,6 +175,7 @@ whole machine. The boot tests read the ROM from `APPLE3_ROM`.
                                         # video, keyboard, I/O, RTC, ACIA, disk
 bash sim/accuracy/run.sh                # documentation-derived checks
 ./sim/disk/run.sh                       # P6, WOZ parser/writeback, drive timing
+./sim/joystick/run.sh                   # joystick read methods at every position
 APPLE3_ROM=apple3.rom ./sim/run_core_boot.sh 30000000
 APPLE3_ROM=apple3.rom ./sim/run_core_boot.sh 400000000 system.woz --woz
 APPLE3_ROM=apple3.rom ./sim/run_core_boot.sh 1400000000 sysutils.woz --keytest
@@ -214,6 +216,15 @@ tells one key code from another when the screen shows the same glyph. See
 comparison and the 6502 functional test, and
 [sim/hwtest/README.md](../sim/hwtest/README.md) for boot disks that check the
 character-download windows and display fetch timing by eye on a MiSTer.
+
+`sim/joystick/run.sh` runs a test ROM on the whole machine that reads the
+joystick the ways shipped software does: SOS 1.3's GET_ANALOG, timed by the D
+VIA's timer 2 through the boot ROM's ANALOG routine, at 2 MHz with the screen
+off and on and at 1 MHz; the emulation disk's PREAD; Atomic Defense's own
+polling loop; and the boot ROM's A/D self-test. The copied routines sit at their
+original addresses, so their cycle counts match. The harness sets a new joystick
+position before each batch, 256 in all, and checks every result and the
+switches. It needs cc65 and Verilator but no ROM image.
 
 See [Main storage integration](MAIN_STORAGE.md) for the companion Main patch and
 [Disk III validation](DISK_FIDELITY_2026-09-16.md) for the tested hardware build.

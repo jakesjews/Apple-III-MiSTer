@@ -76,6 +76,11 @@ as Solid Apple while it is down.
 **Keyboard** in the OSD selects the Apple /// Plus keyboard, which adds that
 machine's one extra key, DELETE, on the host Delete key.
 
+Controller 1 is the joystick in port B, which SOS and Business BASIC read as
+joystick 0; **Joystick 1 on** in the OSD moves it to port A. Controller 2 uses
+the other port. Button 1 is the joystick's pushbutton, and each press of button
+2 flips its latching switch.
+
 Serial uses MiSTer's UART. Leave **Serial CTS** at **Always ready** unless
 using host hardware flow control. [Serial details](docs/DEVELOPMENT.md#serial-port).
 
@@ -93,14 +98,17 @@ Existing partial implementations are noted where they provide a starting point.
       follow the scan PROM's per-line windows. Tests cover writes during active
       display, the download boundaries and rendering in every mode.
 
+- [x] **Native joystick accuracy.** The 9708 converter's charge, ramp and
+      comparator follow the schematic's component values, with the joystick
+      spanning SOS's GET_ANALOG window. Each port has a pushbutton and a
+      latching switch, and port A's Silentype lines are wired as on the board.
+      Tests run SOS's timer method and the polling loops of the emulation
+      disk, a game and the boot ROM at every position.
+
 - [ ] **All four Disk III drives.** Extend the current internal drive and one
       external drive to expose all four drives, retaining the Disk II-compatible
       option. Preserve shared disk-phase/fine-scroll behavior and independent
       mounting, write protection and media-change state.
-
-- [ ] **Native joystick accuracy.** Complete the existing conversion and switch
-      model with accurate charge/start/timeout behavior. Test different polling
-      and timer methods, and provide a host mapping for the latching switch.
 
 - [ ] **One virtual block-storage interface.** Use a single interface in place of
       separate historical storage-card projects, with compatible SOS driver and

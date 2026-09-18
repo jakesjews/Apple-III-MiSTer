@@ -21,6 +21,7 @@ nonzero if any group failed.
 | `keyboard_accuracy_tb.sv` | Strobed NUL; independent left and right modifiers; held-key tracking, release ordering, host typematic suppression and repeat fallback; repeat activation ordering around the solid Apple line, the cursor keys' second contacts and the Apple /// Plus DELETE code. |
 | `disk_protection_tb.sv` | Each drive writes its track cache when writable and emits no writes when protected; the other drive is untouched. |
 | `rtc_accuracy_tb.sv` | GO rounds seconds correctly; the 10 Hz interrupt includes whole-second boundaries; rollover status behaves as the data sheet describes; machine reset preserves the clock. |
+| `joystick_accuracy_tb.sv` | The 9708 A/D converter against its data sheet and the schematic's component values: ground, reference, battery and unconnected channels; each axis on its channel, linear at 8 VIA ticks per step; short charges reading low; the input sampled only during the charge; slow settling to a lower input; RAMP STOP through the charge and the ramp; a reset leaving the capacitor charged; the four switches and their VIA lines; the Silentype outputs on port A. |
 | `timing_prom_tb.sv` | 134,144 A-slot PHASEN comparisons across RAM selection, screen enable and CPU speed, and 16,768 states each of refresh reservation, character-generator write window (RTCWRT) and display window (-RBL), compared with the original timing and scan PROM contents. |
 
 The video accuracy test seeds the pixel pipeline and character memory and runs
