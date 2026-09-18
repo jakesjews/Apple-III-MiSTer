@@ -117,6 +117,10 @@ Existing partial implementations are noted where they provide a starting point.
       per-slot interrupt routing. Add coprocessor bus ownership when the first
       card needs it.
 
+- [ ] **Peripheral wait-state and boundary timing.** Implement and test delayed
+      IOSTOP/ready behavior, and complete extended-horizontal-state timing beyond
+      the existing scan counters and Q3 hold.
+
 - [ ] **One virtual block-storage interface.** Add a virtual card modeled on the
       Apple II core's hard-disk card, with its own ProDOS block-mode firmware,
       so SOS uses it through the [Problock3](https://github.com/robjustice/Problock3)
@@ -138,10 +142,6 @@ Existing partial implementations are noted where they provide a starting point.
 - [ ] **III Plus model with authentic interlace.** Reuse the existing clock and
       keyboard work. Implement field timing and display-memory behavior rather
       than simply doubling lines.
-
-- [ ] **Peripheral wait-state and boundary timing.** Implement and test delayed
-      IOSTOP/ready behavior, and complete extended-horizontal-state timing beyond
-      the existing scan counters and Q3 hold.
 
 - [ ] **Apple II Mouse Interface card.** Use host mouse input and validate against
       an existing native mouse-driver configuration.
