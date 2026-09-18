@@ -3,18 +3,12 @@
 __Warning: This core is vibe coded.__
 
 A complete [Apple ///](https://en.wikipedia.org/wiki/Apple_III) core, and a very
-usable one: most software tried so far runs well. That includes SOS 1.3 and its
-System Utilities, Business BASIC, Apple Writer III, Selector /// booted from a
-hard-disk image, and the Apple II emulation disk. Apple's Confidence Program
-passes its memory, interrupt and four-drive disk tests.
+usable one: most software tried so far runs well.
 
 - 256 KiB RAM, every native video mode and the Apple II modes
 - Four floppy drives: WOZ, DSK, DO, PO, NIB and 2MG, writable and formattable
 - A hard-disk card with two images, bootable without a floppy
 - Keyboard, joysticks, clock, audio and serial
-
-[Hardware validation](docs/PERIPHERAL_TIMING.md#confidence-program-11-on-2026-09-18) ·
-[Four drives](docs/FOUR_DRIVES.md) · [Hard disk](docs/BLOCK_STORAGE.md#results-2026-09-18)
 
 For something to play, [apple-iii-games](https://github.com/jakesjews/apple-iii-games)
 has native Apple /// games as ready-to-mount disk images.
@@ -30,7 +24,7 @@ has native Apple /// games as ready-to-mount disk images.
    main=MiSTer_AppleIII
    ```
 
-4. Supply the 4,096-byte Apple /// boot ROM as
+4. Supply the Apple /// boot ROM as
    `/media/fat/games/Apple-III/boot.rom`. It is the file MAME calls
    `apple3.rom`. ROMs are not included.
 
@@ -42,10 +36,7 @@ has native Apple /// games as ready-to-mount disk images.
    **Mount Drive 1** to select a boot disk. **Mount Drive 2–4** are the three
    external Disk III drives. Each drive has its own **Write Protect** option.
    **Mount Hard Disk 1** and **2** take ProDOS-order images for the block
-   card in slot 1; SOS reaches them through the
-   [Problock3](https://github.com/robjustice/Problock3) driver, and the
-   [soshdboot](https://github.com/robjustice/soshdboot) ROM boots from them
-   without a floppy. [Details](docs/BLOCK_STORAGE.md).
+   card in slot 1
 6. If SOS lists only two drives, use System Utilities → **System Configuration
    Program**: read your `SOS.DRIVER`, set **Change System Parameters → Number of
    Disk III Drives** to **4**, then **Generate New System** to save `SOS.DRIVER`
@@ -53,19 +44,14 @@ has native Apple /// games as ready-to-mount disk images.
 
 Use matching core and Main builds. The custom Main is selected only for this
 core. The supplied `MiSTer_AppleIII` binary comes from
-[jakesjews/Main_MiSTer](https://github.com/jakesjews/Main_MiSTer), with the complete
-matching source changes included in this repository's Main patch.
-[Build instructions and Main patch](docs/MAIN_STORAGE.md).
+[jakesjews/Main_MiSTer](https://github.com/jakesjews/Main_MiSTer)
 
 ## Disk images
 
 Supported: **WOZ, DSK, DO, PO, NIB and 2MG**.
 
-- **DSK, DO, PO, NIB and 2MG** are writable, and SOS can format the sector
-  images. A NIB track is saved only when all sixteen of its sectors read back
-  cleanly. Saves go
-  straight into the image you mounted, so keep a copy of anything you want to
-  preserve, or make the file read-only on the SD card to protect it.
+- **DSK, DO, PO, NIB and 2MG** are writable, A NIB track is saved only when all sixteen of its sectors read back
+  cleanly.
 - **WOZ2** is writable. Writes require existing track allocations; formatting
   cannot create missing tracks.
 - WOZ1, flux-encoded WOZ and images inside a zip are **read-only**.
