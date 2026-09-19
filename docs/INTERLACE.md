@@ -112,9 +112,18 @@ model selected.
 
   ![Buffers 1 and 2 merged](video/2026-09-19-interlace-pages-merged.png)
 
-Not run: the interlace test of Apple's /// Plus dealer diagnostics. Both
-images of that disk stop at "VOLUME MISMATCH", with this core and the one
-before it.
+* **Apple /// Plus dealer diagnostics, video test.** All of its screens
+  report two identical fields except its interlace test, which puts a
+  horizontal line in page 2 and a vertical one in page 1 and shows page 2. With
+  the switch off only the horizontal line appears. With it on the two make a
+  cross, the horizontal line on an even row and the vertical line on the odd
+  rows, and the disk reports VIDEO (PASSED) either way.
+
+  ![Dealer diagnostics interlace test](video/2026-09-19-interlace-dealer-test.png)
+
+  The disk is a DOS 3.3 volume 1 and needs the companion Main that takes a
+  sector image's volume from its [VTOC](MAIN_STORAGE.md); before that it
+  stopped at VOLUME MISMATCH.
 
 ## Tests
 

@@ -61,6 +61,8 @@ Supported: **WOZ, DSK, DO, PO, NIB and 2MG**.
   or DOS 3.3 VTOC, so a ProDOS-order file named `.dsk` works. Without either,
   `.dsk`/`.do` mean DOS order and `.po` ProDOS order. For 2MG files, the header
   determines the order.
+- A DOS 3.3 image gets the volume number in its VTOC, which disks made with
+  another volume than 254, such as Apple's dealer diagnostics, need to boot.
 - Sector dumps of copy-protected originals (an encrypted `SOS.INTERP`) get the
   SOS protection key and synchronized tracks automatically. Deprotected disks,
   which is most of what circulates, are left without the key so SOS does not

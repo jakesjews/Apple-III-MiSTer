@@ -1,9 +1,9 @@
 diff --git a/support/a2/APPLE_III_STORAGE.md b/support/a2/APPLE_III_STORAGE.md
 new file mode 100644
-index 0000000..49fd6c5
+index 0000000..42e7861
 --- /dev/null
 +++ b/support/a2/APPLE_III_STORAGE.md
-@@ -0,0 +1,75 @@
+@@ -0,0 +1,81 @@
 +# Apple III profile
 +
 +`iigs_disk` also handles WOZ-capable Apple-III cores (S0 advertises WOZ).
@@ -71,6 +71,12 @@ index 0000000..49fd6c5
 +directory (12 or 13 entries per block) or DOS 3.3 VTOC, in either order; when
 +neither is present the extension decides, `.po` being ProDOS order.
 +
++A sector image has no address fields, so their volume number is 254 unless a
++2MG header gives one or the image has a DOS 3.3 VTOC, whose volume byte is
++then used. `INIT` writes that number to the VTOC and to every address field,
++and the DOS it saves asks RWTS for it from its first command: Apple's ///
++dealer diagnostics are volume 1 and stopped at VOLUME MISMATCH under 254.
++
 +The hardware still implements Apple III's P6 sequencer, independent spindle/I/O
 +selection, motor timeout, disk-change latch and physical bit timing. Main handles
 +file formats and file I/O via the existing SD protocol, including multi-block
@@ -80,7 +86,7 @@ index 0000000..49fd6c5
 +regressions. The Apple III core's simulator exercises the real-time disk path
 +using the same converted WOZ output.
 diff --git a/support/a2/iigs_disk.cpp b/support/a2/iigs_disk.cpp
-index 8f1b23f..4b6f2ac 100644
+index 8f1b23f..b4af974 100644
 --- a/support/a2/iigs_disk.cpp
 +++ b/support/a2/iigs_disk.cpp
 @@ -1,4 +1,4 @@
@@ -176,7 +182,8 @@ index 8f1b23f..4b6f2ac 100644
  	// Resolve the payload (strip 2MG/DC42 header) and its order.
  	const uint8_t *pay = raw;
  	size_t pay_len = raw_len;
- 	int order_prodos = 0, order_nib = 0;
+-	int order_prodos = 0, order_nib = 0;
++	int order_prodos = 0, order_nib = 0, volume_given = 0;
 +	uint8_t volume = 254;
  
  	TwoMG m;
@@ -185,7 +192,7 @@ index 8f1b23f..4b6f2ac 100644
  		pay_len = m.data_len;
  		order_prodos = (m.format == 1);
  		order_nib    = (m.format == 2);
-+		if (m.flags & 0x100) volume = m.flags & 255;
++		if (m.flags & 0x100) { volume = m.flags & 255; volume_given = 1; }
  	} else if (dc42_parse(raw, raw_len, &d)) {
  		pay = raw + 84;
  		pay_len = d.data_size;
@@ -197,7 +204,13 @@ index 8f1b23f..4b6f2ac 100644
  		size_t cap = 512 * 1024;
  		uint8_t *woz = (uint8_t *)malloc(cap);
  		if (!woz) return NULL;
-@@ -163,7 +182,8 @@ static uint8_t *build_woz(int kind, A2SectorOrder order_525,
+@@ -160,10 +179,14 @@ static uint8_t *build_woz(int kind, A2SectorOrder order_525,
+ 	if (pay_len != A2_525_IMAGE_SIZE) return NULL;
+ 	if (order_prodos) a2_prodos_to_dos(dsk, pay);
+ 	else              memcpy(dsk, pay, A2_525_IMAGE_SIZE);
++	// A sector image has no address fields; a DOS 3.3 disk's VTOC says what
++	// volume they held, unless a 2MG header already has.
++	if (!volume_given && a2_dos33_volume(dsk)) volume = a2_dos33_volume(dsk);
  	size_t cap = 512 * 1024;
  	uint8_t *woz = (uint8_t *)malloc(cap);
  	if (!woz) return NULL;
@@ -207,7 +220,7 @@ index 8f1b23f..4b6f2ac 100644
  	if (!n) { free(woz); return NULL; }
  	*out_sz = n;
  	return woz;
-@@ -174,6 +194,7 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
+@@ -174,6 +197,7 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
  	if (!iigs_is_core()) return IIGS_PASSTHRU;
  	int kind = slot_kind(index);
  	if (kind < 0) return IIGS_PASSTHRU;
@@ -215,7 +228,7 @@ index 8f1b23f..4b6f2ac 100644
  
  	iigs_unmount(index);
  
-@@ -191,6 +212,34 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
+@@ -191,6 +215,34 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
  	TwoMG m;
  	int is_2mg = twomg_parse(head, f->size, &m);
  	int is_dc42 = dc42_probe(head, f->size);
@@ -250,7 +263,7 @@ index 8f1b23f..4b6f2ac 100644
  
  	if (kind == 0) {
  		// ----- hard-disk slot: permissive (any ProDOS-order block image) -----
-@@ -199,17 +248,21 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
+@@ -199,17 +251,21 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
  		if (is_2mg && m.format != 1) { reject("This 2MG is DOS/NIB order; not a ProDOS hard-disk image."); return IIGS_REJECT; }
  		if (eqi(ext, "do")) { reject("DOS-order disk — load it in a 5.25\" drive, not a hard disk."); return IIGS_REJECT; }
  
@@ -283,7 +296,7 @@ index 8f1b23f..4b6f2ac 100644
  		return IIGS_HANDLED;
  	}
  
-@@ -222,26 +275,6 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
+@@ -222,26 +278,6 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
  			return IIGS_REJECT;
  		}
  
@@ -310,7 +323,7 @@ index 8f1b23f..4b6f2ac 100644
  
  		return IIGS_PASSTHRU;   // native WOZ on a real file: serve directly
  	}
-@@ -291,10 +324,10 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
+@@ -291,10 +327,10 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
  			       order_525 == A2_ORDER_PRODOS ? "ProDOS" : "DOS");
  		}
  	}
@@ -323,7 +336,7 @@ index 8f1b23f..4b6f2ac 100644
  	free(raw);
  	if (!woz) { reject("Could not convert this disk to WOZ."); return IIGS_REJECT; }
  
-@@ -302,52 +335,89 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
+@@ -302,52 +338,89 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
  	g_woz[index]     = woz;
  	g_woz_sz[index]  = woz_sz;
  	g_wb_ok[index]   = wb_ok;
@@ -441,7 +454,7 @@ index 8f1b23f..4b6f2ac 100644
  	// Converted floppy: update the in-memory WOZ, then (if write-back is
  	// supported) decode the affected track and persist it to the source image.
  	uint64_t off = lba * 512;
-@@ -365,6 +435,12 @@ void iigs_write(int disk, fileTYPE *f, uint64_t lba, int ack)
+@@ -365,6 +438,12 @@ void iigs_write(int disk, fileTYPE *f, uint64_t lba, int ack)
  			if (FileSeek(f, g_wb_off[disk] + (int64_t)base * 512, SEEK_SET))
  				FileWriteAdv(f, po + (size_t)base * 512, (size_t)cnt * 512);
  		}
@@ -454,7 +467,7 @@ index 8f1b23f..4b6f2ac 100644
  	} else {
  		// 5.25": decode the DOS-order track and restore the detected source order.
  		static uint8_t dsk[A2_525_IMAGE_SIZE];
-@@ -389,3 +465,35 @@ void iigs_write(int disk, fileTYPE *f, uint64_t lba, int ack)
+@@ -389,3 +468,35 @@ void iigs_write(int disk, fileTYPE *f, uint64_t lba, int ack)
  		}
  	}
  }
@@ -537,7 +550,7 @@ index d50fc80..f859b5a 100644
  
  #endif // IIGS_DISK_H
 diff --git a/support/a2/iigs_fmt.cpp b/support/a2/iigs_fmt.cpp
-index ceee58c..e5eff3c 100644
+index ceee58c..7a17324 100644
 --- a/support/a2/iigs_fmt.cpp
 +++ b/support/a2/iigs_fmt.cpp
 @@ -51,10 +51,13 @@ int twomg_parse(const uint8_t *buf, size_t size, TwoMG *out)
@@ -636,7 +649,24 @@ index ceee58c..e5eff3c 100644
  	uint16_t bitmap = rd_le16(entry + 0x23);
  	uint16_t blocks = rd_le16(entry + 0x25);
  	return bitmap >= 3 && bitmap < blocks && blocks == (A2_525_IMAGE_SIZE / A2_BLOCK_SIZE);
-@@ -381,12 +423,15 @@ static void nibbilize(const uint8_t *src, uint8_t *dest)
+@@ -285,6 +327,16 @@ A2SectorOrder a2_detect_525_order(const uint8_t *image, size_t size)
+ 	return A2_ORDER_UNKNOWN;
+ }
+ 
++// INIT writes one volume number to the VTOC and to every address field, and
++// the DOS it saves asks RWTS for that number from the first command on. A disk
++// made with INIT HELLO,V1 therefore stops at VOLUME MISMATCH under any other.
++uint8_t a2_dos33_volume(const uint8_t *dsk)
++{
++	if (!dsk || !dos_vtoc_probe(dsk, DOS_PHYSICAL)) return 0;
++	uint8_t volume = dsk[17 * A2_TRACK_SIZE + 6];
++	return volume == 0xFF ? 0 : volume;
++}
++
+ static int ext_is_ascii(const char *ext, const char *want)
+ {
+ 	if (!ext || !want) return 0;
+@@ -381,12 +433,15 @@ static void nibbilize(const uint8_t *src, uint8_t *dest)
  }
  
  // Build one full 6656-byte NIB track from a 4096-byte DOS-order track.
@@ -653,7 +683,7 @@ index ceee58c..e5eff3c 100644
  
  		uint8_t *o = nibtrack + position * BYTES_PER_NIB_SECTOR;
  		memset(o, GAP_BYTE, GAP1_LEN);
-@@ -394,10 +439,10 @@ static void nib_track_from_dsk(uint8_t *nibtrack, const uint8_t *dsktrack, int t
+@@ -394,10 +449,10 @@ static void nib_track_from_dsk(uint8_t *nibtrack, const uint8_t *dsktrack, int t
  
  		// address field
  		memcpy(o, addr_prolog, 3); o += 3;
@@ -666,7 +696,7 @@ index ceee58c..e5eff3c 100644
  		memcpy(o, addr_epilog, 3); o += 3;
  
  		memset(o, GAP_BYTE, GAP2_LEN); o += GAP2_LEN;
-@@ -477,15 +522,15 @@ static int parse_nib_sector(const uint8_t *d, int len, uint8_t *out256,
+@@ -477,15 +532,15 @@ static int parse_nib_sector(const uint8_t *d, int len, uint8_t *out256,
  
  // Parse one 6656-byte NIB track into a 4096-byte DOS-order track. Returns the
  // number of sectors recovered.
@@ -685,7 +715,7 @@ index ceee58c..e5eff3c 100644
  			if (s >= 0 && s < A2_SECTORS_PER_TRACK) {
  				uint16_t bit = (uint16_t)(1U << s);
  				if (!(seen & bit)) {
-@@ -515,10 +560,10 @@ int a2_nib_to_dsk(uint8_t *dsk, const uint8_t *nib)
+@@ -515,10 +570,10 @@ int a2_nib_to_dsk(uint8_t *dsk, const uint8_t *nib)
  }
  
  // Per-track versions of the above, for NIB write-back
@@ -698,7 +728,7 @@ index ceee58c..e5eff3c 100644
  }
  
  int a2_nib_track_to_dsk(const uint8_t *nibtrack, uint8_t *dsktrack)
-@@ -536,85 +581,214 @@ int a2_nib_track_to_dsk(const uint8_t *nibtrack, uint8_t *dsktrack)
+@@ -536,85 +591,214 @@ int a2_nib_track_to_dsk(const uint8_t *nibtrack, uint8_t *dsktrack)
  #define WOZ_TRK_DIR    (160 * 8)         // 1280
  #define WOZ525_BLOCKS_PER_TRACK 13
  #define WOZ525_FIRST_BLOCK 3
@@ -829,12 +859,12 @@ index ceee58c..e5eff3c 100644
 +			// Early SOS volumes declare 12 entries per block instead of 13.
 +			per_block = dir[0x24];
 +			if ((dir[4] >> 4) != 0xf || dir[0x23] != 39 || per_block < 1 || per_block > 13) return 0;
- 		}
++		}
 +		for (unsigned i = 0; i < per_block && !key_block; ++i) {
 +			const uint8_t *e = dir + 4 + i * 39;
 +			if ((e[0] & 15) != 10 || memcmp(e + 1, "SOS.INTERP", 10)) continue;
 +			storage = e[0] >> 4; key_block = rd_le16(e + 0x11);
-+		}
+ 		}
 +		block = rd_le16(dir + 2);
  	}
 -	p += WOZ_TMAP_LEN;
@@ -974,7 +1004,7 @@ index ceee58c..e5eff3c 100644
  }
  
  // Locate a chunk by id; returns pointer to its data and fills *out_size, or NULL.
-@@ -624,6 +798,7 @@ static const uint8_t *woz_find_chunk(const uint8_t *woz, size_t size,
+@@ -624,6 +808,7 @@ static const uint8_t *woz_find_chunk(const uint8_t *woz, size_t size,
  	size_t pos = 12;
  	while (pos + 8 <= size) {
  		uint32_t csize = rd_le32(woz + pos + 4);
@@ -982,7 +1012,7 @@ index ceee58c..e5eff3c 100644
  		if (memcmp(woz + pos, id, 4) == 0) {
  			if (out_size) *out_size = csize;
  			return woz + pos + 8;
-@@ -633,47 +808,106 @@ static const uint8_t *woz_find_chunk(const uint8_t *woz, size_t size,
+@@ -633,47 +818,106 @@ static const uint8_t *woz_find_chunk(const uint8_t *woz, size_t size,
  	return NULL;
  }
  
@@ -1119,7 +1149,7 @@ index ceee58c..e5eff3c 100644
  		const uint8_t *e = trks + t * 8;
  		uint16_t sb = rd_le16(e + 0);
 diff --git a/support/a2/iigs_fmt.h b/support/a2/iigs_fmt.h
-index 4bcc1d3..af27192 100644
+index 4bcc1d3..feb39ad 100644
 --- a/support/a2/iigs_fmt.h
 +++ b/support/a2/iigs_fmt.h
 @@ -84,6 +84,9 @@ size_t dc42_build(uint8_t *out, size_t out_cap, const uint8_t *payload,
@@ -1132,7 +1162,16 @@ index 4bcc1d3..af27192 100644
  // zlib-compatible CRC32 (poly 0xEDB88320), init 0.
  uint32_t woz_crc32(const uint8_t *data, size_t len);
  
-@@ -111,14 +114,25 @@ int  a2_nib_to_dsk(uint8_t *dsk, const uint8_t *nib);   // 1 if all tracks parse
+@@ -97,6 +100,8 @@ typedef enum {
+ // Detect disk sector order from a ProDOS volume header or DOS 3.3 VTOC (.po, .do, .dsk)
+ A2SectorOrder a2_detect_525_order(const uint8_t *image, size_t size);
+ A2SectorOrder a2_resolve_525_order(const uint8_t *image, size_t size, const char *ext);
++// Volume number (1..254) in the VTOC of a DOS-order DOS 3.3 image, or 0 without one.
++uint8_t a2_dos33_volume(const uint8_t *dsk);
+ 
+ // dst and src are 143360-byte 5.25" images; in-place safe only if dst!=src.
+ void a2_dos_to_prodos(uint8_t *dst, const uint8_t *src);
+@@ -111,14 +116,25 @@ int  a2_nib_to_dsk(uint8_t *dsk, const uint8_t *nib);   // 1 if all tracks parse
  
  // ---- 5.25" per-track nibble encode/decode (NIB write-back) ----
  // Re-encode a DOS-order track as canonical NIB; unchanged tracks remain byte-stable.
@@ -1159,7 +1198,7 @@ index 4bcc1d3..af27192 100644
  int    a2_woz525_to_dsk(uint8_t *dsk, const uint8_t *woz, size_t woz_size);
  
  // ---- 3.5" 800K (ProDOS-order PO <-> WOZ2), Apple zoned GCR ----
-@@ -137,6 +151,10 @@ int a2_woz35_decode_track(const uint8_t *woz, size_t woz_size, int track, uint8_
+@@ -137,6 +153,10 @@ int a2_woz35_decode_track(const uint8_t *woz, size_t woz_size, int track, uint8_
                            int *base_block, int *block_count);
  // 5.25": decode one track into dsk (143360) at track*4096 (16 sectors, DOS order).
  int a2_woz525_decode_track(const uint8_t *woz, size_t woz_size, int track, uint8_t *dsk);
@@ -1238,10 +1277,10 @@ index 0000000..921147a
 +"$out/storage_test" "$@"
 diff --git a/tests/apple3/storage_test.cpp b/tests/apple3/storage_test.cpp
 new file mode 100644
-index 0000000..7c662cc
+index 0000000..9c7cd01
 --- /dev/null
 +++ b/tests/apple3/storage_test.cpp
-@@ -0,0 +1,326 @@
+@@ -0,0 +1,348 @@
 +#include "../../file_io.h"
 +#include "../../user_io.h"
 +#include "../../support/a2/iigs_fmt.h"
@@ -1357,6 +1396,28 @@ index 0000000..7c662cc
 +  // NIB address volume bytes survive direct packing (never sector decode/rebuild).
 +  nib[51]=0xaau; nib[52]=0xab; auto modified=mount_serve(f,nib,"disk.nib",0,true); assert(modified!=nw);
 +  puts("PASS shared 5.25 codec: DOS/PO/2MG equivalence, sync bits, round-trip and NIB preservation");
++  // A DOS 3.3 disk's address fields carry the volume in its VTOC (the /// Plus dealer
++  // diagnostics are volume 1 and stop at VOLUME MISMATCH under 254). A 2MG header's own
++  // volume wins, and an image without a VTOC, or with volume 0, keeps 254.
++  {
++    auto dos=dsk; uint8_t *vtoc=dos.data()+17*4096; memset(vtoc,0,256);
++    vtoc[1]=17; vtoc[2]=15; vtoc[3]=3; vtoc[6]=1; vtoc[0x34]=35; vtoc[0x35]=16; vtoc[0x37]=1;
++    auto all=[&](const std::vector<uint8_t> &woz,uint8_t want) {
++      uint8_t got[16], sectors[4096];
++      for(int t:{0,9,17,34}) {
++        assert(a2_woz525_verify_track(woz.data(),woz.size(),t,sectors,got)==0xffff);
++        for(int s=0;s<16;s++) assert(got[s]==want);
++      }
++    };
++    assert(a2_dos33_volume(dos.data())==1 && !a2_dos33_volume(dsk.data()));
++    all(w,254); all(mount_serve(f,dos,"dos.dsk",0,true),1);
++    a2_dos_to_prodos(po.data(),dos.data()); all(mount_serve(f,po,"dos.po",0,true),1);
++    std::vector<uint8_t> vmg(64+dos.size()); twomg_build(vmg.data(),vmg.size(),po.data(),po.size(),1);
++    put32(vmg.data()+16,0x100|77); all(mount_serve(f,vmg,"dos.2mg",0,true),77);
++    vtoc[6]=0; all(mount_serve(f,dos,"dos.dsk",0,true),254);
++    a2_dos_to_prodos(po.data(),dsk.data());
++    puts("PASS DOS 3.3 volume: VTOC volume in the address fields, 2MG volume first, 254 otherwise");
++  }
 +  // Apple /// NIB write-back. The drive saves a track as seventeen blocks; the source
 +  // changes only when the last one arrives and all sixteen sectors verify. The track
 +  // is re-nibblized whole and keeps its address-field volume bytes, where SOS's

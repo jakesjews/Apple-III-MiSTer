@@ -36,6 +36,12 @@ mount assignments and write policies.
   this is upstream's detector. When neither is present, DSK/DO mean DOS order
   and PO ProDOS order. 2MG's format, data offset, payload length and volume
   flags take precedence. Invalid headers are rejected.
+- A sector image has no address fields. Their volume number is 254 unless a
+  2MG header gives one or the image has a DOS 3.3 VTOC, whose volume byte is
+  then used: `INIT` writes that number to the VTOC and to every address field,
+  and the DOS it saves asks RWTS for it from its first command. Apple's ///
+  and /// Plus dealer diagnostics are volume 1, and stopped at VOLUME MISMATCH
+  before their HELLO ran.
 - 140K ProDOS-order images use the standard sector map: block 2, the volume
   directory, is DOS sectors 11 and 10. The map inherited from upstream Main
   placed only sectors 0 and 15 correctly, so real `.po` images did not boot.
