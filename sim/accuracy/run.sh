@@ -23,6 +23,7 @@ run_case video_accuracy rtl/apple3_video.sv
 run_case video_fetch rtl/apple3_timing.sv rtl/apple3_ram.sv rtl/apple3_video.sv
 run_case video_source rtl/apple3_timing.sv rtl/apple3_ram.sv rtl/apple3_video.sv rtl/apple3_composite.sv
 run_case peripheral_timing rtl/apple3_timing.sv
+run_case interlace rtl/apple3_timing.sv rtl/apple3_ram.sv rtl/apple3_video.sv
 run_case keyboard_accuracy rtl/apple3_keyboard.sv
 run_case disk_protection rtl/apple3_disk.sv rtl/disk/apple3_p6.sv rtl/disk/apple3_disk_sequencer.sv
 run_case rtc_accuracy rtl/apple3_rtc.sv
@@ -47,6 +48,24 @@ if [[ -f "$proms/341-0030.BIN" && -f "$proms/342-0046-A.BIN" ]]; then
   done
 else
   echo "SKIP timing PROM comparison: set APPLE3_PROM_DIR to unpacked A3PROMs"
+fi
+
+# The Apple /// Plus interlace scan PROM, against the stock one for the other field.
+plus_prom=${APPLE3_PLUS_PROM:-research/roms/archive.org_AppleIIIROMs/342-0145-A.bin}
+if [[ -f "$proms/341-0030.BIN" && -f "$plus_prom" ]]; then
+  xxd -p -c 1 "$plus_prom" > "$out/plus.hex"
+  if iverilog -g2012 -s interlace_prom_tb -o "$out/interlace_prom" rtl/apple3_timing.sv rtl/apple3_video.sv \
+      sim/accuracy/interlace_prom_tb.sv > "$out/interlace_prom.compile.log" 2>&1; then
+    if ! vvp "$out/interlace_prom" "+SCAN=$out/scan.hex" "+PLUS=$out/plus.hex" > "$out/interlace_prom.log" 2>&1; then
+      failures=$((failures+1))
+    fi
+    cat "$out/interlace_prom.log"
+  else
+    cat "$out/interlace_prom.compile.log"
+    failures=$((failures+1))
+  fi
+else
+  echo "SKIP interlace PROM comparison: set APPLE3_PLUS_PROM to the 342-0145-A dump"
 fi
 echo "Accuracy test groups failing: $failures"
 test "$failures" -eq 0

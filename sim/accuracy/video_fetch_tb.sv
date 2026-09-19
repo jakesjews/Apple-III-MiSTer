@@ -13,11 +13,14 @@ module video_fetch_tb;
 	wire display_slot, refresh_slot, character_slot, frame_tick;
 	wire [9:0] h_count;
 	wire [8:0] v_count;
+	wire [8:0] scan_line;
+	wire       field;
 	wire [6:0] h_state;
 	wire [3:0] state_dot;
 	apple3_timing timing (
 		.clk_14m          (clk),
 		.slow_mode,
+		.interlace        (1'b0),
 		.screen_enable,
 		.peripheral_cycle,
 		.rtc_cycle        (1'b0),
@@ -35,9 +38,11 @@ module video_fetch_tb;
 		.character_slot,
 		.h_count,
 		.v_count,
+		.scan_line,
 		.h_state,
 		.state_dot,
-		.frame_tick
+		.frame_tick,
+		.field
 	);
 
 	logic [17:0] cpu_addr = 0;
@@ -68,9 +73,11 @@ module video_fetch_tb;
 		.reset,
 		.h_count,
 		.v_count,
+		.scan_line,
 		.h_state,
 		.state_dot,
 		.frame_tick,
+		.field,
 		.screen_enable,
 		.native_mode,
 		.video_mode,

@@ -10,6 +10,8 @@ module apple3_core #(
 	input logic        reset,
 	input logic [10:0] ps2_key,
 	input logic        plus_keymap,
+	// The Apple /// Plus text interlace switch.
+	input logic        interlace,
 	input logic [64:0] host_rtc,
 	input logic [ 7:0] joy_a_x,
 	input logic [ 7:0] joy_a_y,
@@ -66,6 +68,8 @@ module apple3_core #(
 	output logic               video_vblank,
 	output logic               video_hsync,
 	output logic               video_vsync,
+	// High in the upper of two interlaced fields, and whenever the switch is off.
+	output logic               video_field,
 	// The colour lines RGB8..RGB1 behind that picture, their subcarrier slot
 	// and the colour burst enable, for apple3_composite.
 	output logic        [ 3:0] video_colour,
@@ -141,6 +145,7 @@ module apple3_core #(
 
 	logic [9:0] h_count;
 	logic [8:0] v_count;
+	logic [8:0] scan_line;
 	logic [6:0] h_state;
 	logic [3:0] state_dot;
 	logic frame_tick, timing_hblank, timing_vblank;
@@ -242,6 +247,7 @@ module apple3_core #(
 		.clk_14m,
 		.slow_mode    (environment[7]),
 		.screen_enable(environment[5]),
+		.interlace,
 		.peripheral_cycle,
 		.rtc_cycle,
 		.ram_cycle    (ram_select),
@@ -258,9 +264,11 @@ module apple3_core #(
 		.character_slot,
 		.h_count,
 		.v_count,
+		.scan_line,
 		.h_state,
 		.state_dot,
-		.frame_tick
+		.frame_tick,
+		.field        (video_field)
 	);
 
 	apple3_mmu #(
@@ -536,6 +544,8 @@ module apple3_core #(
 		.reset        (machine_reset),
 		.h_count,
 		.v_count,
+		.scan_line,
+		.field        (video_field),
 		.h_state,
 		.state_dot,
 		.frame_tick,

@@ -11,6 +11,9 @@ module core_tb #(
 	output wire         serial_dtr_n,
 	input  logic [10:0] ps2_key,
 	input  logic        plus_keymap,
+	// The Apple /// Plus text interlace switch, and the field it is showing.
+	input  logic        interlace,
+	output wire         field,
 	// The OSD's Video option: 0 RGB, 1 colour composite, 2 mono composite.
 	input  logic [ 1:0] video_source,
 	input  logic [64:0] host_rtc,
@@ -196,6 +199,7 @@ module core_tb #(
 		.reset,
 		.ps2_key            (ps2_key),
 		.plus_keymap        (plus_keymap),
+		.interlace,
 		.host_rtc,
 		.serial_rx,
 		.serial_cts_n,
@@ -245,6 +249,7 @@ module core_tb #(
 		.video_vblank       (vblank),
 		.video_hsync        (hsync),
 		.video_vsync        (vsync),
+		.video_field        (field),
 		.video_colour,
 		.video_colour_phase,
 		.video_colour_burst,

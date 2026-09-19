@@ -4,11 +4,16 @@
 // 342-0030/342-0046 PROMs: 64 ordinary 14-dot states plus one 16-dot state,
 // 262 lines, and a CPU slot in each state, subject to peripheral waits. In fast
 // mode the CPU may also use the video/refresh slot when neither needs RAM.
+//
+// The Apple /// Plus scan PROM (342-0145-A) and its text interlace switch add
+// a field flip-flop and a 263-line field, which with the ordinary 262-line
+// field makes a 525-line interlaced frame.
 
 module apple3_timing (
 	input logic clk_14m,
 	input logic slow_mode,
 	input logic screen_enable,
+	input logic interlace,
 	input logic peripheral_cycle,
 	input logic rtc_cycle,
 	input logic ram_cycle,
@@ -26,20 +31,25 @@ module apple3_timing (
 	output logic       character_slot,
 	output logic [9:0] h_count,
 	output logic [8:0] v_count,
+	output logic [8:0] scan_line,
 	output logic [6:0] h_state,
 	output logic [3:0] state_dot,
-	output logic       frame_tick
+	output logic       frame_tick,
+	output logic       field
 );
 
 	logic       fast_a_slot;
 	logic       iostop = 1'b0;
 	logic       extended_state;
 	logic [3:0] phase_dot;
-	logic [4:0] scan_vertical;
+	logic       long_field;
 
 	// RRFSH output of Apple's 342-0030 scan-decode PROM. Kept as logic so
 	// the independently supplied binary PROM can verify the complete frame.
-	function automatic logic scan_refresh(input logic [3:0] horizontal, input logic [4:0] vertical, input logic VBL);
+	// The long field of the 342-0145-A never counts line 508, and that PROM
+	// moves one of the lost refresh addresses to the line after it.
+	function automatic logic scan_refresh(input logic [3:0] horizontal, input logic [4:0] vertical, input logic VBL,
+										  input logic longer);
 		logic H2, H3, H4, H5, VA, VB, VC, V0, V1;
 		begin
 			{H5, H4, H3, H2} = horizontal;
@@ -66,7 +76,8 @@ module apple3_timing (
 						   (H2 && !H3 && H4 && VA && !VB && VC && V0) ||
 						   (H2 && H4 && H5 && VA && !VB && VC && V0 && V1 && VBL) ||
 						   (!H2 && !H3 && !H4 && !H5 && VB && VC && V0 && V1 && VBL) ||
-						   (!H3 && !H4 && !H5 && VA && VB && VC && V0 && V1 && VBL);
+						   (!H3 && !H4 && !H5 && VA && VB && VC && V0 && V1 && VBL) ||
+						   (longer && !H2 && !H3 && H4 && !H5 && VA && !VB && VC && V0 && V1 && VBL);
 		end
 	endfunction
 
@@ -96,13 +107,13 @@ module apple3_timing (
 		vblank       = (v_count >= 9'd192);
 		pixel_enable = 1'b1;
 
+		// FIELDIN, pin 18 of the scan PROM, selects the long field when low.
+		long_field     = !field;
 		// The scan PROM adds refresh slots and suppresses others during VBL.
-		// Its vertical counter wraps from 511 to 250 for the final six lines.
-		scan_vertical  = (v_count < 9'd256) ? v_count[4:0] : v_count[4:0] - 5'd6;
 		// G10 retains the preceding scan decode as the counters enter HPE.
 		// HPE forces blanking, but does not disable the refresh latch.
-		refresh_slot   = scan_refresh((h_state == 7'd64) ? 4'hf : h_state[5:2], scan_vertical, vblank);
-		character_slot = (h_state < 7'd64) && scan_character(h_state[5:2], scan_vertical, vblank);
+		refresh_slot   = scan_refresh((h_state == 7'd64) ? 4'hf : h_state[5:2], scan_line[4:0], vblank, long_field);
+		character_slot = (h_state < 7'd64) && scan_character(h_state[5:2], scan_line[4:0], vblank);
 		display_slot   = screen_enable && !vblank && (h_state < 7'd40);
 		fast_a_slot    = !slow_mode && !peripheral_cycle && (!ram_cycle || (!display_slot && !refresh_slot));
 
@@ -138,8 +149,10 @@ module apple3_timing (
 	initial begin
 		h_count   = 10'd0;
 		v_count   = 9'd0;
+		scan_line = 9'd256;
 		h_state   = 7'd0;
 		state_dot = 4'd0;
+		field     = 1'b1;
 	end
 
 	always_ff @(posedge clk_14m) begin
@@ -153,12 +166,28 @@ module apple3_timing (
 			if (h_state == 7'd64) begin
 				h_state <= 7'd0;
 				h_count <= 10'd0;
-				if (v_count == 9'd261) begin
+				// V5..V0 and VC..VA count 256..511 and reload for the lines
+				// before the next picture.  The reload's VB is the PROM's COMP
+				// output, which is VA = 1 on line 511 and makes 250; the long
+				// field's PROM answers 0 there for 248.  COMP also reloads VA
+				// in every extended state, and the long field's 1 on entering
+				// line 508 turns it straight into 509: 263 lines in all.
+				if (scan_line == 9'd511) scan_line <= long_field ? 9'd248 : 9'd250;
+				else if (long_field && scan_line == 9'd507) scan_line <= 9'd509;
+				else scan_line <= scan_line + 1'b1;
+				// v_count is the raster row: 0 on the first picture line.
+				if (scan_line == 9'd255) begin
 					v_count    <= 9'd0;
 					frame_tick <= 1'b1;
 				end else begin
 					v_count <= v_count + 1'b1;
 				end
+				// RFIELD of the 342-0145-A is true at H5..H2 = 0 of line 448
+				// alone, the one horizontal group the extended state makes an
+				// odd five clocks long.  G10 latches it as FIELDOUT and the
+				// switch returns that to FIELDIN, so the pair is a flip-flop
+				// that changes over once a frame as blanking begins.
+				if (scan_line == 9'd447) field <= !field;
 			end else begin
 				h_state <= h_state + 1'b1;
 				h_count <= h_count + 1'b1;
@@ -167,6 +196,10 @@ module apple3_timing (
 			state_dot <= state_dot + 1'b1;
 			h_count   <= h_count + 1'b1;
 		end
+
+		// With the switch open RP10's 1K pull-up on FORCPAGE outweighs R63's
+		// 3K to ground and FIELDIN rests high: the ordinary field, always.
+		if (!interlace) field <= 1'b1;
 	end
 
 endmodule

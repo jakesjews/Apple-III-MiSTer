@@ -19,6 +19,8 @@ module apple3_video (
 	input logic       reset,
 	input logic [9:0] h_count,
 	input logic [8:0] v_count,
+	input logic [8:0] scan_line,
+	input logic       field,
 	input logic [6:0] h_state,
 	input logic [3:0] state_dot,
 	input logic       frame_tick,
@@ -58,6 +60,7 @@ module apple3_video (
 	logic [7:0] prev_low, prev_high;
 
 	logic [7:0] vertical;
+	logic       page2;
 	logic [18:0] primary_address, secondary_address;
 	logic primary_lane, secondary_lane;
 	logic state_end;
@@ -87,10 +90,11 @@ module apple3_video (
 	logic        apple2_hires;
 	logic [3:0] fetch_mode, pixel_mode;
 
-	// V7..V0 of the vertical counter, which runs 256..511 then 250..255.
+	// V7..V0 of the vertical counter, which runs 256..511 then 250..255, or
+	// 248..255 to end the long field of an interlaced pair.
 	// Visible line y is counter value 256 + y, which puts every blanking line
 	// in the top quarter (V7..V6 = 3) where the scanner reaches the holes.
-	assign vertical  = (v_count < 9'd256) ? v_count[7:0] : v_count[7:0] - 8'd6;
+	assign vertical  = scan_line[7:0];
 	assign state_end = (h_state == 7'd64) ? (state_dot == 4'd15) : (state_dot == 4'd13);
 
 	// A pair read in state S is shifted out during state S + 2, so blanking and
@@ -99,7 +103,30 @@ module apple3_video (
 	assign hblank = (h_count < 10'd28) || (h_count >= 10'd588);
 	assign vblank = (v_count >= 9'd192);
 	assign hsync  = (h_count >= 10'd700) && (h_count < 10'd756);
-	assign vsync  = (v_count >= 9'd224) && (v_count < 9'd228);
+
+	// Vertical sync is the run of six broad pulses in the scan PROM's RSYNCH.
+	// The 342-0030, and the Plus PROM's ordinary field, begin it at H = 16 of
+	// line 483, half a line after that line's horizontal pulse, and end it at
+	// H = 8 of line 486.  The Plus PROM's long field holds all of it back 32
+	// states, to begin on the horizontal pulse at H = 48.  The two fields'
+	// pulses are then 262 lines and 33 states apart one way and 262 lines and
+	// 32 states the other, which is the half line that interlaces them.
+	always_comb begin : vertical_sync
+		logic [9:0] first_dot, last_dot;
+
+		first_dot = field ? 10'd252 : 10'd700;
+		last_dot = field ? 10'd140 : 10'd588;
+		vsync     = ((scan_line == 9'd483) && (h_count >= first_dot)) || (scan_line == 9'd484) ||
+			(scan_line == 9'd485) || ((scan_line == 9'd486) && (h_count < last_dot));
+	end
+
+	// FORCPAGE, pin 6 of the mode PROM (342-0032), is pulled high by RP10 and
+	// the interlace switch ties it to the field flip-flop.  Low, it makes every
+	// native mode's outputs those of page 1; the emulation terms ignore it.
+	// The long field therefore always shows page 1 and the other field the
+	// page the program chose: twice the same picture, or pages 1 and 2 on
+	// alternate lines of a 384-line one.
+	assign page2 = video_mode[2] && (field || !native_mode);
 
 	// In emulation VM0/VM1/VM3 are TEXT/MIXED/HIRES, not the native
 	// three-bit mode number. Mixed graphics ends at scan line 160.
@@ -189,7 +216,7 @@ module apple3_video (
 			// Program's "Apple ][ Hires page 2" test and MAME's
 			// apple3_v.cpp, which selects hgr_map (base $2000) for VM2 in
 			// that mode and hgr_map+$2000 in every other graphics mode.
-			graphics_base     = (video_mode[2] ? (apple2_hires ? 15'h2000 : 15'h4000) : 15'h0000) +
+			graphics_base     = (page2 ? (apple2_hires ? 15'h2000 : 15'h4000) : 15'h0000) +
 				{2'b00, graphics_row, text_offset};
 			primary_address = {4'h0, graphics_base};
 			secondary_address = {4'h0, graphics_base} + 19'h02000;
@@ -286,8 +313,8 @@ module apple3_video (
 			case (pixel_mode)
 				4'd0, 4'd1: begin
 					// 40-column text: the other half of the sister pair carries colour.
-					char_code    = video_mode[2] ? pixel_high : pixel_low;
-					colour_byte  = video_mode[2] ? pixel_low : pixel_high;
+					char_code    = page2 ? pixel_high : pixel_low;
+					colour_byte  = page2 ? pixel_low : pixel_high;
 					glyph        = character_ram[{char_code[6:0], glyph_row}];
 					pixel_on     = glyph[glyph_column];
 					invert_pixel = !char_code[7] && (!glyph[7] || flash_count[3]);
@@ -301,7 +328,7 @@ module apple3_video (
 
 				4'd2, 4'd3: begin
 					// 80-column text: page select exchanges the two 40-byte halves.
-					char_code    = (second_char ^ video_mode[2]) ? pixel_high : pixel_low;
+					char_code    = (second_char ^ page2) ? pixel_high : pixel_low;
 					glyph_column = char_dot;
 					glyph        = character_ram[{char_code[6:0], glyph_row}];
 					pixel_on     = glyph[glyph_column];
@@ -341,7 +368,7 @@ module apple3_video (
 				4'd8: begin
 					// Apple II 40x48 lores uses the text pages: one nibble for
 					// each four-scan-line half of a character cell.
-					colour_byte      = video_mode[2] ? pixel_high : pixel_low;
+					colour_byte      = page2 ? pixel_high : pixel_low;
 					colour_index     = glyph_row[2] ? colour_byte[7:4] : colour_byte[3:0];
 					graphics_palette = 1'b1;
 				end

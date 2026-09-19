@@ -25,7 +25,6 @@ module emu (
 	assign LED_POWER      = 2'b00;
 	assign LED_DISK       = 2'b00;
 	assign BUTTONS        = 2'b00;
-	assign VGA_F1         = 1'b0;
 	assign VGA_SCALER     = 1'b0;
 	assign VGA_DISABLE    = 1'b0;
 	assign HDMI_FREEZE    = 1'b0;
@@ -51,7 +50,8 @@ module emu (
 		"O7,Write Protect 2,Off,On;",
 		"OB,Write Protect 3,Off,On;",
 		"OC,Write Protect 4,Off,On;",
-		"O8,Keyboard,Apple ///,/// Plus;",
+		"O8,Model,Apple ///,/// Plus;",
+		"h0OF,Text Interlace,Off,On;",
 		"O9,Serial CTS,Always ready,Host RTS;",
 		"OA,Joystick 1 on,Port B,Port A;",
 		"-;",
@@ -91,6 +91,11 @@ module emu (
 	wire [ 15:0] joystick_analog_1;
 	wire [ 10:0] ps2_key;
 	wire [ 64:0] host_rtc;
+
+	// The Apple /// Plus differs in its keyboard and its text interlace
+	// switch, which the menu offers with that model.
+	wire plus_model = status[8];
+	wire interlace = plus_model && status[15];
 
 	// S0-S3 are the Disk III drives; S4 and S5 are the block card's images.
 	wire [ 5:0] img_mounted;
@@ -132,7 +137,7 @@ module emu (
 		.status            (status),
 		.status_in         (status),
 		.status_set        (1'b0),
-		.status_menumask   (16'd0),
+		.status_menumask   ({15'd0, plus_model}),
 		.info_req          (1'b0),
 		.info              (8'd0),
 
@@ -233,6 +238,7 @@ module emu (
 	wire               core_vblank;
 	wire               core_hsync;
 	wire               core_vsync;
+	wire               core_field;
 	wire        [ 3:0] core_colour;
 	wire        [ 1:0] core_colour_phase;
 	wire               core_colour_burst;
@@ -329,7 +335,8 @@ module emu (
 		.ps2_key           (ps2_key),
 		// The Apple /// Plus keyboard adds a DELETE key; the rest of the
 		// encoder output is the same on both machines.
-		.plus_keymap       (status[8]),
+		.plus_keymap       (plus_model),
+		.interlace         (interlace),
 		// An unopened HPS UART deasserts RTS. The stock ROM requires CTS
 		// ready during its ACIA test, as with the unplugged motherboard port.
 		.serial_rx         (UART_RXD),
@@ -381,6 +388,7 @@ module emu (
 		.video_vblank      (core_vblank),
 		.video_hsync       (core_hsync),
 		.video_vsync       (core_vsync),
+		.video_field       (core_field),
 		.video_colour      (core_colour),
 		.video_colour_phase(core_colour_phase),
 		.video_colour_burst(core_colour_burst),
@@ -419,6 +427,15 @@ module emu (
 		.hsync       (core_hsync_q),
 		.vsync       (core_vsync_q)
 	);
+
+	// The field changes as vertical blanking begins, so the scaler finds it
+	// settled at each field's first line.  F1 marks the lower field, the one
+	// whose sync comes half a line late and whose lines the scaler weaves
+	// into the odd rows; with the switch off the flag rests low and the
+	// picture is progressive.
+	logic field_q = 1'b0;
+	always_ff @(posedge clk_14m) field_q <= interlace && !core_field;
+	assign VGA_F1 = field_q;
 
 	assign LED_USER  = disk_activity || block_activity;
 	assign AUDIO_L   = core_audio;

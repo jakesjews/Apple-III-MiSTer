@@ -26,6 +26,8 @@ behaviour to its source.
   selection, screen blanking and smooth vertical scrolling.
 - The [three video outputs](VIDEO_SOURCES.md): RGB, the NTSC colour encoder
   with a decoding monitor, and the black-and-white output's grey scale.
+- The Apple /// Plus [text interlace](INTERLACE.md): its scan PROM's two
+  fields and the page each one shows.
 - Both 6522 VIAs, the keyboard encoder with its two repeat rates, the cursor
   keys' second contacts and the optional /// Plus DELETE key, the MM58167
   clock, the joysticks' 9708 A/D converter, buttons and latching switches,
@@ -201,6 +203,8 @@ mount the three external drives on the shared transfer bus, and
 saves the rendered 560x192 picture at the end of a run, which is what a
 MiSTer screenshot shows; the text dumps decode display memory instead.
 `--video=color` or `--video=mono` takes it from that [video source](VIDEO_SOURCES.md).
+`--interlace` turns on the /// Plus [text interlace](INTERLACE.md) switch and
+makes that picture two fields woven into 560x384.
 `--wp-trace` logs each write-protect sense read with the motor timing and
 drive 1's protect terms, and `--dump-mem=A000,2000` prints system-bank memory
 for disassembling a loaded program;

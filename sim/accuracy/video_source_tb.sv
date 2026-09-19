@@ -12,11 +12,14 @@ module video_source_tb;
 	wire character_slot, frame_tick;
 	wire [9:0] h_count;
 	wire [8:0] v_count;
+	wire [8:0] scan_line;
+	wire       field;
 	wire [6:0] h_state;
 	wire [3:0] state_dot;
 	apple3_timing timing (
 		.clk_14m          (clk),
 		.slow_mode        (1'b0),
+		.interlace        (1'b0),
 		.screen_enable    (1'b1),
 		.peripheral_cycle (1'b0),
 		.rtc_cycle        (1'b0),
@@ -34,9 +37,11 @@ module video_source_tb;
 		.character_slot,
 		.h_count,
 		.v_count,
+		.scan_line,
 		.h_state,
 		.state_dot,
-		.frame_tick
+		.frame_tick,
+		.field
 	);
 
 	wire [15:0] video_q;
@@ -65,9 +70,11 @@ module video_source_tb;
 		.reset          (1'b0),
 		.h_count,
 		.v_count,
+		.scan_line,
 		.h_state,
 		.state_dot,
 		.frame_tick,
+		.field,
 		.screen_enable  (1'b1),
 		.native_mode,
 		.video_mode,

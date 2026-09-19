@@ -1,5 +1,6 @@
 #include "Vcore_tb.h"
 #include "verilated.h"
+#include <algorithm>
 #include <array>
 #include <cstdlib>
 #include <cstring>
@@ -48,8 +49,11 @@ int main(int argc, char **argv) {
 	// --frame-out=PATH: after the run, write the next displayed frame as a
 	// 560x192 PPM, the picture the core produces rather than text memory.
 	// --video=rgb|color|mono selects the monitor it is taken from.
+	// --interlace turns on the Apple /// Plus text interlace switch; the frame
+	// is then two fields woven into 560x384, the upper field on the even rows.
 	std::string frame_out;
 	unsigned video_source = 0;
+	bool interlace = false;
 	// --dump-mem=ADDR,LEN (hex): hex dump of system-bank memory ($0000-$1FFF or
 	// $A000-$FFFF) at the end of the run, for disassembling a loaded program.
 	unsigned dump_addr = 0, dump_len = 0;
@@ -88,6 +92,7 @@ int main(int argc, char **argv) {
 		if (option.rfind("--frame-out=", 0) == 0) frame_out = option.substr(12);
 		if (option == "--video=color") video_source = 1;
 		if (option == "--video=mono") video_source = 2;
+		if (option == "--interlace") interlace = true;
 		if (option.rfind("--dump-mem=", 0) == 0) {
 			dump_addr = std::strtoul(argv[i] + 11, nullptr, 16);
 			const char *comma = std::strchr(argv[i] + 11, ',');
@@ -146,6 +151,7 @@ int main(int argc, char **argv) {
 	top.ps2_key = 0;
 	top.plus_keymap = plus_keymap;
 	top.video_source = video_source;
+	top.interlace = interlace;
 	top.probe_addr = 0;
 	top.probe_font_addr = 0;
 	top.joy_a_x = top.joy_a_y = top.joy_b_x = top.joy_b_y = 0x80;
@@ -573,16 +579,38 @@ int main(int argc, char **argv) {
 		auto clock = [&]() { prepare_storage(); top.clk ^= 1; top.eval(); finish_storage(); };
 		while (!top.vblank) clock();
 		while (top.vblank) clock();
-		std::vector<uint8_t> frame;
-		unsigned lines = 0, width = 0, line_width = 0;
-		bool in_line = false;
-		while (!top.vblank) {
-			clock();
-			if (!top.clk) continue;
-			if (!top.frame_hblank) {
-				frame.push_back(top.frame_r); frame.push_back(top.frame_g); frame.push_back(top.frame_b);
-				++line_width; in_line = true;
-			} else if (in_line) { in_line = false; ++lines; width = line_width; line_width = 0; }
+		unsigned lines = 0, width = 0;
+		bool upper = false;
+		auto capture = [&]() {
+			std::vector<uint8_t> field;
+			unsigned line_width = 0;
+			bool in_line = false;
+			lines = 0;
+			upper = top.field;
+			while (!top.vblank) {
+				clock();
+				if (!top.clk) continue;
+				if (!top.frame_hblank) {
+					field.push_back(top.frame_r); field.push_back(top.frame_g); field.push_back(top.frame_b);
+					++line_width; in_line = true;
+				} else if (in_line) { in_line = false; ++lines; width = line_width; line_width = 0; }
+			}
+			return field;
+		};
+		std::vector<uint8_t> frame = capture();
+		if (interlace) {
+			const bool first_upper = upper;
+			while (top.vblank) clock();
+			const std::vector<uint8_t> second = capture();
+			if (upper == first_upper) std::printf("interlace: both fields report field %u\n", upper);
+			const std::vector<uint8_t> first = frame;
+			const std::size_t row = static_cast<std::size_t>(width) * 3;
+			frame.assign(row * lines * 2, 0);
+			for (unsigned y = 0; y < lines; ++y) {
+				std::copy_n(first.begin() + row * y, row, frame.begin() + row * (2 * y + (first_upper ? 0 : 1)));
+				std::copy_n(second.begin() + row * y, row, frame.begin() + row * (2 * y + (first_upper ? 1 : 0)));
+			}
+			lines *= 2;
 		}
 		std::ofstream output(frame_out, std::ios::binary);
 		output << "P6\n" << width << " " << lines << "\n255\n";

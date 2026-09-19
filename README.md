@@ -7,6 +7,7 @@ usable one: most software tried so far runs well.
 
 - 256 KiB RAM, every native video mode and the Apple II modes
 - RGB, color composite with Apple II artifact color, and monochrome composite
+- Apple /// Plus model with its 560 × 384 text interlace
 - Four floppy drives: WOZ, DSK, DO, PO, NIB and 2MG, writable and formattable
 - A hard-disk card with two images, bootable without a floppy
 - Keyboard, joysticks, clock, audio and serial
@@ -93,8 +94,10 @@ combinations to a single character. A held arrow key closes the second contact
 that its keyswitch has on real hardware, so it speeds up the same way and reads
 as Solid Apple while it is down.
 
-**Keyboard** in the OSD selects the Apple /// Plus keyboard, which adds that
-machine's one extra key, DELETE, on the host Delete key.
+**Model** in the OSD selects the Apple /// Plus. It adds that machine's one
+extra key, DELETE, on the host Delete key, and its **Text Interlace** switch:
+two fields half a line apart for 384 lines, showing pages 1 and 2 merged when
+a program selects page 2, as on the real machine. [Details](docs/INTERLACE.md).
 
 **Video** in the OSD selects the machine's RGB, NTSC color or black-and-white
 output. Apple II hires is in color only on **Color Composite**, as on the real
@@ -161,9 +164,10 @@ Existing partial implementations are noted where they provide a starting point.
       the monochrome output's sixteen-step gray scale.
       [Signal model and tests](docs/VIDEO_SOURCES.md).
 
-- [ ] **III Plus model with authentic interlace.** Reuse the existing clock and
-      keyboard work. Implement field timing and display-memory behavior rather
-      than simply doubling lines.
+- [x] **III Plus model with authentic interlace.** The Plus scan PROM's field
+      flip-flop, its 263-line field and half-line sync, and the FORCPAGE wiring
+      that shows page 1 in one field and the selected page in the other.
+      [Hardware and tests](docs/INTERLACE.md).
 
 - [ ] **Apple II Mouse Interface card.** Use host mouse input and validate against
       an existing native mouse-driver configuration.

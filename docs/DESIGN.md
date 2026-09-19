@@ -169,6 +169,9 @@ Sources (abbreviations used below):
 * Blanking: HBL for the 25 non-display states, VBL for 70 lines. E-VIA PB6 = composite
   blanking (1 = blanking), CB1/CB2 = VBL (1 = in vertical blanking). [SOS kernel VIDEO
   routine counts BL pulses with T2; SOS interrupt table "E.CB2 VBL+, E.CB1 VBL-"]
+* Apple /// Plus text interlace (OSD status bits 8 and 15): the 342-0145-A scan
+  PROM's field flip-flop, a 263-line field with sync half a line late, and
+  FORCPAGE forcing page 1 in that field. See [INTERLACE.md](INTERLACE.md).
 
 ## I/O ($C000-$C0FF, only with env bit 6)
 
@@ -357,9 +360,9 @@ keeps an ordinary-key bitmap for ANY-key-down. Validity is separate from the
 encoded byte, so Control-Shift-2 emits a strobed NUL. Duplicate host make events
 do not restart repeat; after releasing the newest key, another held key can repeat.
 
-OSD status bit 8 selects the Apple /// Plus keyboard, which is the original's 61
-main keys plus a DELETE key; both machines share the same encoder codes and the
-same SOS keyboard layouts. DELETE arrives on the host Delete key, which otherwise
+OSD status bit 8, the Apple /// Plus model, selects its keyboard, which is the
+original's 61 main keys plus a DELETE key; both machines share the same encoder
+codes and the same SOS keyboard layouts. DELETE arrives on the host Delete key, which otherwise
 duplicates keypad period. Its encoder code is $FF: DEL with the special-code flag,
 because the console driver only rewrites codes without that flag, and the layout
 table is documented as never defining DELETE. [PLUS, SOS]
