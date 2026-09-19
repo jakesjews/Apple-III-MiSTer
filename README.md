@@ -192,35 +192,44 @@ Existing partial implementations are noted where they provide a starting point.
 
 This core stands on work from the MiSTer and Apple /// communities:
 
-- **Alexey Melnikov (Sorgelig)** for the MiSTer framework, the floppy track
-  cache and the Apple II MiSTer core the disk integration follows.
+- **sorgelig** for the MiSTer framework and Main, the floppy track cache and
+  the Apple II MiSTer core the disk integration follows.
+- **alanswx** for the WOZ drive and media implementation from Apple-II_MiSTer
+  (see its [provenance and license](rtl/disk/woz/README.md)), and for the
+  Apple-family disk codec and DSK support in Main that the companion Main
+  extends.
+- **Newsdee** for Main's Apple II WOZ support and floppy fixes, which the
+  companion Main builds on.
 - **Stephen A. Edwards** for the Disk II drive model from his Apple II FPGA and
   for his article on the Apple II clock generator.
-- **Gyorgy Szombathelyi (gyurco)** for the 6551 UART core, Disk II write
-  support and his T65 fixes.
-- **Gideon Zweijtzer (GideonZ)** for the 6522 VIA.
-- **Daniel Wallner, Mike Johnson (MikeJ), Wolfgang Scherr and Morten Leikvoll**
-  for the T65 6502 core.
-- **Till Harbaum** for the HPS I/O interface the MiSTer framework grew from.
-- **Rob Justice (robjustice)** for the ca65 transcription of the boot ROM
-  listing, SOS hard-disk boot work and his Apple /// tools and write-ups.
-- **Paul Hagstrom** for `diskhero`, whose commented source documents the display
+- **gyurco** for the 6551 UART core, Disk II write support and his T65 fixes.
+- **GideonZ** for the 6522 VIA.
+- **Daniel Wallner, MikeJ, WoS and Morten Leikvoll** for the T65 6502 core.
+- **harbaum** for the HPS I/O interface the MiSTer framework grew from.
+- **robjustice** for the ca65 transcription of the boot ROM listing, the
+  Problock3 driver and soshdboot ROM the block card runs, A3Driverutil and his
+  Apple /// write-ups.
+- **steven-a-wilson** and the **AppleWin** team for the ProDOS hard-disk
+  interface the block card's registers follow.
+- **paulhagstrom** for `diskhero`, whose commented source documents the display
   modes, character download and extended addressing on real hardware.
 - **ThorstenBr** for the Apple /// custom ROM and Disk II interface
   documentation.
-- **BBC NewBrain** for the Apple /// keyboard encoder replacement project, which
+- **BBCNewBrain** for the Apple /// keyboard encoder replacement project, which
   documents the key matrix.
 - **Patrick Schaefer** for decoding the motherboard logic PROMs.
 - **John Jeppson** for his 1982 and 1983 Softalk articles on the Apple ///
   memory system.
-- **Nathan Woods, R. Belmont and the MAME team** for the `apple3` driver used as
-  a cross-check.
-- **Klaus Dormann** for the 6502 functional test suite.
-- **David Schmidt** for apple3.org, and the bitsavers and Asimov archives for
-  the manuals, schematics and PROM dumps.
-
-- **Alan Steremberg** for the WOZ drive and media implementation from
-  Apple-II_MiSTer. See its [provenance and license](rtl/disk/woz/README.md).
+- **npwoods, rb6502 and the MAME team** for the `apple3` driver, MOS 6551 and
+  CFFA card models used as cross-checks.
+- **Klaus2m5** for the 6502 functional test suite.
+- **Applesauce** for the WOZ format reference.
+- The **AppleCommander** team for the disk-image tool behind the block-card
+  test media.
+- **wizzomafizzo** for Zaparoo, which drives the keystrokes and screenshots in
+  the hardware tests.
+- **david-schmidt** for apple3.org, and the bitsavers, Asimov and
+  vintagecomputer.ca archives for the manuals, schematics and PROM dumps.
 
 Imported components retain their own license notices, including the
 [GPL-3.0-or-later WOZ implementation](rtl/disk/woz/README.md).
