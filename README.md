@@ -171,6 +171,33 @@ Existing partial implementations are noted where they provide a starting point.
       that shows page 1 in one field and the selected page in the other.
       [Hardware and tests](docs/INTERLACE.md).
 
+- [ ] **Neutral RGB output.** Remove the 80-column-only green override so
+      monochrome RGB modes remain white on black. Keep green phosphor as an
+      optional monitor presentation, and update the video tests and documentation.
+
+- [ ] **Display monitor presets.** Separate source accuracy from presentation:
+      offer Reference, Monitor /// Green, Amber and Color TV presets rather than
+      individual tint, saturation or bandwidth controls. Apply monochrome presets
+      to the complete B/W signal, preserving its gray levels in every mode.
+      Reuse MiSTer's gamma and video-processing presets for generic softness,
+      scanlines and masks instead of duplicating those controls; document companion
+      settings without overriding user choices. Keep source-specific NTSC decoding
+      in the core and a clean Direct Video path for external scalers.
+
+- [ ] **PROM-backed memory-map validation.** Build an independent reference from
+      the stock 5 V/256 KiB board's 342-0061 and 342-0063 decoder dumps, the
+      342-0043 status and 342-0056 byte-selection logic, and schematic latch/mux
+      wiring. Record dump hashes and test reads/writes across map boundaries,
+      including the special $8F map and the hypothesized $87 alias, before changing
+      the MMU. Separate documented behavior from unverified aliases and keep
+      third-party 512 KiB decoding distinct from the stock board.
+
+- [ ] **Upstream validated MAME fixes.** Turn independently verified differences
+      into small patches with original-source references and minimal guest
+      diagnostics, starting with keyboard, text and joystick decoding. Treat
+      timing and III Plus interlace as separate follow-ups, and resolve memory
+      aliases from hardware evidence rather than emulator agreement.
+
 - [ ] **Apple II Mouse Interface card.** Use host mouse input and validate against
       an existing native mouse-driver configuration.
 
@@ -178,8 +205,6 @@ Existing partial implementations are noted where they provide a starting point.
       RAM/MMU support with an external-memory backend and a usable 512 KiB option.
       Preserve paired-byte reads and guest-visible memory timing, and budget for
       future card RAM and disk buffers.
-
-- [ ] **Display Monitor Modes.** Similar to the Apple II core.
 
 - [ ] **PCPI Appli-Card.** Add it as the first CP/M option and validate its disk
       services against the chosen storage configuration.
