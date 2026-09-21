@@ -213,8 +213,18 @@ Existing partial implementations are noted where they provide a starting point.
 
 - [ ] **PAL/NTSC Toggle** Allow selecting NTSC or PAL video.
 
+- [ ] **Scaling Options** Options are Normal, V-Integer, Narrower HV-Integer, Wider HV-Integer.
+
+- [ ] **Interlacing Options** Bob or Weave. Use the framework.
+
+- [ ] **Aspect Ratio Options** Original, Full Screen, [ARC1], [ARC2]. Original is Default.
+
+- [ ] **NTSC Composite Comb Filter Option** Off by default.
+
 - [ ] **Apple II Mouse Interface card.** Use host mouse input and validate against
       an existing native mouse-driver configuration.
+      
+- [ ] **Save States**
 
 - [ ] **External memory and optional 512 KiB RAM.** Build on the parameterized
       RAM/MMU support with an external-memory backend and a usable 512 KiB option.
