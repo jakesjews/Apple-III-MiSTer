@@ -35,7 +35,7 @@ module emu (
 	// 0         1         2         3          4         5         6
 	// 01234567890123456789012345678901 23456789012345678901234567890123
 	// 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-	// X  XXXXXXXXXXXXXXXXXXXX
+	// X  XXXXXXXXXXXXXXXXXXXXXXX
 	//
 	// Aspect ratio is status[122:121], where the Template keeps it.
 
@@ -67,6 +67,8 @@ module emu (
 		"h2O[22],Deinterlacing,Weave,Bob;",
 		"O9,Serial CTS,Always ready,Host RTS;",
 		"OA,Joystick 1 on,Port B,Port A;",
+		"O[23],Mouse Card,On,Off;",
+		"O[25:24],Mouse Speed,Normal,Fast,Faster,Fastest;",
 		"-;",
 		"R0,Reset;",
 		"J,Button,Switch;",
@@ -103,6 +105,7 @@ module emu (
 	wire [ 15:0] joystick_analog_0;
 	wire [ 15:0] joystick_analog_1;
 	wire [ 10:0] ps2_key;
+	wire [ 24:0] ps2_mouse;
 	wire [ 64:0] host_rtc;
 
 	// "Video Standard" PAL is Apple's Euro system: the 50 Hz scan PROM,
@@ -177,6 +180,7 @@ module emu (
 		.joystick_4_rumble  (16'd0),
 		.joystick_5_rumble  (16'd0),
 		.ps2_key            (ps2_key),
+		.ps2_mouse          (ps2_mouse),
 		.ps2_kbd_led_status (3'd0),
 		.ps2_kbd_led_use    (3'd0),
 
@@ -304,11 +308,12 @@ module emu (
 
 	// Slot 1 holds the virtual block-storage card, a ProDOS block-mode
 	// device that SOS reaches through the Problock3 driver or the soshdboot
-	// ROM. Its two drives are the hard-disk images on S4 and S5. Slots 2-4
-	// are empty.
+	// ROM. Its two drives are the hard-disk images on S4 and S5. Slot 4 holds
+	// the Apple II Mouse Interface card, where SOS's mouse driver is usually
+	// configured to find it. Slots 2 and 3 are empty.
 	/* verilator lint_off UNUSEDSIGNAL */
-	wire [15:0] slot_addr;  // the card decodes the page offset only
-	wire [3:0] slot_device_select, slot_io_select;  // slots 2-4 are empty
+	wire [15:0] slot_addr;  // the cards decode the page offset only
+	wire [3:0] slot_device_select, slot_io_select;  // slots 2 and 3 are empty
 	/* verilator lint_on UNUSEDSIGNAL */
 	wire [7:0] slot_data_out;
 	wire slot_cpu_read, slot_cycle, slot_reset;
@@ -354,6 +359,29 @@ module emu (
 	assign sd_buff_din[4] = block_din;
 	assign sd_buff_din[5] = block_din;
 
+	// Like any card, the mouse card goes in or comes out with the machine
+	// off: the "Mouse Card" option takes effect at the next reset.
+	wire [7:0] mouse_data;
+	wire mouse_oe, mouse_irq_n;
+	logic mouse_installed = 1'b0;
+	always_ff @(posedge clk_14m) if (slot_reset) mouse_installed <= !status[23];
+
+	apple3_mouse_card mouse_card (
+		.clk          (clk_14m),
+		.reset        (slot_reset || !mouse_installed),
+		.cycle        (slot_cycle),
+		.addr         (slot_addr[7:0]),
+		.cpu_read     (slot_cpu_read),
+		.data_in      (slot_data_out),
+		.device_select(slot_device_select[3]),
+		.io_select    (slot_io_select[3]),
+		.data_out     (mouse_data),
+		.data_oe      (mouse_oe),
+		.irq_n        (mouse_irq_n),
+		.ps2_mouse    (ps2_mouse),
+		.speed        (status[25:24])
+	);
+
 	apple3_core machine (
 		.clk_14m           (clk_14m),
 		.reset             (core_reset),
@@ -381,9 +409,9 @@ module emu (
 		.joy_a_switch      (stick_switch[!port_b]),
 		.joy_b_button      (stick_button[port_b]),
 		.joy_b_switch      (stick_switch[port_b]),
-		.slot_data_in      ({24'hffffff, block_data}),
-		.slot_data_oe      ({3'b000, block_oe}),
-		.slot_irq_n        (4'b1111),
+		.slot_data_in      ({mouse_data, 16'hffff, block_data}),
+		.slot_data_oe      ({mouse_oe, 2'b00, block_oe}),
+		.slot_irq_n        ({mouse_irq_n, 3'b111}),
 		.slot_nmi_n        (4'b1111),
 		.slot_ready        ({3'b111, block_ready}),
 		.slot_addr         (slot_addr),

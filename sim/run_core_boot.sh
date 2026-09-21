@@ -20,7 +20,10 @@ sources=(
 	rtl/apple3_ram.sv rtl/apple3_rom.sv rtl/apple3_extaddr.sv
 	rtl/apple3_keyboard.sv rtl/apple3_io.sv rtl/apple3_rtc.sv
 	rtl/acia/gen_uart.v rtl/apple3_acia.sv rtl/apple3_disk.sv rtl/apple3_video.sv rtl/apple3_composite.sv
-	rtl/apple3_slots.sv rtl/apple3_slot_rom.sv rtl/cards/apple3_block_card.sv rtl/apple3_core.sv
+	rtl/apple3_slots.sv rtl/apple3_slot_rom.sv rtl/cards/apple3_block_card.sv
+	rtl/cards/mouse/pia6821.v rtl/cards/mouse/jt6805/jt6805_alu.v rtl/cards/mouse/jt6805/jt6805_ctrl.v
+	rtl/cards/mouse/jt6805/jt6805_regs.v rtl/cards/mouse/jt6805/jt6805.v
+	rtl/cards/mouse/jt6805/jtframe_6805mcu.v rtl/cards/apple3_mouse_card.sv rtl/apple3_core.sv
 	# Absolute: Verilator before 5.03x looks for it from --Mdir.
 	"$PWD/sim/coretest/main.cpp"
 )
@@ -29,5 +32,6 @@ verilator --cc --exe --build -j 4 -O2 --top-module core_tb \
 	-CFLAGS "-O3" \
 	-MAKEFLAGS "OPT_FAST=-O3 OPT_SLOW=-O3 OPT_GLOBAL=-O3" \
 	-Wno-fatal -Wno-WIDTH -Wno-UNUSED -Wno-DECLFILENAME \
+	+incdir+rtl/cards/mouse/jt6805 \
 	--Mdir sim/coretest/obj_dir "${sources[@]}" -o Vcore_tb
 sim/coretest/obj_dir/Vcore_tb "$@"

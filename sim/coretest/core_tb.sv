@@ -10,6 +10,9 @@ module core_tb #(
 	output wire         serial_rts_n,
 	output wire         serial_dtr_n,
 	input  logic [10:0] ps2_key,
+	// The mouse card in slot 4, with --mouse-card, and MiSTer's mouse report.
+	input  logic        mouse_card_installed,
+	input  logic [24:0] ps2_mouse,
 	input  logic        plus_keymap,
 	input  logic        ram_128k,
 	// The Apple /// Plus text interlace switch, and the field it is showing.
@@ -39,14 +42,14 @@ module core_tb #(
 	input  logic [ 5:0] image_change,
 	input  logic [63:0] image_size,
 	input  logic        image_readonly,
-	output wire  [31:0] sd_lba         [6],
-	output wire  [ 5:0] sd_blk_cnt     [6],
+	output wire  [31:0] sd_lba              [6],
+	output wire  [ 5:0] sd_blk_cnt          [6],
 	output wire  [ 5:0] sd_rd,
 	sd_wr,
 	input  logic [ 5:0] sd_ack,
 	input  logic [13:0] sd_buff_addr,
 	input  logic [ 7:0] sd_buff_dout,
-	output wire  [ 7:0] sd_buff_din    [6],
+	output wire  [ 7:0] sd_buff_din         [6],
 	input  logic        sd_buff_wr,
 	output wire         block_activity,
 	// Rendered picture for --frame-out.
@@ -198,6 +201,25 @@ module core_tb #(
 	assign sd_buff_din[4] = block_din;
 	assign sd_buff_din[5] = block_din;
 
+	// The mouse card sits in slot 4, as in the MiSTer top.
+	wire [7:0] mouse_data;
+	wire mouse_oe, mouse_irq_n;
+	apple3_mouse_card mouse_card (
+		.clk,
+		.reset        (slot_reset || !mouse_card_installed),
+		.cycle        (slot_cycle),
+		.addr         (slot_addr[7:0]),
+		.cpu_read     (slot_cpu_read),
+		.data_in      (slot_data_out),
+		.device_select(slot_device_select[3]),
+		.io_select    (slot_io_select[3]),
+		.data_out     (mouse_data),
+		.data_oe      (mouse_oe),
+		.irq_n        (mouse_irq_n),
+		.ps2_mouse,
+		.speed        (2'd3)
+	);
+
 	apple3_core #(
 		.ROM_INIT_FILE (ROM_FILE),
 		.ROM_INIT_START(4096)
@@ -224,9 +246,9 @@ module core_tb #(
 		.joy_a_switch,
 		.joy_b_button,
 		.joy_b_switch,
-		.slot_data_in       ({24'hffffff, block_data}),
-		.slot_data_oe       ({3'b000, block_oe}),
-		.slot_irq_n         (4'b1111),
+		.slot_data_in       ({mouse_data, 16'hffff, block_data}),
+		.slot_data_oe       ({mouse_oe, 2'b00, block_oe}),
+		.slot_irq_n         ({mouse_irq_n, 3'b111}),
 		.slot_nmi_n         (4'b1111),
 		.slot_ready         ({3'b111, block_ready}),
 		.slot_addr          (slot_addr),

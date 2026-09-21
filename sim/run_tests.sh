@@ -51,4 +51,5 @@ vvp sim/obj_dir/acia_baud_tb
 ./sim/memmap/run.sh
 ./sim/slots/run.sh
 ./sim/blockdev/run.sh
+./sim/mouse/run.sh
 ./sim/timing/run.sh

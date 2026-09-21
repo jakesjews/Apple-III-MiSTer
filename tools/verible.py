@@ -15,6 +15,7 @@ SOURCES = [
     ":(exclude)sys/**",
     ":(exclude)rtl/acia/**",
     ":(exclude)rtl/disk/woz/**",
+    ":(exclude)rtl/cards/mouse/**",
     ":(exclude)rtl/pll.v",
     ":(exclude)rtl/pll/**",
     ":(exclude)sim/gen/**",

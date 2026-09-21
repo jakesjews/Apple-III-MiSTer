@@ -42,7 +42,9 @@ behaviour to its source.
   ROM latches, individual IRQ status, VIA interrupt delivery and masked NMIs.
 - A [virtual block-storage card](BLOCK_STORAGE.md) in slot 1: ProDOS
   block-mode firmware and two hard-disk images, used by SOS through the
-  Problock3 driver and bootable with the soshdboot ROM. Slots 2–4 are empty.
+  Problock3 driver and bootable with the soshdboot ROM.
+- Apple's [mouse card](MOUSE.md) in slot 4, its 68705 running Apple's program.
+  Slots 2 and 3 are empty.
 
 ## Boot ROM details
 
@@ -109,8 +111,8 @@ and headers under `rtl/` and `sim/`, including new, untracked files. Ignored fil
 generated PLL/simulation output and VHDL are excluded. The MiSTer `sys/` framework
 is always excluded.
 
-Formatting also excludes all vendored files in `rtl/acia/` and `rtl/disk/woz/`
-to preserve readable diffs against upstream. Explicit file selection uses the same scope,
+Formatting also excludes all vendored files in `rtl/acia/`, `rtl/disk/woz/` and
+`rtl/cards/mouse/` to preserve readable diffs against upstream. Explicit file selection uses the same scope,
 so even `make format FILES='rtl/acia/gen_uart.v'` is rejected without changes.
 
 The configuration follows the [MiSTer development principles](https://mister-devel.github.io/MkDocs_MiSTer/developer/principles/)
@@ -154,8 +156,9 @@ Modules without an explicit timescale use `1ns/1ps`.
 
 The MiSTer `sys/` modules are loaded to check their connections, with diagnostics
 suppressed by `lint/exclusions.vlt`. The GHDL-generated T65/VIA code and lint-only
-PLL stub are also excluded from diagnostics. Vendored Verilog in `rtl/acia/`
-and `rtl/disk/woz/`, including local modifications, has lint warnings suppressed.
+PLL stub are also excluded from diagnostics. Vendored Verilog in `rtl/acia/`,
+`rtl/disk/woz/` and `rtl/cards/mouse/`, including local modifications, has lint
+warnings suppressed.
 Those modules remain loaded to check connections from project RTL. The formatter
 also excludes these directories. Diagnostics involving both project and excluded
 vendor code can also be suppressed, such as the disk engine's mixed-reset warning.
@@ -188,15 +191,15 @@ packages (Icarus 12, Verilator 5.020, GHDL 4.1).
 
 ```sh
 make check-tools   # what is installed, and the brew/apt line for what is not
-make test-quick    # unit, disk, memory map, slot, block card and timing benches, about a minute
+make test-quick    # unit, disk, memory map, slot, block card, mouse card and timing benches, about a minute
 make test          # everything that needs no ROM image, about ten minutes
 make boot ROM=apple3.rom                                   # stock ROM to the disk bootstrap
 make boot ROM=apple3.rom DISK=system.woz ARGS=--to-menu    # SOS to the Utilities menu, about five minutes
 ```
 
-Nothing copyrighted is in the repository, so the tests that compare against
-Apple's chips take their images from the environment and skip when one is
-missing; `make test` passes on a fresh clone. The boot test has no fallback.
+Apart from the [mouse card's two ROMs](MOUSE.md), no Apple ROM or PROM is in
+the repository, so the tests that compare against Apple's chips take their
+images from the environment and skip when one is missing; `make test` passes on a fresh clone. The boot test has no fallback.
 
 | Variable | File | Used by | Source |
 |---|---|---|---|
@@ -222,6 +225,7 @@ bash sim/accuracy/run.sh                # documentation-derived checks
 ./sim/joystick/run.sh                   # joystick read methods at every position
 ./sim/timing/run.sh                     # CPU peripheral waits, RDY, RMW and NMI
 ./sim/blockdev/run.sh                   # block card registers, firmware, real-CPU driver calls
+./sim/mouse/run.sh                      # mouse card under SOS's mouse driver sequences
 APPLE3_ROM=apple3.rom ./sim/run_core_boot.sh 30000000
 APPLE3_ROM=apple3.rom ./sim/run_core_boot.sh 400000000 system.woz --woz
 APPLE3_ROM=apple3.rom ./sim/run_core_boot.sh 1400000000 sysutils.woz --keytest
@@ -239,6 +243,11 @@ MiSTer screenshot shows; the text dumps decode display memory instead.
 `--video=color` or `--video=mono` takes it from that [video source](VIDEO_SOURCES.md),
 and `--monitor=green`, `amber` or `tv` from that monitor on it.
 `--ram128k` runs the 128 KiB memory board.
+`--mouse-card` puts the [mouse card](MOUSE.md) in slot 4, and the `--keys`
+script then takes `mouse:DX:DY` for a host mouse report, `mouse:DX:DY:N` for N
+of them a sixtieth of a second apart, and `button:1` or `button:0` for its
+button. `--mouse-trace` prints the bytes that cross the card's PIA port A: the
+driver's commands and the 68705's answers.
 `--interlace` turns on the /// Plus [text interlace](INTERLACE.md) switch and
 makes that picture two fields woven into 560x384.
 `--pal` fits the Euro system's [50 Hz scan PROM](PAL.md).

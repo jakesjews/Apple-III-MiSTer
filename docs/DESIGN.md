@@ -213,7 +213,7 @@ Sources (abbreviations used below):
 | $C064/5, $C06C/D | slot IRQ status (bit 7, negative logic) |
 | $C066/E | A/D RAMP STOP (bit 7 = 1 while the capacitor is above the threshold) |
 | $C070-7F | MM58167 RTC, register selected by the zero page register |
-| $C090-CF | slots 1-4 device select (reusable card bus); $C090-9F is the [block-storage card](BLOCK_STORAGE.md) |
+| $C090-CF | slots 1-4 device select (reusable card bus); $C090-9F is the [block-storage card](BLOCK_STORAGE.md), $C0C0-CF the [mouse card](MOUSE.md) |
 | $C0D0-7 | drive select A0/A1, internal enable, side 2 |
 | $C0D8/9 | smooth scroll off/on |
 | $C0DA/B | character download off/on |

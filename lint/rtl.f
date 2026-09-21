@@ -8,6 +8,7 @@
 lint/exclusions.vlt
 +incdir+lint/gen
 +incdir+sys
++incdir+rtl/cards/mouse/jt6805
 -y sys
 // The Hq2x module name does not match its lowercase library filename.
 sys/hq2x.sv
@@ -44,5 +45,12 @@ rtl/apple3_composite.sv
 rtl/apple3_slots.sv
 rtl/apple3_slot_rom.sv
 rtl/cards/apple3_block_card.sv
+rtl/cards/mouse/pia6821.v
+rtl/cards/mouse/jt6805/jt6805_alu.v
+rtl/cards/mouse/jt6805/jt6805_ctrl.v
+rtl/cards/mouse/jt6805/jt6805_regs.v
+rtl/cards/mouse/jt6805/jt6805.v
+rtl/cards/mouse/jt6805/jtframe_6805mcu.v
+rtl/cards/apple3_mouse_card.sv
 rtl/apple3_core.sv
 Apple-III.sv

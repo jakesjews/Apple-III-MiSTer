@@ -45,7 +45,6 @@ lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin
 lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'ps2_mouse_data_out'"
 lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'ps2_mouse_clk_in'"
 lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'ps2_mouse_data_in'"
-lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'ps2_mouse'"
 lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'ps2_mouse_ext'"
 lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'direct_video'"
 lint_off -rule PINMISSING -file "Apple-III.sv" -match "*Instance has missing pin: 'ioctl_upload'"
@@ -110,6 +109,11 @@ lint_off -rule UNUSEDSIGNAL -file "rtl/apple3_core.sv" -match "*Signal is not us
 // supports the optional 512 KiB configuration, which consumes the extra bit.
 lint_off -rule UNUSEDSIGNAL -file "rtl/apple3_ram.sv" -match "*Bits of signal are not used: 'cpu_addr'[17]*"
 lint_off -rule UNUSEDSIGNAL -file "rtl/apple3_ram.sv" -match "*Bits of signal are not used: 'video_addr'[17]*"
+// The mouse card takes a report's movement and left button, leaves PB0 of its
+// PIA to the ROM page logic's neighbour, and wires only PB6 of the 68705's port.
+lint_off -rule UNUSEDSIGNAL -file "rtl/cards/apple3_mouse_card.sv" -match "*Bits of signal are not used: 'ps2_mouse'[7:6,3:1]*"
+lint_off -rule UNUSEDSIGNAL -file "rtl/cards/apple3_mouse_card.sv" -match "*Bits of signal are not used: 'pia_pb_out'[0]*"
+lint_off -rule UNUSEDSIGNAL -file "rtl/cards/apple3_mouse_card.sv" -match "*Bits of signal are not used: 'mcu_pb_out'[7,5:0]*"
 // A repeat is already qualified by held_key_valid; only its character is used.
 lint_off -rule UNUSEDSIGNAL -file "rtl/apple3_keyboard.sv" -match "*Bits of signal are not used: 'repeat_translation'[8]*"
 // Host RTC padding and reserved BCD bits are intentionally discarded.
@@ -143,6 +147,13 @@ lint_off -rule UNOPTFLAT -file "sys/*"
 // checks, but suppress their lint warnings, including in locally modified code.
 lint_off -file "rtl/acia/*"
 lint_off -file "rtl/disk/woz/*"
+lint_off -file "rtl/cards/mouse/*"
+lint_off -file "rtl/cards/mouse/jt6805/*"
+// With Verilator 5.052 a plain -file waiver does not reach these three in the
+// jt6805 files; one with a message match does.
+lint_off -rule UNUSEDSIGNAL -file "rtl/cards/mouse/jt6805/*" -match "*"
+lint_off -rule UNUSEDPARAM -file "rtl/cards/mouse/jt6805/*" -match "*"
+lint_off -rule EOFNEWLINE -file "rtl/cards/mouse/jt6805/*" -match "*"
 
 // GHDL output is generated from the vendored VHDL and our T65 wrapper.
 lint_off -file "sim/gen/*"

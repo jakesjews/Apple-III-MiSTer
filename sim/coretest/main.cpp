@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
 	// --dump-mem=ADDR,LEN (hex): hex dump of system-bank memory ($0000-$1FFF or
 	// $A000-$FFFF) at the end of the run, for disassembling a loaded program.
 	unsigned dump_addr = 0, dump_len = 0;
-	bool key_test = false, warm_reset = false, to_menu = false, disk_trace = false, trace_all = false;
+	bool mouse_card = false, mouse_trace = false, key_test = false, warm_reset = false, to_menu = false, disk_trace = false, trace_all = false;
 	bool plus_keymap = false;  // Apple /// Plus keyboard: separate DELETE key
 	bool ram_128k = false;     // 128 KiB memory board instead of 256 KiB
 	// --check-font: after --to-menu, the character generator must hold the set
@@ -70,6 +70,9 @@ int main(int argc, char **argv) {
 	// --font-dump=01,02: print these codes' character generator rows at the end.
 	std::vector<unsigned> font_dump;
 	// --keys=down,down,enter,wait5,enter typed once --keys-after=TEXT is on screen.
+	// With --mouse-card, mouse:DX:DY is a host mouse report (Y counts upward),
+	// mouse:DX:DY:N is N of them a sixtieth of a second apart, and button:1 or
+	// button:0 presses or releases its button. One unit is one count.
 	std::string keys, keys_after;
 	bool writable = false;  // mount images read-write, as Main does for writable sources
 	unsigned sd_delay = 0;
@@ -109,6 +112,8 @@ int main(int argc, char **argv) {
 		}
 		if (option == "--keytest") key_test = true;
 		if (option == "--plus-keymap") plus_keymap = true;
+		if (option == "--mouse-card") mouse_card = true;
+		if (option == "--mouse-trace") mouse_trace = true;
 		if (option == "--ram128k") ram_128k = true;
 		if (option == "--check-font") check_font = to_menu = true;
 		if (option.rfind("--font-dump=", 0) == 0)
@@ -159,6 +164,8 @@ int main(int argc, char **argv) {
 	top.sd_buff_dout = 0;
 	top.sd_buff_wr = 0;
 	top.ps2_key = 0;
+	top.ps2_mouse = 0;
+	top.mouse_card_installed = mouse_card;
 	top.plus_keymap = plus_keymap;
 	top.ram_128k = ram_128k;
 	top.video_source = video_source;
@@ -285,7 +292,12 @@ int main(int argc, char **argv) {
 	// response can be compared with hardware screenshots.
 	struct KeyEvent { unsigned long long cycle; uint8_t code; bool ext; bool pressed; };
 	struct ScreenDump { unsigned long long cycle; const char *label; };
+	struct MouseEvent { unsigned long long cycle; int dx, dy; bool button; };
 	std::vector<KeyEvent> key_script;
+	std::vector<MouseEvent> mouse_script;
+	std::size_t mouse_index = 0;
+	unsigned mouse_trace_count = 0;
+	bool mouse_button = false;
 	std::vector<ScreenDump> dump_script;
 	const unsigned long long second = 14318181ULL;
 	auto tap = [&](double at, uint8_t code, bool ext, int only = -1) {
@@ -378,6 +390,15 @@ int main(int argc, char **argv) {
 						pos = comma == std::string::npos ? keys.size() + 1 : comma + 1;
 						if (k.rfind("wait", 0) == 0) { at += std::strtod(k.c_str() + 4, nullptr); continue; }
 						if (k.rfind("dump", 0) == 0) { dump_script.push_back({static_cast<unsigned long long>(at * second), "scripted"}); continue; }
+						if (k.rfind("mouse:", 0) == 0 || k.rfind("button:", 0) == 0) {
+							int dx = 0, dy = 0, reports = 1;
+							if (k[0] == 'm') std::sscanf(k.c_str(), "mouse:%d:%d:%d", &dx, &dy, &reports);
+							else mouse_button = k[7] == '1';
+							for (int report = 0; report < reports; ++report, at += 1.0 / 60)
+								mouse_script.push_back({static_cast<unsigned long long>(at * second), dx, dy, mouse_button});
+							at += 0.1;
+							continue;
+						}
 						if (k.rfind("text:", 0) == 0) {
 							// PS/2 set 2 make codes for a-z, 0-9, '.', '/' and '-'.
 							static const char *chars = "abcdefghijklmnopqrstuvwxyz0123456789./-";
@@ -425,6 +446,14 @@ int main(int argc, char **argv) {
 				top.ps2_key = (key_toggle ? 0x400 : 0) | (event.pressed ? 0x200 : 0) |
 				              (event.ext ? 0x100 : 0) | event.code;
 			}
+			if (mouse_index < mouse_script.size() &&
+			    clock_cycles >= mouse_script[mouse_index].cycle) {
+				const MouseEvent &event = mouse_script[mouse_index++];
+				top.ps2_mouse = ((top.ps2_mouse ^ 0x1000000) & 0x1000000) |
+				                (event.dy & 0xff) << 16 | (event.dx & 0xff) << 8 |
+				                (event.dy < 0 ? 0x20 : 0) | (event.dx < 0 ? 0x10 : 0) | 0x08 |
+				                (event.button ? 1 : 0);
+			}
 			if (dump_index < dump_script.size() &&
 			    clock_cycles >= dump_script[dump_index].cycle)
 				dump_screen(dump_script[dump_index++].label);
@@ -435,6 +464,14 @@ int main(int argc, char **argv) {
 		finish_storage();
 		if (top.clk && top.cpu_enable) {
 			++enable_count;
+			// The bytes that cross the mouse card's PIA port A, which are the
+			// driver's commands and the 68705's answers.
+			if (mouse_trace && top.cpu_addr == 0xc0c0 && mouse_trace_count < 600) {
+				std::printf("mouse %s %02X t=%.3f pc=%04X\n", top.cpu_rwn ? "read " : "write",
+				            top.cpu_rwn ? top.cpu_din : top.cpu_dout,
+				            static_cast<double>(half_cycle / 2) / second, top.pc);
+				++mouse_trace_count;
+			}
 			if (script_armed && keyboard_trace_count < 120 && top.cpu_rwn &&
 			    (top.cpu_addr == 0xc000 || top.cpu_addr == 0xc008 ||
 			     top.cpu_addr == 0xc010)) {

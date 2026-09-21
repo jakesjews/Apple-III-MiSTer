@@ -2,7 +2,7 @@
 
 `apple3_core` exposes a synchronous card bus for all four expansion slots.
 The MiSTer top installs the [block-storage card](BLOCK_STORAGE.md) in slot 1
-and leaves slots 2–4 empty. A card can be attached without changing the CPU,
+and the [mouse card](MOUSE.md) in slot 4, and leaves slots 2 and 3 empty. A card can be attached without changing the CPU,
 MMU, motherboard I/O or interrupt wiring. Main needs no change for this
 interface.
 

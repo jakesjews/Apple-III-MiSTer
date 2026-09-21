@@ -11,6 +11,7 @@ usable one: most software tried so far runs well.
 - Apple /// Plus model with its 560 × 384 text interlace
 - Four floppy drives: WOZ, DSK, DO, PO, NIB and 2MG, writable and formattable
 - A hard-disk card with two images, bootable without a floppy
+- Apple's mouse card in slot 4, driven by the MiSTer's mouse
 - Keyboard, joysticks, clock, audio and serial
 
 For something to play, [apple-iii-games](https://github.com/jakesjews/apple-iii-games)
@@ -29,7 +30,7 @@ has native Apple /// games as ready-to-mount disk images.
 
 4. Supply the Apple /// boot ROM as
    `/media/fat/games/Apple-III/boot.rom`. It is the file MAME calls
-   `apple3.rom`. ROMs are not included.
+   `apple3.rom`, and it is not included.
 
    | Name | Size | CRC32 | SHA-1 |
    |---|---|---|---|
@@ -113,6 +114,11 @@ with its soft text and bleeding color. [Details](docs/VIDEO_SOURCES.md).
 
 **Video Standard** in the OSD selects NTSC or PAL: Apple's 50 Hz "Euro
 system", the same picture in a 310-line frame. [Details](docs/PAL.md).
+
+**Mouse Card** in the OSD is Apple's mouse card in slot 4, where SOS mouse
+drivers are usually configured to find it, and **Mouse Speed** sets how far
+the MiSTer's mouse moves it; Normal is close to Apple's mouse.
+[Details](docs/MOUSE.md).
 
 **Aspect ratio** and **Scale** are MiSTer's usual ones: Original (4:3), Full
 Screen or the custom ratios of `MiSTer.ini`, and integer scaling.
@@ -245,9 +251,11 @@ Existing partial implementations are noted where they provide a starting point.
       chooses Weave or Bob through the framework's scaler. Weave is the
       default. [Details](docs/INTERLACE.md).
 
-- [ ] **Apple II Mouse Interface card.** Use host mouse input and validate against
-      an existing native mouse-driver configuration.
-      
+- [x] **Apple II Mouse Interface card.** The card the /// used, in slot 4,
+      driven by the MiSTer's mouse. Checked against Apple's SOS mouse driver
+      sequences and the mouse-enabled Selector /// image.
+      [Details](docs/MOUSE.md).
+
 - [ ] **Save States**
 
 - [ ] **External memory and optional 512 KiB RAM.** Build on the parameterized
@@ -280,7 +288,10 @@ This core stands on work from the MiSTer and Apple /// communities:
   companion Main builds on.
 - **Stephen A. Edwards** for the Disk II drive model from his Apple II FPGA and
   for his article on the Apple II clock generator.
-- **gyurco** for the 6551 UART core, Disk II write support and his T65 fixes.
+- **gyurco** for the 6551 UART core, Disk II write support, his T65 fixes and
+  the Apple II core's mouse card, whose wiring this one follows.
+- **jotego** for the jt6805 microcontroller core and **John E. Kent** for the
+  6821 PIA (see their [provenance and license](rtl/cards/mouse/README.md)).
 - **GideonZ** for the 6522 VIA.
 - **Daniel Wallner, MikeJ, WoS and Morten Leikvoll** for the T65 6502 core.
 - **harbaum** for the HPS I/O interface the MiSTer framework grew from.
@@ -298,8 +309,8 @@ This core stands on work from the MiSTer and Apple /// communities:
 - **Patrick Schaefer** for decoding the motherboard logic PROMs.
 - **John Jeppson** for his 1982 and 1983 Softalk articles on the Apple ///
   memory system.
-- **npwoods, rb6502 and the MAME team** for the `apple3` driver, MOS 6551 and
-  CFFA card models used as cross-checks.
+- **npwoods, rb6502 and the MAME team** for the `apple3` driver, MOS 6551,
+  CFFA and mouse card models used as cross-checks.
 - **Klaus2m5** for the 6502 functional test suite.
 - **Applesauce** for the WOZ format reference.
 - The **AppleCommander** team for the disk-image tool behind the block-card
@@ -310,4 +321,5 @@ This core stands on work from the MiSTer and Apple /// communities:
   vintagecomputer.ca archives for the manuals, schematics and PROM dumps.
 
 Imported components retain their own license notices, including the
-[GPL-3.0-or-later WOZ implementation](rtl/disk/woz/README.md).
+GPL-3.0-or-later [WOZ implementation](rtl/disk/woz/README.md) and
+[mouse card parts](rtl/cards/mouse/README.md).

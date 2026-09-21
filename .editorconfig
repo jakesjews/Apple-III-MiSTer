@@ -9,7 +9,7 @@ indent_size = 4
 tab_width = 4
 
 # Imported components and generated IP retain their upstream formatting.
-[{sys/**,rtl/acia/**,rtl/disk/woz/**,rtl/pll.v,rtl/pll/**,sim/gen/**,sim/obj_dir/**,sim/work/**}]
+[{sys/**,rtl/acia/**,rtl/disk/woz/**,rtl/cards/mouse/**,rtl/pll.v,rtl/pll/**,sim/gen/**,sim/obj_dir/**,sim/work/**}]
 charset = unset
 end_of_line = unset
 insert_final_newline = unset
