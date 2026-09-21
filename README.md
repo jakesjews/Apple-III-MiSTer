@@ -245,8 +245,6 @@ Existing partial implementations are noted where they provide a starting point.
       chooses Weave or Bob through the framework's scaler. Weave is the
       default. [Details](docs/INTERLACE.md).
 
-- [ ] **NTSC Composite Comb Filter Option** Off by default.
-
 - [ ] **Apple II Mouse Interface card.** Use host mouse input and validate against
       an existing native mouse-driver configuration.
       
