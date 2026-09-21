@@ -187,6 +187,10 @@ Sources (abbreviations used below):
 * Video Standard PAL (OSD status bit 19): the Euro system's scan PROM,
   341-0060. The vertical counter reloads to 202 for 310 lines, VBL lasts 118
   of them, and vertical sync is 16 lines later. See [PAL.md](PAL.md).
+* Aspect ratio and Scale (OSD status bits 122:121 and 21:20) are the
+  framework's: `video_freak` takes `video_mixer`'s data enable and drives
+  `VIDEO_ARX`/`VIDEO_ARY`. It is shown the upper field's vertical sync alone
+  while the interlace switch is on, so integer scaling fits the woven frame.
 
 ## I/O ($C000-$C0FF, only with env bit 6)
 

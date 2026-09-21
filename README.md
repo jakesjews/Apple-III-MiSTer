@@ -114,6 +114,9 @@ with its soft text and bleeding color. [Details](docs/VIDEO_SOURCES.md).
 **Video Standard** in the OSD selects NTSC or PAL: Apple's 50 Hz "Euro
 system", the same picture in a 310-line frame. [Details](docs/PAL.md).
 
+**Aspect ratio** and **Scale** are MiSTer's usual ones: Original (4:3), Full
+Screen or the custom ratios of `MiSTer.ini`, and integer scaling.
+
 Controller 1 is the joystick in port B, which SOS and Business BASIC read as
 joystick 0; **Joystick 1 on** in the OSD moves it to port A. Controller 2 uses
 the other port. Button 1 is the joystick's pushbutton, and each press of button
@@ -229,11 +232,16 @@ Existing partial implementations are noted where they provide a starting point.
       PROM's dump. The Euro crystal is not modelled, and Text Interlace stays
       with NTSC. [Hardware and tests](docs/PAL.md).
 
-- [ ] **Scaling Options** Options are Normal, V-Integer, Narrower HV-Integer, Wider HV-Integer.
+- [x] **Scaling options.** **Scale** offers Normal, V-Integer, Narrower
+      HV-Integer and Wider HV-Integer through the framework's `video_freak`.
+      With Text Interlace on it scales the woven 384-line frame, not the
+      192-line field.
+
+- [x] **Custom aspect ratios.** **Aspect ratio** is Original, Full Screen,
+      [ARC1] and [ARC2], the last two from `MiSTer.ini`. Original is the
+      default; Full Screen replaces the old 16:9.
 
 - [ ] **Interlacing Options** Bob or Weave. Use the framework.
-
-- [ ] **Custom Aspect Ratios** Include [ARC1], [ARC2] as aspect ratio options. Original is Default.
 
 - [ ] **NTSC Composite Comb Filter Option** Off by default.
 

@@ -11,6 +11,8 @@ lint/exclusions.vlt
 -y sys
 // The Hq2x module name does not match its lowercase library filename.
 sys/hq2x.sv
+// sys_umul and sys_udiv, which video_freak uses, live in math.sv.
+sys/math.sv
 
 // Lint-only PLL boundary and GHDL-converted VHDL dependencies.
 lint/pll.sv

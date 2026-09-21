@@ -90,6 +90,11 @@ first of the five clocks.
   three lines higher than in earlier builds, where the motherboard puts it.
 * The wrapper drives `VGA_F1` for the scaler, high in the lower field, whose
   lines the scaler weaves into the odd rows.
+* The framework's `video_freak` sizes the picture for the **Scale** options by
+  the lines between vertical syncs, which is one field. With the switch on
+  the wrapper shows it the upper field's sync alone, so it measures the woven
+  384 lines: V-Integer on a 1080-line display is 768 lines, twice the frame,
+  where the field's 192 would give 960 and two and a half.
 
 ## Results, 2026-09-19
 

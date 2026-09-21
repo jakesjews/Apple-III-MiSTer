@@ -31,6 +31,15 @@ module emu (
 	assign HDMI_BLACKOUT  = 1'b0;
 	assign HDMI_BOB_DEINT = 1'b0;
 
+	// Status Bit Map:
+	//              Upper                          Lower
+	// 0         1         2         3          4         5         6
+	// 01234567890123456789012345678901 23456789012345678901234567890123
+	// 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
+	// X  XXXXXXXXXXXXXXXXXXX
+	//
+	// Aspect ratio is status[122:121], where the Template keeps it.
+
 	`include "build_id.v"
 	localparam CONF_STR = {
 		"Apple-III;UART19200:9600:4800:2400:1200:600:300:150:110:75:50;",
@@ -43,7 +52,8 @@ module emu (
 		"S5,PO HDV2MG,Mount Hard Disk 2;",
 		"F2,ROMBIN,Load Boot ROM;",
 		"-;",
-		"O2,Aspect ratio,4:3,16:9;",
+		"O[122:121],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
+		"O[21:20],Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;",
 		"ODE,Video,RGB,Color Composite,Mono Composite;",
 		"H1OGH,Display,RGB Monitor,Monitor /// Green,Amber,Color TV;",
 		"OJ,Video Standard,NTSC,PAL;",
@@ -465,9 +475,30 @@ module emu (
 	wire [2:0] video_effect = status[5:3];
 	wire [2:0] scanline_level = video_effect ? video_effect - 1'b1 : 3'd0;
 	wire       use_scandoubler = forced_scandoubler || (video_effect != 0);
-	assign VGA_SL    = scanline_level[1:0];
-	assign VIDEO_ARX = status[2] ? 13'd16 : 13'd4;
-	assign VIDEO_ARY = status[2] ? 13'd9 : 13'd3;
+	assign VGA_SL = scanline_level[1:0];
+
+	// Aspect ratio and integer scaling are the framework's.  video_freak
+	// sizes the picture by the lines between vertical syncs, which is one
+	// field; the scaler weaves two of them into 384 lines, so with the
+	// interlace switch on it is shown one sync in two and scales the frame.
+	wire [1:0] aspect = status[122:121];
+	wire       mixer_de;
+	video_freak video_freak (
+		.CLK_VIDEO  (CLK_VIDEO),
+		.CE_PIXEL   (CE_PIXEL),
+		.VGA_VS     (VGA_VS && !VGA_F1),
+		.HDMI_WIDTH (HDMI_WIDTH),
+		.HDMI_HEIGHT(HDMI_HEIGHT),
+		.VGA_DE     (VGA_DE),
+		.VIDEO_ARX  (VIDEO_ARX),
+		.VIDEO_ARY  (VIDEO_ARY),
+		.VGA_DE_IN  (mixer_de),
+		.ARX        ((aspect == 2'd0) ? 12'd4 : {10'd0, aspect - 2'd1}),
+		.ARY        ((aspect == 2'd0) ? 12'd3 : 12'd0),
+		.CROP_SIZE  (12'd0),
+		.CROP_OFF   (5'd0),
+		.SCALE      ({1'b0, status[21:20]})
+	);
 
 	video_mixer #(
 		.LINE_LENGTH(560),
@@ -493,7 +524,7 @@ module emu (
 		.VGA_B      (VGA_B),
 		.VGA_VS     (VGA_VS),
 		.VGA_HS     (VGA_HS),
-		.VGA_DE     (VGA_DE)
+		.VGA_DE     (mixer_de)
 	);
 
 endmodule
