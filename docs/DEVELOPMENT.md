@@ -178,9 +178,37 @@ Verilator 5.052 and GHDL 6.0.0.
 
 ## Testing
 
-The simulation flow needs Icarus Verilog, Verilator, GHDL, a C++ compiler and
-`xxd`. GHDL converts the VHDL components to Verilog so Verilator can simulate the
-whole machine. The boot tests read the ROM from `APPLE3_ROM`.
+The simulation flow needs Icarus Verilog, Verilator 5, GHDL with synthesis,
+cc65, a C++ compiler, `make`, Python 3 and `xxd`. GHDL converts the VHDL
+components to Verilog so Verilator can simulate the whole machine. The scripts
+run under bash, including the 3.2 that macOS ships. Everything below was run on
+macOS (Icarus 13, Verilator 5.052, GHDL 6.0) and on Ubuntu 24.04 with its own
+packages (Icarus 12, Verilator 5.020, GHDL 4.1).
+
+```sh
+make check-tools   # what is installed, and the brew/apt line for what is not
+make test-quick    # unit, disk, slot, block card and timing benches, about a minute
+make test          # everything that needs no ROM image, about ten minutes
+make boot ROM=apple3.rom                                   # stock ROM to the disk bootstrap
+make boot ROM=apple3.rom DISK=system.woz ARGS=--to-menu    # SOS to the Utilities menu, about five minutes
+```
+
+Nothing copyrighted is in the repository, so the tests that compare against
+Apple's chips take their images from the environment and skip when one is
+missing; `make test` passes on a fresh clone. The boot test has no fallback.
+
+| Variable | File | Used by | Source |
+|---|---|---|---|
+| `APPLE3_ROM` (`ROM=` for `make boot`) | 4,096-byte boot ROM, [hashes above](#boot-rom-details) | `sim/run_core_boot.sh` | MAME's `apple3.rom` |
+| `APPLE3_PROM_DIR` | unpacked `A3PROMs` directory | timing PROM comparison in `sim/accuracy/run.sh` | [bitsavers `A3PROMs.zip`](http://bitsavers.org/pdf/apple/apple_III/firmware/A3PROMs.zip) |
+| `APPLE3_DISK_PROM` | `341-0028.bin`, 256 bytes | P6 comparison in `sim/disk/run.sh` | [archive.org `AppleIIIROMs`](https://archive.org/details/AppleIIIROMs) |
+| `APPLE3_PLUS_PROM` | `342-0145-A.bin` | interlace comparison in `sim/accuracy/run.sh` | the same archive.org item |
+
+The simulator mounts **WOZ images only**; on hardware Main converts the other
+formats. Convert a DSK, PO or NIB with the companion Main's
+[`storage_test --convert`](MAIN_STORAGE.md#tests-and-conversion-utility).
+
+The individual runners, which `make` calls:
 
 ```sh
 ./sim/run_tests.sh                      # unit benches: MMU, timing, memory,

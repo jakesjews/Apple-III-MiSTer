@@ -227,90 +227,113 @@ module video_source_tb;
 	endfunction
 
 	// The decoder's sixteen colours and the B/W ladder, as in composite_tb.
-	logic [23:0] NTSC_COLOUR[16] = '{
-		24'h000000,
-		24'h861b3f,
-		24'h3f27bd,
-		24'hc643fd,
-		24'h00633f,
-		24'h7f7f7f,
-		24'h388bfd,
-		24'hbfa7ff,
-		24'h3f5700,
-		24'hc67301,
-		24'h7f7f7f,
-		24'hff9bbf,
-		24'h38bb01,
-		24'hbfd741,
-		24'h78e3bf,
-		24'hffffff
-	};
-	logic [7:0] GREY[16] = '{
-		8'd0,
-		8'd15,
-		8'd29,
-		8'd44,
-		8'd62,
-		8'd77,
-		8'd91,
-		8'd106,
-		8'd149,
-		8'd164,
-		8'd178,
-		8'd193,
-		8'd211,
-		8'd226,
-		8'd240,
-		8'd255
-	};
+	logic  [23:0] NTSC_COLOUR  [16];
+	logic  [ 7:0] GREY         [16];
 	// Apple II hires bytes for even and odd columns, eight columns a band.
 	// The ladder on a green phosphor, as in composite_tb.
-	logic [23:0] GREEN_LEVEL[16] = '{
-		24'h000000,
-		24'h010d00,
-		24'h021900,
-		24'h032600,
-		24'h043600,
-		24'h054300,
-		24'h064f00,
-		24'h075c00,
-		24'h0a8100,
-		24'h0b8e00,
-		24'h0c9a00,
-		24'h0da700,
-		24'h0eb700,
-		24'h0fc400,
-		24'h10d000,
-		24'h11dd00
-	};
-	logic [23:0] AMBER_LEVEL[16] = '{
-		24'h000000,
-		24'h0f0a00,
-		24'h1d1400,
-		24'h2c1e00,
-		24'h3e2b00,
-		24'h4d3500,
-		24'h5b3f00,
-		24'h6a4900,
-		24'h956700,
-		24'ha47100,
-		24'hb27b00,
-		24'hc18500,
-		24'hd39200,
-		24'he29c00,
-		24'hf0a600,
-		24'hffb000
-	};
-	logic [7:0] HIRES_EVEN[5] = '{8'h55, 8'h2a, 8'hd5, 8'haa, 8'h7f};
-	logic [7:0] HIRES_ODD[5] = '{8'h2a, 8'h55, 8'haa, 8'hd5, 8'h7f};
-	logic [23:0] ARTIFACT[5] = '{24'hf31cff, 24'h0be200, 24'h0b92ff, 24'hf36c00, 24'hffffff};
-	string ARTIFACT_NAME[5] = '{"violet", "green", "blue", "orange", "white"};
+	logic  [23:0] GREEN_LEVEL  [16];
+	logic  [23:0] AMBER_LEVEL  [16];
+	logic  [ 7:0] HIRES_EVEN   [ 5];
+	logic  [ 7:0] HIRES_ODD    [ 5];
+	logic  [23:0] ARTIFACT     [ 5];
+	string        ARTIFACT_NAME[ 5];
+
+	// Filled element by element: Icarus Verilog 12 has no array assignment.
+	task automatic load_tables;
+		begin
+			NTSC_COLOUR[0]   = 24'h000000;
+			NTSC_COLOUR[1]   = 24'h861b3f;
+			NTSC_COLOUR[2]   = 24'h3f27bd;
+			NTSC_COLOUR[3]   = 24'hc643fd;
+			NTSC_COLOUR[4]   = 24'h00633f;
+			NTSC_COLOUR[5]   = 24'h7f7f7f;
+			NTSC_COLOUR[6]   = 24'h388bfd;
+			NTSC_COLOUR[7]   = 24'hbfa7ff;
+			NTSC_COLOUR[8]   = 24'h3f5700;
+			NTSC_COLOUR[9]   = 24'hc67301;
+			NTSC_COLOUR[10]  = 24'h7f7f7f;
+			NTSC_COLOUR[11]  = 24'hff9bbf;
+			NTSC_COLOUR[12]  = 24'h38bb01;
+			NTSC_COLOUR[13]  = 24'hbfd741;
+			NTSC_COLOUR[14]  = 24'h78e3bf;
+			NTSC_COLOUR[15]  = 24'hffffff;
+			GREY[0]          = 8'd0;
+			GREY[1]          = 8'd15;
+			GREY[2]          = 8'd29;
+			GREY[3]          = 8'd44;
+			GREY[4]          = 8'd62;
+			GREY[5]          = 8'd77;
+			GREY[6]          = 8'd91;
+			GREY[7]          = 8'd106;
+			GREY[8]          = 8'd149;
+			GREY[9]          = 8'd164;
+			GREY[10]         = 8'd178;
+			GREY[11]         = 8'd193;
+			GREY[12]         = 8'd211;
+			GREY[13]         = 8'd226;
+			GREY[14]         = 8'd240;
+			GREY[15]         = 8'd255;
+			GREEN_LEVEL[0]   = 24'h000000;
+			GREEN_LEVEL[1]   = 24'h010d00;
+			GREEN_LEVEL[2]   = 24'h021900;
+			GREEN_LEVEL[3]   = 24'h032600;
+			GREEN_LEVEL[4]   = 24'h043600;
+			GREEN_LEVEL[5]   = 24'h054300;
+			GREEN_LEVEL[6]   = 24'h064f00;
+			GREEN_LEVEL[7]   = 24'h075c00;
+			GREEN_LEVEL[8]   = 24'h0a8100;
+			GREEN_LEVEL[9]   = 24'h0b8e00;
+			GREEN_LEVEL[10]  = 24'h0c9a00;
+			GREEN_LEVEL[11]  = 24'h0da700;
+			GREEN_LEVEL[12]  = 24'h0eb700;
+			GREEN_LEVEL[13]  = 24'h0fc400;
+			GREEN_LEVEL[14]  = 24'h10d000;
+			GREEN_LEVEL[15]  = 24'h11dd00;
+			AMBER_LEVEL[0]   = 24'h000000;
+			AMBER_LEVEL[1]   = 24'h0f0a00;
+			AMBER_LEVEL[2]   = 24'h1d1400;
+			AMBER_LEVEL[3]   = 24'h2c1e00;
+			AMBER_LEVEL[4]   = 24'h3e2b00;
+			AMBER_LEVEL[5]   = 24'h4d3500;
+			AMBER_LEVEL[6]   = 24'h5b3f00;
+			AMBER_LEVEL[7]   = 24'h6a4900;
+			AMBER_LEVEL[8]   = 24'h956700;
+			AMBER_LEVEL[9]   = 24'ha47100;
+			AMBER_LEVEL[10]  = 24'hb27b00;
+			AMBER_LEVEL[11]  = 24'hc18500;
+			AMBER_LEVEL[12]  = 24'hd39200;
+			AMBER_LEVEL[13]  = 24'he29c00;
+			AMBER_LEVEL[14]  = 24'hf0a600;
+			AMBER_LEVEL[15]  = 24'hffb000;
+			HIRES_EVEN[0]    = 8'h55;
+			HIRES_EVEN[1]    = 8'h2a;
+			HIRES_EVEN[2]    = 8'hd5;
+			HIRES_EVEN[3]    = 8'haa;
+			HIRES_EVEN[4]    = 8'h7f;
+			HIRES_ODD[0]     = 8'h2a;
+			HIRES_ODD[1]     = 8'h55;
+			HIRES_ODD[2]     = 8'haa;
+			HIRES_ODD[3]     = 8'hd5;
+			HIRES_ODD[4]     = 8'h7f;
+			ARTIFACT[0]      = 24'hf31cff;
+			ARTIFACT[1]      = 24'h0be200;
+			ARTIFACT[2]      = 24'h0b92ff;
+			ARTIFACT[3]      = 24'hf36c00;
+			ARTIFACT[4]      = 24'hffffff;
+			ARTIFACT_NAME[0] = "violet";
+			ARTIFACT_NAME[1] = "green";
+			ARTIFACT_NAME[2] = "blue";
+			ARTIFACT_NAME[3] = "orange";
+			ARTIFACT_NAME[4] = "white";
+		end
+	endtask
 
 	integer errors, band;
 	logic [27:0] group;
 	logic [ 3:0] bar_colour;
 
 	initial begin
+		load_tables();
 		for (integer word = 0; word < (1 << 17); word++) ram.mem[word] = 16'h0000;
 		for (integer entry = 0; entry < 1024; entry++) video.character_ram[entry] = 8'h00;
 

@@ -57,88 +57,98 @@ module composite_tb;
 
 	// The NTSC pin's sixteen colours through the decoder, against the same
 	// arithmetic done by hand from the RP3 weights.
-	logic [23:0] NTSC[16] = '{
-		24'h000000,
-		24'h861b3f,
-		24'h3f27bd,
-		24'hc643fd,
-		24'h00633f,
-		24'h7f7f7f,
-		24'h388bfd,
-		24'hbfa7ff,
-		24'h3f5700,
-		24'hc67301,
-		24'h7f7f7f,
-		24'hff9bbf,
-		24'h38bb01,
-		24'hbfd741,
-		24'h78e3bf,
-		24'hffffff
-	};
+	logic [23:0] NTSC[16];
 	// RP4's ladder.  RGB8 weighs ten times RGB1, so the scale steps up at 8.
-	logic [7:0] GREY[16] = '{
-		8'd0,
-		8'd15,
-		8'd29,
-		8'd44,
-		8'd62,
-		8'd77,
-		8'd91,
-		8'd106,
-		8'd149,
-		8'd164,
-		8'd178,
-		8'd193,
-		8'd211,
-		8'd226,
-		8'd240,
-		8'd255
-	};
+	logic [ 7:0] GREY[16];
 
 	// A Monitor /// shows the same ladder in P31 green: each grey level times
 	// 11dd00, worked by hand.
-	logic [23:0] GREEN[16] = '{
-		24'h000000,
-		24'h010d00,
-		24'h021900,
-		24'h032600,
-		24'h043600,
-		24'h054300,
-		24'h064f00,
-		24'h075c00,
-		24'h0a8100,
-		24'h0b8e00,
-		24'h0c9a00,
-		24'h0da700,
-		24'h0eb700,
-		24'h0fc400,
-		24'h10d000,
-		24'h11dd00
-	};
+	logic [23:0] GREEN[16];
 
 	// And in amber: each grey level times ffb000.
-	logic [23:0] AMBER[16] = '{
-		24'h000000,
-		24'h0f0a00,
-		24'h1d1400,
-		24'h2c1e00,
-		24'h3e2b00,
-		24'h4d3500,
-		24'h5b3f00,
-		24'h6a4900,
-		24'h956700,
-		24'ha47100,
-		24'hb27b00,
-		24'hc18500,
-		24'hd39200,
-		24'he29c00,
-		24'hf0a600,
-		24'hffb000
-	};
+	logic [23:0] AMBER         [16];
 	// Colour 1 on the NTSC pin is 113, 51, -11 and 51 in slots 0 to 3.  A
 	// monochrome tube shows 5/4 of that, clipped at black: 141, 63, 0, 63.
-	logic [23:0] GREEN_COLOUR_1[4] = '{24'h097a00, 24'h043700, 24'h000000, 24'h043700};
-	logic [23:0] AMBER_COLOUR_1[4] = '{24'h8d6100, 24'h3f2b00, 24'h000000, 24'h3f2b00};
+	logic [23:0] GREEN_COLOUR_1[ 4];
+	logic [23:0] AMBER_COLOUR_1[ 4];
+
+	// Filled element by element: Icarus Verilog 12 has no array assignment.
+	task automatic load_tables;
+		begin
+			NTSC[0]           = 24'h000000;
+			NTSC[1]           = 24'h861b3f;
+			NTSC[2]           = 24'h3f27bd;
+			NTSC[3]           = 24'hc643fd;
+			NTSC[4]           = 24'h00633f;
+			NTSC[5]           = 24'h7f7f7f;
+			NTSC[6]           = 24'h388bfd;
+			NTSC[7]           = 24'hbfa7ff;
+			NTSC[8]           = 24'h3f5700;
+			NTSC[9]           = 24'hc67301;
+			NTSC[10]          = 24'h7f7f7f;
+			NTSC[11]          = 24'hff9bbf;
+			NTSC[12]          = 24'h38bb01;
+			NTSC[13]          = 24'hbfd741;
+			NTSC[14]          = 24'h78e3bf;
+			NTSC[15]          = 24'hffffff;
+			GREY[0]           = 8'd0;
+			GREY[1]           = 8'd15;
+			GREY[2]           = 8'd29;
+			GREY[3]           = 8'd44;
+			GREY[4]           = 8'd62;
+			GREY[5]           = 8'd77;
+			GREY[6]           = 8'd91;
+			GREY[7]           = 8'd106;
+			GREY[8]           = 8'd149;
+			GREY[9]           = 8'd164;
+			GREY[10]          = 8'd178;
+			GREY[11]          = 8'd193;
+			GREY[12]          = 8'd211;
+			GREY[13]          = 8'd226;
+			GREY[14]          = 8'd240;
+			GREY[15]          = 8'd255;
+			GREEN[0]          = 24'h000000;
+			GREEN[1]          = 24'h010d00;
+			GREEN[2]          = 24'h021900;
+			GREEN[3]          = 24'h032600;
+			GREEN[4]          = 24'h043600;
+			GREEN[5]          = 24'h054300;
+			GREEN[6]          = 24'h064f00;
+			GREEN[7]          = 24'h075c00;
+			GREEN[8]          = 24'h0a8100;
+			GREEN[9]          = 24'h0b8e00;
+			GREEN[10]         = 24'h0c9a00;
+			GREEN[11]         = 24'h0da700;
+			GREEN[12]         = 24'h0eb700;
+			GREEN[13]         = 24'h0fc400;
+			GREEN[14]         = 24'h10d000;
+			GREEN[15]         = 24'h11dd00;
+			AMBER[0]          = 24'h000000;
+			AMBER[1]          = 24'h0f0a00;
+			AMBER[2]          = 24'h1d1400;
+			AMBER[3]          = 24'h2c1e00;
+			AMBER[4]          = 24'h3e2b00;
+			AMBER[5]          = 24'h4d3500;
+			AMBER[6]          = 24'h5b3f00;
+			AMBER[7]          = 24'h6a4900;
+			AMBER[8]          = 24'h956700;
+			AMBER[9]          = 24'ha47100;
+			AMBER[10]         = 24'hb27b00;
+			AMBER[11]         = 24'hc18500;
+			AMBER[12]         = 24'hd39200;
+			AMBER[13]         = 24'he29c00;
+			AMBER[14]         = 24'hf0a600;
+			AMBER[15]         = 24'hffb000;
+			GREEN_COLOUR_1[0] = 24'h097a00;
+			GREEN_COLOUR_1[1] = 24'h043700;
+			GREEN_COLOUR_1[2] = 24'h000000;
+			GREEN_COLOUR_1[3] = 24'h043700;
+			AMBER_COLOUR_1[0] = 24'h8d6100;
+			AMBER_COLOUR_1[1] = 24'h3f2b00;
+			AMBER_COLOUR_1[2] = 24'h000000;
+			AMBER_COLOUR_1[3] = 24'h3f2b00;
+		end
+	endtask
 
 	localparam logic [1:0] RGB_MONITOR = 2'd0, GREEN_MONITOR = 2'd1, AMBER_MONITOR = 2'd2, COLOUR_TV = 2'd3;
 
@@ -190,6 +200,7 @@ module composite_tb;
 	integer clean_dots, tv_dots;
 
 	initial begin
+		load_tables();
 		// Native colours on the clean monitor: a steady colour number is its
 		// own hue.
 		source  = 2'd1;

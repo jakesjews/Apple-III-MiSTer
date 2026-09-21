@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -21,7 +21,8 @@ sources=(
 	rtl/apple3_keyboard.sv rtl/apple3_io.sv rtl/apple3_rtc.sv
 	rtl/acia/gen_uart.v rtl/apple3_acia.sv rtl/apple3_disk.sv rtl/apple3_video.sv rtl/apple3_composite.sv
 	rtl/apple3_slots.sv rtl/apple3_slot_rom.sv rtl/cards/apple3_block_card.sv rtl/apple3_core.sv
-	sim/coretest/main.cpp
+	# Absolute: Verilator before 5.03x looks for it from --Mdir.
+	"$PWD/sim/coretest/main.cpp"
 )
 
 verilator --cc --exe --build -j 4 -O2 --top-module core_tb \

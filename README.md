@@ -116,6 +116,21 @@ the other port. Button 1 is the joystick's pushbutton, and each press of button
 Serial uses MiSTer's UART. Leave **Serial CTS** at **Always ready** unless
 using host hardware flow control. [Serial details](docs/DEVELOPMENT.md#serial-port).
 
+## Building and simulation
+
+Open `Apple-III.qpf` in Quartus Prime 17.0 and compile, or run
+`./build.sh compile` on a Mac with Quartus under CrossOver. The simulation needs
+Icarus Verilog, Verilator 5, GHDL and cc65:
+
+```sh
+make check-tools                  # lists what is missing and how to install it
+make test                         # every test that needs no ROM, about ten minutes
+make boot ROM=apple3.rom DISK=system.woz ARGS=--to-menu   # boot SOS in the simulator
+```
+
+Booting needs your own boot ROM and a WOZ disk image.
+[Details](docs/DEVELOPMENT.md#testing).
+
 ## Todo
 
 Existing partial implementations are noted where they provide a starting point.
