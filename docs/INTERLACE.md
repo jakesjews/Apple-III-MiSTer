@@ -4,7 +4,8 @@
 keyboard and its **Text Interlace** switch. With the switch on the machine
 sends two fields of 262 and 263 lines, half a line apart, for a 525-line
 interlaced frame of 560 × 384. MiSTer's scaler weaves the two fields into one
-picture; the analog output carries them as a CRT expects them.
+picture, or bobs them with **Deinterlacing** set to Bob; the analog output
+carries them as a CRT expects them.
 
 What the two fields show is the machine's, not a line doubler's:
 
@@ -90,10 +91,19 @@ first of the five clocks.
   three lines higher than in earlier builds, where the motherboard puts it.
 * The wrapper drives `VGA_F1` for the scaler, high in the lower field, whose
   lines the scaler weaves into the odd rows.
+* **Deinterlacing**, offered while the switch is on, is the framework's
+  `HDMI_BOB_DEINT`. Weave, the default, holds both fields in one 384-line
+  frame: steady text, and pages 1 and 2 merged without flicker. Bob shows
+  each field as it arrives, its lines doubled and the lower field half a line
+  down, so the fields alternate as they do on a tube and merged pages flicker
+  field by field, ON THREE's "very eye-straining experience". It acts in the
+  scaler only, so the analog output does not change, nor does Direct Video,
+  which bypasses the scaler. MiSTer's screenshots are taken ahead of that
+  stage and show the woven frame in either setting.
 * The framework's `video_freak` sizes the picture for the **Scale** options by
   the lines between vertical syncs, which is one field. With the switch on
-  the wrapper shows it the upper field's sync alone, so it measures the woven
-  384 lines: V-Integer on a 1080-line display is 768 lines, twice the frame,
+  the wrapper shows it the upper field's sync alone, so it measures the 384
+  lines the scaler makes of them, woven or bobbed: V-Integer on a 1080-line display is 768 lines, twice the frame,
   where the field's 192 would give 960 and two and a half.
 
 ## Results, 2026-09-19

@@ -22,21 +22,20 @@ module emu (
 	assign {SDRAM2_CLK, SDRAM2_A, SDRAM2_BA, SDRAM2_DQ, SDRAM2_nCS, SDRAM2_nCAS, SDRAM2_nRAS, SDRAM2_nWE} = 'Z;
 `endif
 
-	assign LED_POWER      = 2'b00;
-	assign LED_DISK       = 2'b00;
-	assign BUTTONS        = 2'b00;
-	assign VGA_SCALER     = 1'b0;
-	assign VGA_DISABLE    = 1'b0;
-	assign HDMI_FREEZE    = 1'b0;
-	assign HDMI_BLACKOUT  = 1'b0;
-	assign HDMI_BOB_DEINT = 1'b0;
+	assign LED_POWER     = 2'b00;
+	assign LED_DISK      = 2'b00;
+	assign BUTTONS       = 2'b00;
+	assign VGA_SCALER    = 1'b0;
+	assign VGA_DISABLE   = 1'b0;
+	assign HDMI_FREEZE   = 1'b0;
+	assign HDMI_BLACKOUT = 1'b0;
 
 	// Status Bit Map:
 	//              Upper                          Lower
 	// 0         1         2         3          4         5         6
 	// 01234567890123456789012345678901 23456789012345678901234567890123
 	// 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-	// X  XXXXXXXXXXXXXXXXXXX
+	// X  XXXXXXXXXXXXXXXXXXXX
 	//
 	// Aspect ratio is status[122:121], where the Template keeps it.
 
@@ -65,6 +64,7 @@ module emu (
 		"O8,Model,Apple ///,/// Plus;",
 		"OI,Memory,256K,128K;",
 		"h0OF,Text Interlace,Off,On;",
+		"h2O[22],Deinterlacing,Weave,Bob;",
 		"O9,Serial CTS,Always ready,Host RTS;",
 		"OA,Joystick 1 on,Port B,Port A;",
 		"-;",
@@ -162,7 +162,7 @@ module emu (
 		.status            (status),
 		.status_in         (status),
 		.status_set        (1'b0),
-		.status_menumask   ({14'd0, !composite_source, plus_model && !euro}),
+		.status_menumask   ({13'd0, interlace, !composite_source, plus_model && !euro}),
 		.info_req          (1'b0),
 		.info              (8'd0),
 
@@ -466,6 +466,13 @@ module emu (
 	always_ff @(posedge clk_14m) field_q <= interlace && !core_field;
 	assign VGA_F1 = field_q;
 
+	// "Deinterlacing" is the scaler's.  Weave shows the two fields as one
+	// 384-line frame; Bob shows each as it arrives, its lines doubled and the
+	// lower field half a line down, so merged pages 1 and 2 alternate as they
+	// do on a tube instead of combining.  The menu offers it while the switch
+	// is on, and it changes nothing on the analog output.
+	assign HDMI_BOB_DEINT = status[22];
+
 	assign LED_USER  = disk_activity || block_activity;
 	assign AUDIO_L   = core_audio;
 	assign AUDIO_R   = core_audio;
@@ -479,8 +486,9 @@ module emu (
 
 	// Aspect ratio and integer scaling are the framework's.  video_freak
 	// sizes the picture by the lines between vertical syncs, which is one
-	// field; the scaler weaves two of them into 384 lines, so with the
-	// interlace switch on it is shown one sync in two and scales the frame.
+	// field; the scaler makes 384 lines of two of them, woven or bobbed, so
+	// with the interlace switch on it is shown one sync in two and scales the
+	// frame.
 	wire [1:0] aspect = status[122:121];
 	wire       mixer_de;
 	video_freak video_freak (

@@ -190,7 +190,8 @@ Sources (abbreviations used below):
 * Aspect ratio and Scale (OSD status bits 122:121 and 21:20) are the
   framework's: `video_freak` takes `video_mixer`'s data enable and drives
   `VIDEO_ARX`/`VIDEO_ARY`. It is shown the upper field's vertical sync alone
-  while the interlace switch is on, so integer scaling fits the woven frame.
+  while the interlace switch is on, so integer scaling fits the 384-line
+  frame. Deinterlacing (status bit 22) is the scaler's `HDMI_BOB_DEINT`.
 
 ## I/O ($C000-$C0FF, only with env bit 6)
 

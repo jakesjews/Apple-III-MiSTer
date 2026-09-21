@@ -241,7 +241,9 @@ Existing partial implementations are noted where they provide a starting point.
       [ARC1] and [ARC2], the last two from `MiSTer.ini`. Original is the
       default; Full Screen replaces the old 16:9.
 
-- [ ] **Interlacing Options** Bob or Weave. Use the framework.
+- [x] **Interlacing options.** With Text Interlace on, **Deinterlacing**
+      chooses Weave or Bob through the framework's scaler. Weave is the
+      default. [Details](docs/INTERLACE.md).
 
 - [ ] **NTSC Composite Comb Filter Option** Off by default.
 
