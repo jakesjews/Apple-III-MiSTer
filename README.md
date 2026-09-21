@@ -179,10 +179,9 @@ Existing partial implementations are noted where they provide a starting point.
       offer Reference, Monitor /// Green, Amber and Color TV presets rather than
       individual tint, saturation or bandwidth controls. Apply monochrome presets
       to the complete B/W signal, preserving its gray levels in every mode.
-      Reuse MiSTer's gamma and video-processing presets for generic softness,
-      scanlines and masks instead of duplicating those controls; document companion
-      settings without overriding user choices. Keep source-specific NTSC decoding
-      in the core and a clean Direct Video path for external scalers.
+      MiSTer's gamma and video-processing presets will be used for generic softness,
+      scanlines and masks so do not duplcate these capabilities in the core.
+      Keep source-specific NTSC decoding in the core and a clean Direct Video path for external scalers.
 
 - [ ] **PROM-backed memory-map validation.** Build an independent reference from
       the stock 5 V/256 KiB board's 342-0061 and 342-0063 decoder dumps, the
