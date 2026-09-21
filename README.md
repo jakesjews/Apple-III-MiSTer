@@ -211,7 +211,7 @@ Existing partial implementations are noted where they provide a starting point.
       the MMU. Separate documented behavior from unverified aliases and keep
       third-party 512 KiB decoding distinct from the stock board.
 
-- [ ] Allow Selecting 128KB or 256KB of RAM. Default is 256KB. 512KB will be added later.
+- [ ] **Allow Selecting 128KB or 256KB of RAM**. Default is 256KB. 512KB will be added later.
 
 - [ ] **PAL/NTSC Toggle** Allow selecting NTSC or PAL video.
 
@@ -238,8 +238,6 @@ Existing partial implementations are noted where they provide a starting point.
 
 - [ ] **Microsoft SoftCard III.** Add it as a second CP/M option, including the
       required bus integration and storage-driver configuration.
-
-- [ ] **Titan III+II.** Add support for this expansion.
 
 - [ ] **Titan III+IIe.** Add support for this expansion.
 
