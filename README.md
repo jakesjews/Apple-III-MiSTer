@@ -211,6 +211,8 @@ Existing partial implementations are noted where they provide a starting point.
       the MMU. Separate documented behavior from unverified aliases and keep
       third-party 512 KiB decoding distinct from the stock board.
 
+- [ ] **PAL/NTSC Toggle** Allow selecting NTSC or PAL video.
+
 - [ ] **Apple II Mouse Interface card.** Use host mouse input and validate against
       an existing native mouse-driver configuration.
 
