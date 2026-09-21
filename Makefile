@@ -9,7 +9,7 @@ help:
 	@echo "make lint          Prepare dependencies and lint the emu top with Verilator"
 	@echo "make lint-prepare  Prepare dependencies for a direct Verilator invocation"
 	@echo "make check-tools   Report which simulation tools are installed"
-	@echo "make test-quick    Unit, disk, slot, block card and timing benches (about a minute)"
+	@echo "make test-quick    Unit, disk, memory map, slot, block card and timing benches (about a minute)"
 	@echo "make test          Every simulation that needs no ROM image (about ten minutes)"
 	@echo "make boot ROM=apple3.rom [DISK=system.woz ARGS='--to-menu']"
 	@echo "                   Boot the whole machine from the stock ROM"

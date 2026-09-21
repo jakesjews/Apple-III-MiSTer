@@ -24,6 +24,8 @@ module slots_tb;
 		.native_mode,
 		.extended_active,
 		.extended_bank,
+		.ram_128k       (1'b0),
+		.bus_addr       (),
 		.ram_byte_addr  (),
 		.ram_word_addr  (),
 		.ram_lane       (),

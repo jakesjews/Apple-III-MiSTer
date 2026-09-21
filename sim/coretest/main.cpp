@@ -61,6 +61,7 @@ int main(int argc, char **argv) {
 	unsigned dump_addr = 0, dump_len = 0;
 	bool key_test = false, warm_reset = false, to_menu = false, disk_trace = false, trace_all = false;
 	bool plus_keymap = false;  // Apple /// Plus keyboard: separate DELETE key
+	bool ram_128k = false;     // 128 KiB memory board instead of 256 KiB
 	// --check-font: after --to-menu, the character generator must hold the set
 	// the console driver keeps at $0C00, loaded through the screen holes.
 	bool check_font = false;
@@ -105,6 +106,7 @@ int main(int argc, char **argv) {
 		}
 		if (option == "--keytest") key_test = true;
 		if (option == "--plus-keymap") plus_keymap = true;
+		if (option == "--ram128k") ram_128k = true;
 		if (option == "--check-font") check_font = to_menu = true;
 		if (option.rfind("--font-dump=", 0) == 0)
 			for (std::size_t at = 12; at < option.size(); at = option.find(',', at) + 1) {
@@ -155,6 +157,7 @@ int main(int argc, char **argv) {
 	top.sd_buff_wr = 0;
 	top.ps2_key = 0;
 	top.plus_keymap = plus_keymap;
+	top.ram_128k = ram_128k;
 	top.video_source = video_source;
 	top.video_monitor = video_monitor;
 	top.interlace = interlace;

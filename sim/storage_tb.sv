@@ -9,9 +9,9 @@ module storage_tb;
 
 	logic reset = 1, cycle_strobe = 0, sync = 0, cpu_read = 1;
 	logic [15:0] ext_cpu_addr = 0;
-	logic [7:0] zero_page = 0, sister_data = 0;
-	wire       active;
-	wire [7:0] bank;
+	logic [7:0] zero_page = 0, sister_data = 0, bank_register = 8'hf1;
+	wire active;
+	wire [7:0] bank, window_bank;
 
 	apple3_ram ram (.*);
 	apple3_extaddr ext (
@@ -22,9 +22,11 @@ module storage_tb;
 		.cpu_read,
 		.cpu_addr(ext_cpu_addr),
 		.zero_page,
+		.bank_register,
 		.sister_data,
 		.active,
-		.bank
+		.bank,
+		.window_bank
 	);
 	always #5 clk = ~clk;
 
@@ -84,6 +86,54 @@ module storage_tb;
 		sister_data  = 8'h8a;
 		pulse_cycle();
 		if (active) $fatal(1, "non-extended ZP captured an X byte");
+
+		// A9 is a register clocked at the end of a read: a store to the bank
+		// register reaches the map only after the next read, so the opcode
+		// fetch that follows it still sees the old bank.
+		if (window_bank !== 8'h01) $fatal(1, "bank latch=%02x after a read", window_bank);
+		bank_register = 8'hf2;
+		cpu_read      = 0;
+		ext_cpu_addr  = 16'hffef;
+		pulse_cycle();
+		if (window_bank !== 8'h01) $fatal(1, "a write clocked the bank latch");
+		cpu_read     = 1;
+		sync         = 1;
+		ext_cpu_addr = 16'h3005;
+		#1;
+		if (window_bank !== 8'h01) $fatal(1, "opcode fetch after the store saw bank %02x", window_bank);
+		pulse_cycle();
+		sync         = 0;
+		ext_cpu_addr = 16'h3006;
+		#1;
+		if (window_bank !== 8'h02) $fatal(1, "operand fetch saw bank %02x", window_bank);
+
+		// An opcode fetched from a zero page of $18-$1F latches its X byte like
+		// any other zero-page read, and a redirected cycle leaves it alone.
+		zero_page    = 8'h1a;
+		sync         = 1;
+		ext_cpu_addr = 16'h00ff;
+		sister_data  = 8'h81;
+		pulse_cycle();
+		sync         = 0;
+		ext_cpu_addr = 16'h0100;
+		sister_data  = 8'h00;
+		#1;
+		if (!active || bank !== 8'h81 || window_bank !== 8'h01) $fatal(1, "opcode fetch X byte=%02x/%b", bank, active);
+		pulse_cycle();
+		if (!active) $fatal(1, "a redirected read clocked the latch");
+		// A zero-page read with bit 7 clear returns the latch to the bank register.
+		ext_cpu_addr = 16'h0020;
+		pulse_cycle();
+		if (active || window_bank !== 8'h02) $fatal(1, "X byte without bit 7 kept the latch: %02x", window_bank);
+		// Ending at SYNC reloads the live bank register, with no lag.
+		sister_data = 8'h83;
+		pulse_cycle();
+		bank_register = 8'hf4;
+		sync          = 1;
+		ext_cpu_addr  = 16'h4000;
+		#1;
+		if (active || window_bank !== 8'h04) $fatal(1, "SYNC reload gave %02x", window_bank);
+		sync = 0;
 
 		$display("PASS apple3 storage and extended addressing");
 		$finish;

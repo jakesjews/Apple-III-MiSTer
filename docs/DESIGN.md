@@ -9,7 +9,8 @@ Sources (abbreviations used below):
 * **[PROM]** Decoded logic-PROM equations of the main logic board (Patrick Schaefer,
   bitsavers `A3PROMs`): 342-0046 timing logic, 342-0043 status, 342-0045 I/O logic,
   342-0055 video mux, 342-0032 video mode control, 342-0030 scan decode,
-  342-0061/-0063 RAS/CAS decode, 342-0056 CASB65.
+  342-0061/-0063 RAS/CAS decode, 342-0056 CASB65; and from archive.org's
+  `AppleIIIROMs`, the 12 V memory board's 341-0042/-0044.
 * **[SOS]** SOS 1.3 kernel/loader/disk driver source, console driver 1.31 source.
 * **[ROM]** Boot ROM source (Rob Justice's ca65 transcription of the ROM listing).
 * **[EDW]** Stephen A. Edwards, "Reconstructing the Apple II+ on an FPGA"
@@ -74,37 +75,48 @@ Sources (abbreviations used below):
 
 ## Memory
 
-* RAM is N×32 KB banks (N = 4/8/16 for 128/256/512 KB). The MiSTer shell models
-  the stock 256 KB 5 V memory board (N=8), the largest configuration Apple
-  shipped; 512 KB requires a third-party expansion board. The parameterized MMU
-  also covers 128/512 KB for simulation and future backends. The system bank
-  ("S") is the highest bank. CPU $0000-$1FFF = S-bank offset $0000-$1FFF, CPU
+* RAM is 32 KB banks. The MiSTer shell models Apple's 256 KB 5 V memory board
+  (banks 0-6 and the system bank), the largest configuration Apple shipped,
+  and the **Memory** option swaps in the 128 KB 12 V board (banks 0-2) at the
+  next reset. 512 KB requires a third-party expansion board; the MMU's
+  16-bank parameter covers it for simulation and future backends. The system
+  bank ("S") is the last bank in the FPGA's RAM at either size. CPU $0000-$1FFF = S-bank offset $0000-$1FFF, CPU
   $A000-$FFFF = S-bank offset $2000-$7FFF, CPU $2000-$9FFF = window into bank
   register bank. [SRM ch.1-2, JEP, On Three 512K guide, MAME]
-* Bank register = E-VIA port A bits 3..0 ($FFEF). Selecting the S-bank's own number
-  (N-1) selects bank 2 instead (verified from the RAS/CAS PROM decode for the 256 KB
-  board: bank 7 decodes identically to bank 2; MAME implements the same rule).
-  Higher values wrap modulo N.
+* Bank register = E-VIA port A ($FFEF); only bits 2..0 reach Apple's boards.
+  On the 256 KB board 7 selects bank 2; on the 128 KB board 7 selects bank 0
+  and 3-6 have no RAM, which reads $FF. It reaches the map through the bank
+  latch, a register clocked at the end of each read, so the opcode fetch that
+  follows a store to it still sees the old bank. [PROM, schematic sheet 3]
 * Zero page register = D-VIA port B ($FFD0). Any CPU access with A[15:8]=$00 is
   redirected to page ZP; with env bit 2 clear, page $01 is redirected to ZP^1
-  (alternate stack). [SRM ch.2, JEP, MAME]
+  (alternate stack). The substitution is on the address bus itself, ahead of
+  every decoder, so a register naming I/O, the ROM or a VIA reaches it, and the
+  slots see the substituted address. [SRM ch.2, JEP, schematic sheet 4]
 * Environment register = D-VIA port A ($FFDF): bit0 ROM enable, bit1 ROM bank
   (1 = stock ROM), bit2 primary stack, bit3 write-protect $C000-$FFFF RAM, bit4
   reset/NMI enable, bit5 screen enable, bit6 I/O enable ($C000-$CFFF), bit7 1 MHz.
 * $C500-$C7FF is always RAM; $FFC0-$FFCF is always RAM; $FFD0-$FFEF are the VIAs
   only while E-VIA PA6 is not driven low (native mode) [MEMO, MAME]; ROM is 4 KB at
-  $F000-$FFFF when enabled. Writes to $F000-$FFFF always go to the underlying RAM
-  (subject to write-protect).
+  $F000-$FFFF when enabled, in native mode only [MEMO, schematic sheet 5].
+  Writes to $F000-$FFFF always go to the underlying RAM (subject to
+  write-protect).
 * Every RAM read returns two bytes: the byte at A and its "sister" at A^$0C00 (text
   area) — the video uses both in 80-column/560/140 modes; for the CPU the sister
   byte of a zero-page pointer fetch is the X byte. [SRM ch.2, JEP]
 * Extended addressing: when ZP is in $18-$1F (status PROM `S399`: translated zero
-  page in $1800-$1FFF) and the CPU reads a zero-page location (not an opcode fetch),
-  the X byte at (ZP^$0C):offset is latched. If bit 7 is set, every following access
+  page in $1800-$1FFF) and the CPU reads a zero-page location (an opcode fetch
+  from it included), the X byte at (ZP^$0C):offset is latched. If bit 7 is set, every following access
   ≥ $0100 of the same instruction (until SYNC) is redirected: X=$80+n → linear
   address n·32K + A (bank n at $0000-$7FFF, bank n+1 at $8000-$FFFF); X=$8F → the
   normal map with bank 0 in the window and RAM under the VIAs. The redirected
-  accesses bypass I/O, ROM and write protection. [JEP, MAME, PROM 342-0043]
+  accesses bypass I/O, ROM, write protection and the alternate stack.
+  [JEP, MAME, PROM 342-0043]
+* The bank latch takes three bits of the X byte on Apple's boards, so $87 is
+  $8F and $88-$8E are $80-$86; the upper half of the last pair has no RAM
+  behind it. The whole map and its ROM, VIA and I/O decode are checked against
+  a reference built from the PROM dumps of both boards.
+  [Memory map](MEMORY_MAP.md)
 
 ## Video
 

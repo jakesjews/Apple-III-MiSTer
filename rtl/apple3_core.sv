@@ -10,6 +10,7 @@ module apple3_core #(
 	input logic        reset,
 	input logic [10:0] ps2_key,
 	input logic        plus_keymap,
+	input logic        ram_128k,
 	// The Apple /// Plus text interlace switch.
 	input logic        interlace,
 	input logic [64:0] host_rtc,
@@ -124,7 +125,10 @@ module apple3_core #(
 	logic via_rising, via_falling;
 	logic native_mode;
 	logic [7:0] environment, zero_page, bank_register;
-	logic [7:0] e_pa_external;
+	logic [ 7:0] latched_bank;
+	logic [15:0] bus_addr;
+	logic        ram_128k_q;
+	logic [ 7:0] e_pa_external;
 
 	logic [18:0] ram_byte_addr;
 	logic [17:0] ram_word_addr;
@@ -188,6 +192,9 @@ module apple3_core #(
 	assign e_pa_i        = bank_register;
 
 	assign machine_reset = reset || (environment[4] && reset_key && control_key);
+	// The memory board is changed with the power off: the option takes effect
+	// at the next reset.
+	always_ff @(posedge clk_14m) if (machine_reset) ram_128k_q <= ram_128k;
 	assign cpu_irq_n = !(via_d_irq || via_e_irq || acia_irq);
 	assign slot_ionmi_n = &slot_nmi_n;
 	assign cpu_nmi_n = !(environment[4] && ((reset_key && !control_key) || !slot_ionmi_n));
@@ -197,7 +204,7 @@ module apple3_core #(
 	// Sheet 9: Reset alone also resets cards in Apple II mode. Native
 	// Reset alone is an NMI; Control-Reset resets the whole machine.
 	assign slot_reset = machine_reset || (!native_mode && reset_key);
-	assign slot_addr = cpu_addr;
+	assign slot_addr = bus_addr;
 	assign slot_data_out = cpu_dout;
 	assign slot_cpu_read = cpu_rwn;
 	assign slot_cycle = cpu_enable && !slot_reset;
@@ -275,13 +282,15 @@ module apple3_core #(
 		.RAM_BANKS(RAM_BANKS)
 	) mmu (
 		.cpu_addr,
-		.cpu_read(cpu_rwn),
+		.cpu_read     (cpu_rwn),
 		.environment,
 		.zero_page,
-		.bank_register,
+		.bank_register(latched_bank),
 		.native_mode,
 		.extended_active,
 		.extended_bank,
+		.ram_128k     (ram_128k_q),
+		.bus_addr,
 		.ram_byte_addr,
 		.ram_word_addr,
 		.ram_lane,
@@ -300,7 +309,7 @@ module apple3_core #(
 		.reset        (slot_reset),
 		.io_select,
 		.rom_select   (slot_rom_select),
-		.addr         (cpu_addr[11:4]),
+		.addr         (bus_addr[11:4]),
 		.cpu_read     (cpu_rwn),
 		.card_data    (slot_data_in),
 		.card_data_oe (slot_data_oe),
@@ -346,9 +355,11 @@ module apple3_core #(
 		.cpu_read    (cpu_rwn),
 		.cpu_addr,
 		.zero_page,
+		.bank_register,
 		.sister_data,
 		.active      (extended_active),
-		.bank        (extended_bank)
+		.bank        (extended_bank),
+		.window_bank (latched_bank)
 	);
 
 	via6522 via_d (

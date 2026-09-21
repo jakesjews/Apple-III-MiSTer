@@ -212,8 +212,33 @@ native_wait:
     lda $c0c0
     cmp #$99
     bne native_wait
+; Apple II mode hides the ROM along with the VIAs (J7 takes -AIISW), so this
+; part runs from RAM with its own interrupt vectors, as the emulation disk does.
 emulation:
     phase 8
+    ldx #0
+:   lda emulation_image,x
+    sta emulation_run,x
+    inx
+    cpx #emulation_end-emulation_run
+    bne :-
+    lda #<emulation_rti
+    sta $fffa
+    sta $fffe
+    lda #>emulation_rti
+    sta $fffb
+    sta $ffff
+    jmp emulation_run
+emulation_image:
+    .org $0300
+.macro expect_ram location, value
+    lda location
+    cmp #value
+    beq :+
+    jmp emulation_fail
+:
+.endmacro
+emulation_run:
     lda #$7f
     sta $ffde
     sta $ffee
@@ -223,21 +248,30 @@ emulation:
     sta $ffe3                 ; PA6 low enters Apple II emulation
     bit $c020
     bit $cfff
-    expect $c090, $12
-    expect $c300, $a3
-    expect $c800, $e3
+    expect_ram $c090, $12
+    expect_ram $c300, $a3
+    expect_ram $c800, $e3
     bit $cfff                 ; native card still needs C02x in II mode
-    expect $c800, $e3
+    expect_ram $c800, $e3
     bit $c020
-    expect $c800, $ff
+    expect_ram $c800, $ff
     bit $c400
-    expect $c800, $e4
+    expect_ram $c800, $e4
     bit $cfff
-    expect $c800, $ff
+    expect_ram $c800, $ff
+    expect_ram $f000, $00     ; RAM, not the ROM's SEI
     lda #$5a
     sta $0200
-done:
-    jmp done
+emulation_done:
+    jmp emulation_done
+emulation_fail:
+    lda #$ee
+    sta $0200
+    jmp emulation_fail
+emulation_rti:
+    rti
+emulation_end:
+    .org emulation_image + (emulation_end - emulation_run)
 wait_slot_flag:
     lda $ffdd
     and #2

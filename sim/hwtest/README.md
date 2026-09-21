@@ -82,3 +82,32 @@ Boot `diskhero.po` and look at the first line of the upper 140-colour map
 lower map (line 144) and the compass strip (line 176). Each should begin
 cleanly. A one-line stripe of coloured dashes across the width at those
 boundaries is the early-fetch fault.
+
+## `memmap.po`: memory-map boundaries
+
+Writes through one view of memory and reads through another, as the decoder
+PROMs of Apple's boards lay the map out ([memory map](../../docs/MEMORY_MAP.md)).
+It finds the memory size from bank 3, shows it, and shows `P` or `F` under each
+group's number. The expected screen is `MAP 256K 123456789A` or `MAP 128K ...`
+with `PPPPPPPPPP.` below; the full stop marks the end of the run. It is three
+blocks long: the ROM loads block 0, which reads the other two through the ROM's
+BLOCKIO.
+
+| Group | Checks |
+|---|---|
+| 1 | Bank pairs: `$81:0100`, the bytes either side of `$81:8000`, and the top byte of the last pair, against the banks in the window |
+| 2 | `$8F`: bank 0 in the window, RAM under the zero page register and under the ROM, registers untouched |
+| 3 | `$87` is `$8F` |
+| 4 | Nothing behind `$86:8000` (256K), or behind `$82:8000`, `$85` and bank register 3 (128K): reads `$FF`, and no other byte changes |
+| 5 | Bank register 7, and bit 3: bank 2 with 256K, bank 0 with 128K |
+| 6 | X byte bits 6-4 and bit 3 are ignored |
+| 7 | The alternate stack sits at zero page xor 1, and a latched X byte switches it off |
+| 8 | The bank latch is a register: the opcode after a store to the bank register comes from the old bank, its operand from the new one |
+| 9 | An opcode fetched from zero page `$1A` latches its X byte: a PLA at `$00FF` pulls through `$81` |
+| A | A zero page register of `$F0` or `$FF` reads the ROM and the VIA |
+
+Cores before the PROM-backed map show `PPFFPPFFFF.`. A 512 KiB machine lays
+some of these banks out differently and fails those groups.
+`./sim/run_core_boot.sh 200000000 memmap.woz --dump-mem=0580,10` shows the
+result row in simulation (`D0` is P, `C6` is F); add `--ram128k` for the other
+board.

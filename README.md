@@ -5,7 +5,7 @@ __Warning: This core is vibe coded.__
 A complete [Apple ///](https://en.wikipedia.org/wiki/Apple_III) core, and a very
 usable one: most software tried so far runs well.
 
-- 256 KiB RAM, every native video mode and the Apple II modes
+- 256 or 128 KiB RAM, every native video mode and the Apple II modes
 - RGB, color composite with Apple II artifact color, and monochrome composite,
   with clean, green, amber and color TV monitor presets
 - Apple /// Plus model with its 560 × 384 text interlace
@@ -100,6 +100,9 @@ as Solid Apple while it is down.
 extra key, DELETE, on the host Delete key, and its **Text Interlace** switch:
 two fields half a line apart for 384 lines, showing pages 1 and 2 merged when
 a program selects page 2, as on the real machine. [Details](docs/INTERLACE.md).
+
+**Memory** in the OSD selects Apple's 256 KiB board or the earlier 128 KiB
+one. Like a board swap, it takes effect at the next reset.
 
 **Video** in the OSD selects the machine's RGB, NTSC color or black-and-white
 output. Apple II hires is in color only on **Color Composite**, as on the real
@@ -203,15 +206,19 @@ Existing partial implementations are noted where they provide a starting point.
       every preset keeps sync and latency, so Direct Video stays clean.
       [Monitors and tests](docs/VIDEO_SOURCES.md#monitors).
 
-- [ ] **PROM-backed memory-map validation.** Build an independent reference from
-      the stock 5 V/256 KiB board's 342-0061 and 342-0063 decoder dumps, the
-      342-0043 status and 342-0056 byte-selection logic, and schematic latch/mux
-      wiring. Record dump hashes and test reads/writes across map boundaries,
-      including the special $8F map and the hypothesized $87 alias, before changing
-      the MMU. Separate documented behavior from unverified aliases and keep
-      third-party 512 KiB decoding distinct from the stock board.
+- [x] **PROM-backed memory-map validation.** An independent reference built
+      from the decoder, status, I/O and timing PROM dumps of Apple's 256 and
+      128 KiB boards and the schematic wiring between them names every DRAM
+      cell and checks the MMU's RAM map and its ROM, VIA and I/O decode
+      against them. It confirmed the `$87` alias of `$8F` and corrected five
+      more cases, among them the bank latch's timing; third-party 512 KiB
+      decoding stays separate and unvalidated.
+      [Sources, findings and tests](docs/MEMORY_MAP.md).
 
-- [ ] **Allow Selecting 128KB or 256KB of RAM**. Default is 256KB. 512KB will be added later.
+- [x] **Selectable 128 KiB or 256 KiB RAM.** The **Memory** option defaults
+      to 256K; 128K swaps in the 12 V board's map from its own PROMs: banks
+      0 to 2, nothing behind the rest. 512 KiB comes later.
+      [Memory map](docs/MEMORY_MAP.md).
 
 - [ ] **PAL/NTSC Toggle** Allow selecting NTSC or PAL video.
 

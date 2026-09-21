@@ -57,6 +57,7 @@ int main(int argc, char **argv) {
 	top.image_readonly = 1;
 	top.ps2_key = 0;
 	top.plus_keymap = 0;
+	top.ram_128k = 0;
 	top.probe_font_addr = 0;
 	auto apply = [&](const Stick &s) {
 		top.joy_b_x = s.bx;

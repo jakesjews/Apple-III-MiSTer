@@ -187,7 +187,7 @@ packages (Icarus 12, Verilator 5.020, GHDL 4.1).
 
 ```sh
 make check-tools   # what is installed, and the brew/apt line for what is not
-make test-quick    # unit, disk, slot, block card and timing benches, about a minute
+make test-quick    # unit, disk, memory map, slot, block card and timing benches, about a minute
 make test          # everything that needs no ROM image, about ten minutes
 make boot ROM=apple3.rom                                   # stock ROM to the disk bootstrap
 make boot ROM=apple3.rom DISK=system.woz ARGS=--to-menu    # SOS to the Utilities menu, about five minutes
@@ -200,7 +200,8 @@ missing; `make test` passes on a fresh clone. The boot test has no fallback.
 | Variable | File | Used by | Source |
 |---|---|---|---|
 | `APPLE3_ROM` (`ROM=` for `make boot`) | 4,096-byte boot ROM, [hashes above](#boot-rom-details) | `sim/run_core_boot.sh` | MAME's `apple3.rom` |
-| `APPLE3_PROM_DIR` | unpacked `A3PROMs` directory | timing PROM comparison in `sim/accuracy/run.sh` | [bitsavers `A3PROMs.zip`](http://bitsavers.org/pdf/apple/apple_III/firmware/A3PROMs.zip) |
+| `APPLE3_PROM_DIR` | unpacked `A3PROMs` directory | timing PROM comparison in `sim/accuracy/run.sh`, decoder PROM comparison in `sim/memmap/run.sh` | [bitsavers `A3PROMs.zip`](http://bitsavers.org/pdf/apple/apple_III/firmware/A3PROMs.zip) |
+| `APPLE3_PROM_12V_DIR` | directory with `341-0042.bin` and `341-0044.bin` | the 128 KiB half of `sim/memmap/run.sh` | the archive.org item below |
 | `APPLE3_DISK_PROM` | `341-0028.bin`, 256 bytes | P6 comparison in `sim/disk/run.sh` | [archive.org `AppleIIIROMs`](https://archive.org/details/AppleIIIROMs) |
 | `APPLE3_PLUS_PROM` | `342-0145-A.bin` | interlace comparison in `sim/accuracy/run.sh` | the same archive.org item |
 
@@ -215,6 +216,7 @@ The individual runners, which `make` calls:
                                         # video, keyboard, I/O, RTC, ACIA, disk
 bash sim/accuracy/run.sh                # documentation-derived checks
 ./sim/disk/run.sh                       # P6, WOZ parser/writeback, drive timing
+./sim/memmap/run.sh                     # memory map against the decoder PROMs, real-CPU boundary reads and writes
 ./sim/joystick/run.sh                   # joystick read methods at every position
 ./sim/timing/run.sh                     # CPU peripheral waits, RDY, RMW and NMI
 ./sim/blockdev/run.sh                   # block card registers, firmware, real-CPU driver calls
@@ -234,6 +236,7 @@ saves the rendered 560x192 picture at the end of a run, which is what a
 MiSTer screenshot shows; the text dumps decode display memory instead.
 `--video=color` or `--video=mono` takes it from that [video source](VIDEO_SOURCES.md),
 and `--monitor=green`, `amber` or `tv` from that monitor on it.
+`--ram128k` runs the 128 KiB memory board.
 `--interlace` turns on the /// Plus [text interlace](INTERLACE.md) switch and
 makes that picture two fields woven into 560x384.
 `--wp-trace` logs each write-protect sense read with the motor timing and

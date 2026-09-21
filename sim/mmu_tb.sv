@@ -4,7 +4,8 @@ module mmu_tb;
 	logic [15:0] cpu_addr;
 	logic        cpu_read;
 	logic [7:0] environment, zero_page, bank_register, extended_bank;
-	logic native_mode, extended_active;
+	logic native_mode, extended_active, ram_128k;
+	wire [15:0] bus_addr;
 	wire [18:0] ram_byte_addr;
 	wire [17:0] ram_word_addr;
 	wire ram_lane, ram_select, ram_read, ram_write_allowed, rom_read, io_select;
@@ -13,6 +14,48 @@ module mmu_tb;
 	integer        checks = 0;
 
 	apple3_mmu #(.RAM_BANKS(16)) dut (.*);
+
+	// The stock 256 KiB machine.  docs/MEMORY_MAP.md derives these from the
+	// decoder PROMs; sim/memmap checks the whole map against the dumps.
+	wire [18:0] stock_addr;
+	wire stock_read, stock_write;
+	apple3_mmu #(
+		.RAM_BANKS(8)
+	) stock (
+		.cpu_addr,
+		.cpu_read,
+		.environment,
+		.zero_page,
+		.bank_register,
+		.native_mode,
+		.extended_active,
+		.extended_bank,
+		.ram_128k,
+		.bus_addr         (),
+		.ram_byte_addr    (stock_addr),
+		.ram_word_addr    (),
+		.ram_lane         (),
+		.ram_select       (),
+		.ram_read         (stock_read),
+		.ram_write_allowed(stock_write),
+		.rom_read         (),
+		.rom_addr         (),
+		.io_select        (),
+		.slot_rom_select  (),
+		.via_d_select     (),
+		.via_e_select     ()
+	);
+
+	task automatic expect_stock(input [15:0] a, input [18:0] p, input logic present);
+		cpu_addr = a;
+		#1;
+		checks++;
+		if (present ? (stock_addr !== p || stock_read !== cpu_read || stock_write === cpu_read) :
+			(stock_read || stock_write))
+			$fatal(
+				1, "stock %04x x=%02x -> %05x read=%b write=%b", a, extended_bank, stock_addr, stock_read, stock_write
+			);
+	endtask
 
 	task automatic expect_addr(input [15:0] a, input [18:0] p);
 		begin
@@ -53,6 +96,7 @@ module mmu_tb;
 		zero_page       = 8'h00;
 		bank_register   = 8'h00;
 		native_mode     = 1'b1;
+		ram_128k        = 1'b0;
 		extended_active = 1'b0;
 		extended_bank   = 8'h00;
 
@@ -96,6 +140,27 @@ module mmu_tb;
 		expect_decode(1, 0, 0, 0, 0, 0);
 		expect_ram_select(1);
 
+		// Stock board: the latch has three bits, pair 6 has no upper bank, and
+		// the latch turns the alternate stack off.
+		extended_bank = 8'h87;
+		expect_stock(16'h2345, 19'h00345, 1);
+		expect_stock(16'hffd0, 19'h3ffd0, 1);
+		extended_bank = 8'h8e;
+		expect_stock(16'h7fff, 19'h37fff, 1);
+		expect_stock(16'h8000, 19'h00000, 0);
+		cpu_read = 1'b0;
+		expect_stock(16'hffff, 19'h00000, 0);
+		cpu_read       = 1'b1;
+		extended_bank  = 8'h8f;
+		environment[2] = 1'b0;
+		zero_page      = 8'h1a;
+		expect_stock(16'h0140, 19'h38140, 1);
+		expect_addr(16'h0140, 19'h78140);
+		extended_active = 1'b0;
+		expect_stock(16'h0140, 19'h39b40, 1);
+		environment = 8'hff;
+		zero_page   = 8'ha2;
+
 		// I/O, always-RAM hole, ROM, VIA priority, and write protection.
 		extended_active = 1'b0;
 		cpu_read        = 1'b1;
@@ -126,15 +191,52 @@ module mmu_tb;
 		expect_decode(0, 1, 0, 0, 0, 0);
 		expect_ram_select(1);
 
-		// In funny mode, the VIA holes reveal the selected ROM/RAM overlay.
+		// Apple II mode hides the VIAs, and the ROM with them (J7 takes -AIISW):
+		// the emulator's monitor image is RAM.
 		cpu_read    = 1'b1;
 		native_mode = 1'b0;
 		cpu_addr    = 16'hffd0;
-		expect_decode(0, 0, 1, 0, 0, 0);
-		expect_ram_select(0);
+		expect_decode(1, 0, 0, 0, 0, 0);
+		expect_ram_select(1);
 		environment[0] = 1'b0;
 		expect_decode(1, 0, 0, 0, 0, 0);
 		expect_ram_select(1);
+		native_mode = 1'b1;
+		environment = 8'hff;
+
+		// A zero page register naming I/O, the ROM or a VIA reaches them, and
+		// write protection covers a zero page in $C000-$FFFF.
+		zero_page = 8'hc0;
+		cpu_addr  = 16'h0090;
+		expect_decode(0, 0, 0, 1, 0, 0);
+		zero_page = 8'hf0;
+		expect_decode(0, 0, 1, 0, 0, 0);
+		zero_page = 8'hff;
+		cpu_addr  = 16'h00d0;
+		expect_decode(0, 0, 0, 0, 1, 0);
+		zero_page = 8'hd0;
+		cpu_read  = 1'b0;
+		expect_decode(0, 0, 0, 0, 0, 0);
+		environment[3] = 1'b0;
+		expect_decode(0, 1, 0, 0, 0, 0);
+		cpu_read  = 1'b1;
+		zero_page = 8'h00;
+
+		// The 128 KiB board: banks 0-2, nothing behind 3-6, and 7 is bank 0.
+		ram_128k      = 1'b1;
+		bank_register = 8'h02;
+		expect_stock(16'h2000, 19'h10000, 1);
+		bank_register = 8'h03;
+		expect_stock(16'h2000, 19'h00000, 0);
+		bank_register = 8'h07;
+		expect_stock(16'h2000, 19'h00000, 1);
+		extended_active = 1'b1;
+		extended_bank   = 8'h82;
+		expect_stock(16'h7fff, 19'h17fff, 1);
+		expect_stock(16'h8000, 19'h00000, 0);
+		extended_active = 1'b0;
+		ram_128k        = 1'b0;
+		bank_register   = 8'h04;
 
 		// Sister bytes share a word and occupy opposite lanes.
 		cpu_addr = 16'h0400;

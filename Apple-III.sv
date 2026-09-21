@@ -52,6 +52,7 @@ module emu (
 		"OB,Write Protect 3,Off,On;",
 		"OC,Write Protect 4,Off,On;",
 		"O8,Model,Apple ///,/// Plus;",
+		"OI,Memory,256K,128K;",
 		"h0OF,Text Interlace,Off,On;",
 		"O9,Serial CTS,Always ready,Host RTS;",
 		"OA,Joystick 1 on,Port B,Port A;",
@@ -341,6 +342,7 @@ module emu (
 		// The Apple /// Plus keyboard adds a DELETE key; the rest of the
 		// encoder output is the same on both machines.
 		.plus_keymap       (plus_model),
+		.ram_128k          (status[18]),
 		.interlace         (interlace),
 		// An unopened HPS UART deasserts RTS. The stock ROM requires CTS
 		// ready during its ACIA test, as with the unplugged motherboard port.

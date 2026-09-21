@@ -11,6 +11,7 @@ module core_tb #(
 	output wire         serial_dtr_n,
 	input  logic [10:0] ps2_key,
 	input  logic        plus_keymap,
+	input  logic        ram_128k,
 	// The Apple /// Plus text interlace switch, and the field it is showing.
 	input  logic        interlace,
 	output wire         field,
@@ -203,6 +204,7 @@ module core_tb #(
 		.reset,
 		.ps2_key            (ps2_key),
 		.plus_keymap        (plus_keymap),
+		.ram_128k           (ram_128k),
 		.interlace,
 		.host_rtc,
 		.serial_rx,
