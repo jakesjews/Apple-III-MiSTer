@@ -217,7 +217,7 @@ Existing partial implementations are noted where they provide a starting point.
 
 - [ ] **Interlacing Options** Bob or Weave. Use the framework.
 
-- [ ] **Aspect Ratio Options** Original, Full Screen, [ARC1], [ARC2]. Original is Default.
+- [ ] **Custom Aspect Ratios** Include [ARC1], [ARC2] as aspect ratio options. Original is Default.
 
 - [ ] **NTSC Composite Comb Filter Option** Off by default.
 
