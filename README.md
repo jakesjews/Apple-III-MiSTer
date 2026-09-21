@@ -192,12 +192,6 @@ Existing partial implementations are noted where they provide a starting point.
       the MMU. Separate documented behavior from unverified aliases and keep
       third-party 512 KiB decoding distinct from the stock board.
 
-- [ ] **Upstream validated MAME fixes.** Turn independently verified differences
-      into small patches with original-source references and minimal guest
-      diagnostics, starting with keyboard, text and joystick decoding. Treat
-      timing and III Plus interlace as separate follow-ups, and resolve memory
-      aliases from hardware evidence rather than emulator agreement.
-
 - [ ] **Apple II Mouse Interface card.** Use host mouse input and validate against
       an existing native mouse-driver configuration.
 
