@@ -10,9 +10,9 @@ help:
 	@echo "make lint-prepare  Prepare dependencies for a direct Verilator invocation"
 	@echo "make check-tools   Report which simulation tools are installed"
 	@echo "make test-quick    Unit, disk, memory map, slot, block card, mouse card and timing benches (about a minute)"
-	@echo "make test          Every simulation that needs no ROM image (about ten minutes)"
-	@echo "make boot ROM=apple3.rom [DISK=system.woz ARGS='--to-menu']"
-	@echo "                   Boot the whole machine from the stock ROM"
+	@echo "make test          Every simulation that needs no disk image (about ten minutes)"
+	@echo "make boot [DISK=system.woz ARGS='--to-menu'] [ROM=other.rom]"
+	@echo "                   Boot the whole machine, from the stock ROM unless ROM= names another"
 	@echo "Append FILES='rtl/apple3_acia.sv sim/acia_tb.sv' to select formatter files"
 
 format format-check:
@@ -36,6 +36,7 @@ test: test-quick
 	bash sim/accuracy/run.sh
 	./sim/joystick/run.sh
 	./sim/serial/run.sh
+	./sim/run_core_boot.sh 30000000
 
 # 30 M clocks reach the disk bootstrap; SOS needs far more with a disk mounted.
 # The harness treats any argument after the clock count as a disk test.

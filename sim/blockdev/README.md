@@ -34,7 +34,7 @@ python3 sim/blockdev/sos_driver.py add problock3.o65 SOS.DRIVER.bin
 java -jar ac.jar -d sysutils.dsk SOS.DRIVER
 java -jar ac.jar -p sysutils.dsk SOS.DRIVER SOS '$0000' < SOS.DRIVER.bin
 storage_test --convert sysutils.dsk sysutils.woz
-APPLE3_ROM=apple3.rom ./sim/run_core_boot.sh 2400000000 sysutils.woz --hd1=hard.po \
+./sim/run_core_boot.sh 2400000000 sysutils.woz --hd1=hard.po \
     --keys=text:f,wait3,text:l,wait3,text:.profile,enter,enter,enter,wait20,dump \
     --keys-after="Device handling"
 ```

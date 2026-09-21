@@ -1,9 +1,11 @@
 // Two 4 KiB Apple /// boot-ROM banks.
 //
-// The ROM image is not part of the repository or the bitstream.  On MiSTer the
-// host uploads games/Apple-III/boot.rom (or the OSD "Load Boot ROM" file)
-// through the host write port after the core starts.  Simulation preloads an
-// image with INIT_FILE instead.
+// Both banks start as Apple's stock 4 KiB ROM, which is built in.  On MiSTer
+// the host can replace it through the host write port: games/Apple-III/boot.rom
+// when the core starts, or the OSD "Load Boot ROM" file.  A bench puts its own
+// program in with INIT_FILE instead.
+//
+// apple3_rom.mif is apple3_rom.hex for Quartus; tools/hex2mif.py makes it.
 
 module apple3_rom #(
 	parameter         INIT_FILE  = "",
@@ -18,6 +20,8 @@ module apple3_rom #(
 );
 
 `ifdef APPLE3_USE_ALTSYNCRAM
+	localparam STOCK_MIF = "rtl/apple3_rom.mif";
+
 	wire  [7:0] low_q;
 	wire  [7:0] high_q;
 	logic       bank_select_d;
@@ -25,7 +29,9 @@ module apple3_rom #(
 	// Separate physical banks allow one host write to mirror into both banks
 	// without creating a two-write-port memory.  Upper-half writes only replace
 	// the high bank, so both 4 KiB and 8 KiB uploads have the expected layout.
-	apple3_rom_bank low_bank (
+	apple3_rom_bank #(
+		.INIT_MIF(STOCK_MIF)
+	) low_bank (
 		.clk,
 		.addr     (addr[11:0]),
 		.q        (low_q),
@@ -33,7 +39,9 @@ module apple3_rom #(
 		.host_data,
 		.host_we  (host_we && !host_addr[12])
 	);
-	apple3_rom_bank high_bank (
+	apple3_rom_bank #(
+		.INIT_MIF(STOCK_MIF)
+	) high_bank (
 		.clk,
 		.addr     (addr[11:0]),
 		.q        (high_q),
@@ -45,10 +53,16 @@ module apple3_rom #(
 	always_ff @(posedge clk) bank_select_d <= addr[12];
 	always_comb q = bank_select_d ? high_q : low_q;
 `else
+	localparam STOCK_FILE = "rtl/apple3_rom.hex";
+
 	(* ramstyle = "M10K" *) logic [7:0] mem[0:8191];
 
 	initial begin
 		if (INIT_FILE != "") $readmemh(INIT_FILE, mem, INIT_START);
+		else begin
+			$readmemh(STOCK_FILE, mem, 0, 4095);
+			$readmemh(STOCK_FILE, mem, 4096, 8191);
+		end
 	end
 
 	always_ff @(posedge clk) begin
@@ -67,7 +81,9 @@ module apple3_rom #(
 endmodule
 
 `ifdef APPLE3_USE_ALTSYNCRAM
-module apple3_rom_bank (
+module apple3_rom_bank #(
+	parameter INIT_MIF = "UNUSED"
+) (
 	input  logic        clk,
 	input  logic [11:0] addr,
 	output wire  [ 7:0] q,
@@ -116,7 +132,7 @@ module apple3_rom_bank (
 		memory.clock_enable_output_a = "BYPASS",
 		memory.clock_enable_output_b = "BYPASS",
 		memory.indata_reg_b = "CLOCK1",
-		memory.init_file = "UNUSED",
+		memory.init_file = INIT_MIF,
 		memory.intended_device_family = "Cyclone V",
 		memory.lpm_type = "altsyncram",
 		memory.operation_mode = "BIDIR_DUAL_PORT",

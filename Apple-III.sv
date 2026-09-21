@@ -238,19 +238,13 @@ module emu (
 	end
 	wire port_b = status[10];  // the controller in port B
 
-	// The boot ROM is not part of the bitstream.  MiSTer sends
-	// games/Apple-III/boot.rom with index 0 when the core starts, and the OSD
-	// "Load Boot ROM" entry (F2) can replace it at run time.  The machine is
-	// held in reset, with the picture blanked, until an image has arrived.
-	wire  rom_download = ioctl_download && ((ioctl_index == 16'd0) || (ioctl_index[5:0] == 6'd2));
-	wire  rom_write = rom_download && ioctl_wr && (ioctl_addr < 27'd8192);
-	logic rom_loaded = 1'b0;
-	logic rom_download_q = 1'b0;
-	always_ff @(posedge clk_14m) begin
-		rom_download_q <= rom_download;
-		if (rom_download_q && !rom_download) rom_loaded <= 1'b1;
-	end
-	wire core_reset = RESET || status[0] || hps_buttons[1] || !pll_locked || rom_download || !rom_loaded;
+	// Apple's boot ROM is built in.  games/Apple-III/boot.rom, which MiSTer
+	// sends with index 0 when the core starts, and the OSD "Load Boot ROM"
+	// entry (F2) replace it until the core is loaded again; the machine is
+	// held in reset while one arrives.
+	wire rom_download = ioctl_download && ((ioctl_index == 16'd0) || (ioctl_index[5:0] == 6'd2));
+	wire rom_write = rom_download && ioctl_wr && (ioctl_addr < 27'd8192);
+	wire core_reset = RESET || status[0] || hps_buttons[1] || !pll_locked || rom_download;
 
 	// Main is the only image-format backend: all floppy mounts arrive as
 	// native or converted WOZ, with independent mount and write-protect state.
@@ -468,10 +462,10 @@ module emu (
 		.clk         (clk_14m),
 		.source      (video_source),
 		.monitor     (status[17:16]),
-		.colour      (rom_loaded ? core_colour : 4'd0),
+		.colour      (core_colour),
 		.colour_phase(core_colour_phase),
 		.colour_burst(core_colour_burst),
-		.rgb_in      (rom_loaded ? {core_r, core_g, core_b} : 24'd0),
+		.rgb_in      ({core_r, core_g, core_b}),
 		.hblank_in   (core_hblank),
 		.vblank_in   (core_vblank),
 		.hsync_in    (core_hsync),

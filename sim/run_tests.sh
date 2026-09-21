@@ -3,6 +3,12 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 mkdir -p sim/obj_dir
+# Quartus loads the boot ROM from a MIF, which must match the simulation's hex.
+python3 tools/hex2mif.py rtl/apple3_rom.hex sim/obj_dir/apple3_rom.mif
+if ! cmp -s sim/obj_dir/apple3_rom.mif rtl/apple3_rom.mif; then
+	echo "rtl/apple3_rom.mif is stale; run python3 tools/hex2mif.py rtl/apple3_rom.hex rtl/apple3_rom.mif" >&2
+	exit 1
+fi
 iverilog -g2012 -Wall -s mmu_tb -o sim/obj_dir/mmu_tb \
 	rtl/apple3_mmu.sv sim/mmu_tb.sv
 vvp sim/obj_dir/mmu_tb

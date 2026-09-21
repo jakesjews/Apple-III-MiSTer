@@ -48,10 +48,10 @@ behaviour to its source.
 
 ## Boot ROM details
 
-Apple's boot ROM is copyrighted and is not included in the repository or the
-core. MiSTer sends `games/Apple-III/boot.rom` to the core every time the core
-starts, and the machine stays in reset until a ROM has arrived. The stock image
-is the 4,096-byte ROM MAME calls `apple3.rom`:
+Apple's stock boot ROM is built into the core, as `rtl/apple3_rom.hex` for
+simulation and `rtl/apple3_rom.mif` for Quartus (`tools/hex2mif.py` makes the
+second from the first, and `sim/run_tests.sh` checks that it has). It is the
+4,096-byte ROM MAME calls `apple3.rom`:
 
 | Size | CRC32 | SHA-1 |
 |---|---|---|
@@ -60,8 +60,10 @@ is the 4,096-byte ROM MAME calls `apple3.rom`:
 A widely circulated copy differs in 48 bytes that sit underneath the VIA
 registers and boots identically. An 8,192-byte image is treated as two 4 KiB
 banks selected by environment register bit 1, which is how custom dual-bank
-ROMs are laid out. **Load Boot ROM** in the OSD replaces the ROM until the core
-is reloaded.
+ROMs are laid out. Another ROM goes in over the built-in one, until the core is
+reloaded: `games/Apple-III/boot.rom`, which MiSTer sends every time the core
+starts, or **Load Boot ROM** in the OSD. The machine is held in reset while
+one arrives.
 
 ## Serial port
 
@@ -192,18 +194,20 @@ packages (Icarus 12, Verilator 5.020, GHDL 4.1).
 ```sh
 make check-tools   # what is installed, and the brew/apt line for what is not
 make test-quick    # unit, disk, memory map, slot, block card, mouse card and timing benches, about a minute
-make test          # everything that needs no ROM image, about ten minutes
-make boot ROM=apple3.rom                                   # stock ROM to the disk bootstrap
-make boot ROM=apple3.rom DISK=system.woz ARGS=--to-menu    # SOS to the Utilities menu, about five minutes
+make test          # everything that needs no disk image, about ten minutes
+make boot                                   # stock ROM to the disk bootstrap (also the last step of make test)
+make boot DISK=system.woz ARGS=--to-menu    # SOS to the Utilities menu, about five minutes
+make boot ROM=apple3hdboot.rom ...          # another 4 KiB boot ROM
 ```
 
-Apart from the [mouse card's two ROMs](MOUSE.md), no Apple ROM or PROM is in
-the repository, so the tests that compare against Apple's chips take their
-images from the environment and skip when one is missing; `make test` passes on a fresh clone. The boot test has no fallback.
+The boot ROM and the [mouse card's two ROMs](MOUSE.md) are the only Apple
+images in the repository, so the tests that compare against Apple's PROMs take
+their dumps from the environment and skip when one is missing; `make test`
+passes on a fresh clone.
 
 | Variable | File | Used by | Source |
 |---|---|---|---|
-| `APPLE3_ROM` (`ROM=` for `make boot`) | 4,096-byte boot ROM, [hashes above](#boot-rom-details) | `sim/run_core_boot.sh` | MAME's `apple3.rom` |
+| `APPLE3_ROM` (`ROM=` for `make boot`) | another 4,096-byte boot ROM in place of the built-in one | `sim/run_core_boot.sh` | for example the [soshdboot](https://github.com/robjustice/soshdboot) ROM |
 | `APPLE3_PROM_DIR` | unpacked `A3PROMs` directory | timing PROM comparison in `sim/accuracy/run.sh`, decoder PROM comparison in `sim/memmap/run.sh` | [bitsavers `A3PROMs.zip`](http://bitsavers.org/pdf/apple/apple_III/firmware/A3PROMs.zip) |
 | `APPLE3_PROM_12V_DIR` | directory with `341-0042.bin` and `341-0044.bin` | the 128 KiB half of `sim/memmap/run.sh` | the archive.org item below |
 | `APPLE3_DISK_PROM` | `341-0028.bin`, 256 bytes | P6 comparison in `sim/disk/run.sh` | [archive.org `AppleIIIROMs`](https://archive.org/details/AppleIIIROMs) |
@@ -226,9 +230,9 @@ bash sim/accuracy/run.sh                # documentation-derived checks
 ./sim/timing/run.sh                     # CPU peripheral waits, RDY, RMW and NMI
 ./sim/blockdev/run.sh                   # block card registers, firmware, real-CPU driver calls
 ./sim/mouse/run.sh                      # mouse card under SOS's mouse driver sequences
-APPLE3_ROM=apple3.rom ./sim/run_core_boot.sh 30000000
-APPLE3_ROM=apple3.rom ./sim/run_core_boot.sh 400000000 system.woz --woz
-APPLE3_ROM=apple3.rom ./sim/run_core_boot.sh 1400000000 sysutils.woz --keytest
+./sim/run_core_boot.sh 30000000
+./sim/run_core_boot.sh 400000000 system.woz --woz
+./sim/run_core_boot.sh 1400000000 sysutils.woz --keytest
 ```
 
 `run_core_boot.sh` runs the stock ROM on the integrated machine and checks that

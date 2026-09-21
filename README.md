@@ -28,20 +28,12 @@ has native Apple /// games as ready-to-mount disk images.
    main=MiSTer_AppleIII
    ```
 
-4. Supply the Apple /// boot ROM as
-   `/media/fat/games/Apple-III/boot.rom`. It is the file MAME calls
-   `apple3.rom`, and it is not included.
-
-   | Name | Size | CRC32 | SHA-1 |
-   |---|---|---|---|
-   | `apple3.rom` | 4096 | `1af7ec42` | `8043f914ebdcdab9838dbb78f8a2ee3867d210d2` |
-
-5. Put disk images in `/media/fat/games/Apple-III/`, launch the core, and use
+4. Put disk images in `/media/fat/games/Apple-III/`, launch the core, and use
    **Mount Drive 1** to select a boot disk. **Mount Drive 2–4** are the three
    external Disk III drives. Each drive has its own **Write Protect** option.
    **Mount Hard Disk 1** and **2** take ProDOS-order images for the block
    card in slot 1
-6. If SOS lists only two drives, use System Utilities → **System Configuration
+5. If SOS lists only two drives, use System Utilities → **System Configuration
    Program**: read your `SOS.DRIVER`, set **Change System Parameters → Number of
    Disk III Drives** to **4**, then **Generate New System** to save `SOS.DRIVER`
    on your boot disk and reboot. Apple II emulation uses drives 1 and 2.
@@ -139,11 +131,11 @@ Icarus Verilog, Verilator 5, GHDL and cc65:
 
 ```sh
 make check-tools                  # lists what is missing and how to install it
-make test                         # every test that needs no ROM, about ten minutes
-make boot ROM=apple3.rom DISK=system.woz ARGS=--to-menu   # boot SOS in the simulator
+make test                         # every test that needs no disk image, about ten minutes
+make boot DISK=system.woz ARGS=--to-menu   # boot SOS in the simulator
 ```
 
-Booting needs your own boot ROM and a WOZ disk image.
+Booting SOS needs a WOZ disk image.
 [Details](docs/DEVELOPMENT.md#testing).
 
 ## Todo

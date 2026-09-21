@@ -2,15 +2,18 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# The Apple /// boot ROM is not distributed; point APPLE3_ROM at a 4 KiB image.
-rom=${APPLE3_ROM:-research/roms/apple3.rom}
-if [[ ! -f $rom || $(wc -c < "$rom" | tr -d " ") != 4096 ]]; then
-	echo "set APPLE3_ROM to the 4096-byte Apple /// boot ROM (missing or wrong size: $rom)" >&2
-	exit 1
-fi
-
+# The stock boot ROM is rtl/apple3_rom.hex; APPLE3_ROM names another 4 KiB
+# image, such as the soshdboot ROM.
 mkdir -p sim/gen
-xxd -p -c 1 "$rom" > sim/gen/apple3.rom.hex
+if [[ -n ${APPLE3_ROM:-} ]]; then
+	if [[ ! -f $APPLE3_ROM || $(wc -c < "$APPLE3_ROM" | tr -d " ") != 4096 ]]; then
+		echo "APPLE3_ROM must be a 4096-byte boot ROM image (missing or wrong size: $APPLE3_ROM)" >&2
+		exit 1
+	fi
+	xxd -p -c 1 "$APPLE3_ROM" > sim/gen/apple3.rom.hex
+else
+	cp rtl/apple3_rom.hex sim/gen/apple3.rom.hex
+fi
 ./sim/gen_vhdl.sh >/dev/null
 
 sources=(
