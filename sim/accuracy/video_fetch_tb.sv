@@ -322,7 +322,7 @@ module video_fetch_tb;
 				3'b010, 3'b011: begin
 					first           = page2 ? peek(text + SISTER) : peek(text);
 					second          = page2 ? peek(text) : peek(text + SISTER);
-					// White on the colour lines; the RGB picture renders it green.
+					// White on black: the colour latch is off in this mode.
 					reference_pixel = text_dot((dot < 7) ? first : second, line, dot % 7) ? 5'h0f : 5'h00;
 				end
 				3'b101: begin

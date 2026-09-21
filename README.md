@@ -103,7 +103,9 @@ a program selects page 2, as on the real machine. [Details](docs/INTERLACE.md).
 
 **Video** in the OSD selects the machine's RGB, NTSC color or black-and-white
 output. Apple II hires is in color only on **Color Composite**, as on the real
-machine. [Details](docs/VIDEO_SOURCES.md).
+machine. Text and monochrome graphics are white on black on all three; with
+**Mono Composite**, **Phosphor** shows that output in the green of a
+Monitor ///. [Details](docs/VIDEO_SOURCES.md).
 
 Controller 1 is the joystick in port B, which SOS and Business BASIC read as
 joystick 0; **Joystick 1 on** in the OSD moves it to port A. Controller 2 uses
@@ -171,9 +173,10 @@ Existing partial implementations are noted where they provide a starting point.
       that shows page 1 in one field and the selected page in the other.
       [Hardware and tests](docs/INTERLACE.md).
 
-- [ ] **Neutral RGB output.** Remove the 80-column-only green override so
-      monochrome RGB modes remain white on black. Keep green phosphor as an
-      optional monitor presentation, and update the video tests and documentation.
+- [x] **Neutral RGB output.** The 80-column-only green override is gone, so
+      every monochrome RGB mode is white on black. Green phosphor is an optional
+      monitor on the monochrome output, shown by gray level in every mode.
+      [Phosphor option and tests](docs/VIDEO_SOURCES.md#mono-composite).
 
 - [ ] **Display monitor presets.** Separate source accuracy from presentation:
       offer Reference, Monitor /// Green, Amber and Color TV presets rather than

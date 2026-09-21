@@ -1,5 +1,5 @@
 `timescale 1ns / 1ps
-// The three video sources on whole frames.  The scan counters, the sister-byte
+// The three video sources and the green-phosphor monitor on whole frames.  The scan counters, the sister-byte
 // RAM, the video generator and the monitor run together, so these checks cover
 // what the unit benches cannot: where a fetched dot falls against the
 // subcarrier, and the burst the monitor sees on each line.
@@ -97,11 +97,13 @@ module video_source_tb;
 	);
 
 	logic [1:0] source = 0;
+	logic       green_phosphor = 0;
 	wire [7:0] red, green, blue;
 	wire hblank, vblank;
 	apple3_composite monitor (
 		.clk,
 		.source,
+		.green_phosphor,
 		.colour,
 		.colour_phase,
 		.colour_burst,
@@ -123,6 +125,9 @@ module video_source_tb;
 	localparam integer       SISTER    = 'h400;
 	localparam integer       PLANE     = 'h2000;
 	localparam         [1:0] RGB       = 2'd0, NTSC = 2'd1, MONO = 2'd2;
+	// The monitors a frame can be taken from: a source, and for the B/W jack
+	// the green phosphor of a Monitor ///.
+	localparam         [2:0] GREEN     = {1'b1, MONO};
 
 	integer failures = 0;
 	task automatic check(input logic ok, input string message);
@@ -162,8 +167,8 @@ module video_source_tb;
 	string        directory;
 	integer       file;
 	logic   [4:0] settled = '1;
-	task automatic capture(input logic [1:0] monitor_source, input string name);
-		source = monitor_source;
+	task automatic capture(input logic [2:0] monitor, input string name);
+		{green_phosphor, source} = monitor;
 		// After a mode change, a whole frame first, so that every line's
 		// burst has been seen.
 		if (settled !== {native_mode, video_mode}) @(posedge vblank);
@@ -181,6 +186,14 @@ module video_source_tb;
 			$fclose(file);
 		end
 	endtask
+
+	// Dots of the frame that are neither black nor the given colour.
+	function automatic integer off_colour(input logic [23:0] lit);
+		off_colour = 0;
+		for (integer row = 0; row < 192; row++)
+		for (integer column = 0; column < 560; column++)
+		if (frame[row][column] != 24'h000000 && frame[row][column] != lit) off_colour++;
+	endfunction
 
 	// Dots of the frame that are neither black nor white.
 	function automatic integer tinted(input integer first_line, input integer last_line);
@@ -228,6 +241,25 @@ module video_source_tb;
 		8'd255
 	};
 	// Apple II hires bytes for even and odd columns, eight columns a band.
+	// The ladder on a green phosphor, as in composite_tb.
+	logic [23:0] GREEN_LEVEL[16] = '{
+		24'h000000,
+		24'h010d00,
+		24'h021900,
+		24'h032600,
+		24'h043600,
+		24'h054300,
+		24'h064f00,
+		24'h075c00,
+		24'h0a8100,
+		24'h0b8e00,
+		24'h0c9a00,
+		24'h0da700,
+		24'h0eb700,
+		24'h0fc400,
+		24'h10d000,
+		24'h11dd00
+	};
 	logic [7:0] HIRES_EVEN[5] = '{8'h55, 8'h2a, 8'hd5, 8'haa, 8'h7f};
 	logic [7:0] HIRES_ODD[5] = '{8'h2a, 8'h55, 8'haa, 8'hd5, 8'h7f};
 	logic [23:0] ARTIFACT[5] = '{24'hf31cff, 24'h0be200, 24'h0b92ff, 24'hf36c00, 24'hffffff};
@@ -262,6 +294,9 @@ module video_source_tb;
 			"bit 7 delays hires dots by one master dot");
 		capture(MONO, "hires-mono");
 		check(tinted(0, 191) == 0, "Apple II hires is black and white on the B/W output");
+		capture(GREEN, "hires-green");
+		check(frame[100][0] == 24'h11dd00 && frame[100][2] == 24'h000000 && off_colour(24'h11dd00) == 0,
+			  "Apple II hires is green on black on a green phosphor");
 
 		// Apple II mixed mode keeps the burst through its text lines, so
 		// they fringe as on an Apple II; TEXT alone kills it.
@@ -285,7 +320,21 @@ module video_source_tb;
 		capture(MONO, "text80-mono");
 		check(frame[100][0] == 24'hffffff && tinted(0, 191) == 0, "80-column text is white on the B/W output");
 		capture(RGB, "text80-rgb");
-		check(frame[100][0] == 24'h11dd00, "80-column text stays green on the RGB output");
+		errors = 0;
+		for (integer column = 0; column < 560; column++)
+		if (frame[100][column] != (((column % 7) % 2 == 0) ? 24'hffffff : 24'h000000)) errors++;
+		check(tinted(0, 191) == 0 && errors == 0, "80-column text is white on black on the RGB output");
+		// The phosphor is the monochrome monitor's: it shows the same dots in
+		// green, and the other two sources ignore the option.
+		capture(GREEN, "text80-green");
+		errors = 0;
+		for (integer column = 0; column < 560; column++)
+		if (frame[100][column] != (((column % 7) % 2 == 0) ? 24'h11dd00 : 24'h000000)) errors++;
+		check(off_colour(24'h11dd00) == 0 && errors == 0, "80-column text is sharp green on a green phosphor");
+		capture({1'b1, RGB}, "text80-rgb-phosphor");
+		check(frame[100][0] == 24'hffffff && tinted(0, 191) == 0, "the phosphor option leaves the RGB output white");
+		capture({1'b1, NTSC}, "text80-ntsc-phosphor");
+		check(frame[100][0] == 24'hffffff && tinted(0, 191) == 0, "the phosphor option leaves the NTSC output white");
 
 		// 140 x 192: sixteen bars, 35 dots each rounded to whole pixels.
 		for (integer line = 0; line < 192; line++)
@@ -306,6 +355,10 @@ module video_source_tb;
 		errors = 0;
 		for (integer bar = 0; bar < 20; bar++) if (frame[100][bar*28+14] != {3{GREY[(bar*16)/20]}}) errors++;
 		check(errors == 0, "140-colour bars are the RP4 grey scale on the B/W output");
+		capture(GREEN, "bars-green");
+		errors = 0;
+		for (integer bar = 0; bar < 20; bar++) if (frame[100][bar*28+14] != GREEN_LEVEL[(bar*16)/20]) errors++;
+		check(errors == 0, "140-colour bars keep their sixteen levels on a green phosphor");
 		capture(RGB, "bars-rgb");
 		check(frame[100][28*5+14] == 24'h007722 && frame[100][28*19+14] == 24'hffffff,
 			  "140-colour bars keep the RGB palette");

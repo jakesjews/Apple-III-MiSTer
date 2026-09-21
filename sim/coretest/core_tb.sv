@@ -14,8 +14,10 @@ module core_tb #(
 	// The Apple /// Plus text interlace switch, and the field it is showing.
 	input  logic        interlace,
 	output wire         field,
-	// The OSD's Video option: 0 RGB, 1 colour composite, 2 mono composite.
+	// The OSD's Video option: 0 RGB, 1 colour composite, 2 mono composite,
+	// and its Phosphor option for the last of them.
 	input  logic [ 1:0] video_source,
+	input  logic        green_phosphor,
 	input  logic [64:0] host_rtc,
 	input  logic [ 7:0] joy_a_x,
 	input  logic [ 7:0] joy_a_y,
@@ -128,6 +130,7 @@ module core_tb #(
 	apple3_composite monitor (
 		.clk         (clk),
 		.source      (video_source),
+		.green_phosphor,
 		.colour      (video_colour),
 		.colour_phase(video_colour_phase),
 		.colour_burst(video_colour_burst),

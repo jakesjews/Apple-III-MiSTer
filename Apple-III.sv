@@ -45,6 +45,7 @@ module emu (
 		"-;",
 		"O2,Aspect ratio,4:3,16:9;",
 		"ODE,Video,RGB,Color Composite,Mono Composite;",
+		"H1OG,Phosphor,White,Green;",
 		"O35,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 		"O6,Write Protect 1,Off,On;",
 		"O7,Write Protect 2,Off,On;",
@@ -97,6 +98,11 @@ module emu (
 	wire plus_model = status[8];
 	wire interlace = plus_model && status[15];
 
+	// "Phosphor" belongs to the monochrome monitor, so the menu offers it with
+	// that source.
+	wire [1:0] video_source = status[14:13];
+	wire       mono_source = (video_source == 2'd2);
+
 	// S0-S3 are the Disk III drives; S4 and S5 are the block card's images.
 	wire [ 5:0] img_mounted;
 	wire        img_readonly;
@@ -137,7 +143,7 @@ module emu (
 		.status            (status),
 		.status_in         (status),
 		.status_set        (1'b0),
-		.status_menumask   ({15'd0, plus_model}),
+		.status_menumask   ({14'd0, !mono_source, plus_model}),
 		.info_req          (1'b0),
 		.info              (8'd0),
 
@@ -398,7 +404,8 @@ module emu (
 	);
 
 	// The "Video" option chooses the monitor: the XRGB lines, the NTSC colour
-	// output or the B/W jack.  A reserved value shows RGB.
+	// output or the B/W jack.  A reserved value shows RGB.  "Phosphor" makes the
+	// B/W jack's monitor a green Monitor ///.
 	//
 	// The monitor's outputs are registers in the machine-clock domain.
 	// video_mixer samples them from CLK_VIDEO on ce_pix, and the phase of the
@@ -409,23 +416,24 @@ module emu (
 	wire [7:0] core_r_q, core_g_q, core_b_q;
 	wire core_hblank_q, core_vblank_q, core_hsync_q, core_vsync_q;
 	apple3_composite monitor (
-		.clk         (clk_14m),
-		.source      (status[14:13]),
-		.colour      (rom_loaded ? core_colour : 4'd0),
-		.colour_phase(core_colour_phase),
-		.colour_burst(core_colour_burst),
-		.rgb_in      (rom_loaded ? {core_r, core_g, core_b} : 24'd0),
-		.hblank_in   (core_hblank),
-		.vblank_in   (core_vblank),
-		.hsync_in    (core_hsync),
-		.vsync_in    (core_vsync),
-		.red         (core_r_q),
-		.green       (core_g_q),
-		.blue        (core_b_q),
-		.hblank      (core_hblank_q),
-		.vblank      (core_vblank_q),
-		.hsync       (core_hsync_q),
-		.vsync       (core_vsync_q)
+		.clk           (clk_14m),
+		.source        (video_source),
+		.green_phosphor(status[16]),
+		.colour        (rom_loaded ? core_colour : 4'd0),
+		.colour_phase  (core_colour_phase),
+		.colour_burst  (core_colour_burst),
+		.rgb_in        (rom_loaded ? {core_r, core_g, core_b} : 24'd0),
+		.hblank_in     (core_hblank),
+		.vblank_in     (core_vblank),
+		.hsync_in      (core_hsync),
+		.vsync_in      (core_vsync),
+		.red           (core_r_q),
+		.green         (core_g_q),
+		.blue          (core_b_q),
+		.hblank        (core_hblank_q),
+		.vblank        (core_vblank_q),
+		.hsync         (core_hsync_q),
+		.vsync         (core_vsync_q)
 	);
 
 	// The field changes as vertical blanking begins, so the scaler finds it

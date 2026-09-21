@@ -11,8 +11,9 @@
 //
 // Every picture the motherboard makes comes from the four colour lines
 // RGB8..RGB1 out of H3.  They are `colour` here; red, green and blue are the
-// XRGB connector as an RGB monitor shows it, and apple3_composite builds the
-// B/W and NTSC outputs from the same lines.
+// XRGB connector as an RGB monitor shows it, white on black in every
+// monochrome mode, and apple3_composite builds the B/W and NTSC outputs from
+// the same lines.
 
 module apple3_video (
 	input logic       clk,
@@ -77,7 +78,6 @@ module apple3_video (
 	logic [2:0] glyph_row;
 	logic [2:0] glyph_column;
 	logic pixel_on, invert_pixel;
-	logic       green_text;
 	/* verilator lint_off UNUSEDSIGNAL */
 	logic [3:0] delayed_dot;  // a 280-dot mode uses the double-width dot number
 	/* verilator lint_on UNUSEDSIGNAL */
@@ -288,7 +288,6 @@ module apple3_video (
 		graphics_palette = 1'b0;
 		pixel_on         = 1'b0;
 		invert_pixel     = 1'b0;
-		green_text       = 1'b0;
 		// BT1 is the serial bitmap one 14M clock late.  J3 selects it in
 		// place of BT0 while the byte on display has bit 7 set, in every
 		// DHIRES mode, which is the Apple II's half-dot shift.  The first dot
@@ -335,10 +334,8 @@ module apple3_video (
 					invert_pixel = !char_code[7] && (!glyph[7] || flash_count[3]);
 					pixel_on     = pixel_on ^ invert_pixel;
 					// The colour latch is off outside the colour modes and
-					// RP8/RP13 pull the lines to white on black.  The RGB
-					// picture keeps the green of a Monitor ///.
+					// RP8/RP13 pull the lines to white on black.
 					colour_index = pixel_on ? 4'hf : 4'h0;
-					green_text   = pixel_on;
 				end
 
 				4'd4: begin
@@ -394,7 +391,7 @@ module apple3_video (
 			endcase
 		end
 
-		rgb    = palette_rgb(green_text ? 4'hc : colour_index, graphics_palette);
+		rgb    = palette_rgb(colour_index, graphics_palette);
 		red    = rgb[23:16];
 		green  = rgb[15:8];
 		blue   = rgb[7:0];

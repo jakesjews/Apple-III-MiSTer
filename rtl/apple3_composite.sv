@@ -12,10 +12,15 @@
 // `source` selects the monitor: 0 RGB, 1 colour composite, 2 monochrome
 // composite.  All three leave here four dots after they arrive, with blanking
 // and sync to match, so the picture does not move when the source changes.
+//
+// `green_phosphor` makes the monochrome monitor a Monitor ///, whose P31 tube
+// shows the B/W signal's grey levels in green.  It is a presentation of that
+// signal alone: the RGB and NTSC pictures are as the motherboard sends them.
 
 module apple3_composite (
 	input logic       clk,
 	input logic [1:0] source,
+	input logic       green_phosphor,
 
 	input logic [ 3:0] colour,
 	input logic [ 1:0] colour_phase,
@@ -53,6 +58,22 @@ module apple3_composite (
 	function automatic [7:0] grey_level(input logic [3:0] lines);
 		grey_level = (lines[0] ? 8'd15 : 8'd0) + (lines[1] ? 8'd29 : 8'd0) + (lines[2] ? 8'd62 : 8'd0) +
 			(lines[3] ? 8'd149 : 8'd0);
+	endfunction
+
+	// A phosphor's picture is the grey level times its colour at full drive.
+	localparam logic [23:0] P31_GREEN = 24'h11dd00;
+
+	function automatic [7:0] scaled(input logic [7:0] level, input logic [7:0] full);
+		logic [16:0] product;
+		begin
+			// level * full / 255, to the nearest step.
+			product = {9'd0, level} * {9'd0, full} + 17'd127;
+			scaled  = 8'((product + 17'd1 + (product >> 8)) >> 8);
+		end
+	endfunction
+
+	function automatic [23:0] phosphor(input logic [7:0] level, input logic [23:0] full);
+		phosphor = {scaled(level, full[23:16]), scaled(level, full[15:8]), scaled(level, full[7:0])};
 	endfunction
 
 	function automatic [7:0] clip(input logic signed [17:0] value);
@@ -122,7 +143,7 @@ module apple3_composite (
 					blue  <= clip((18'sd5 * luma_direct) >>> 2);
 				end
 			end
-			2'd2:    {red, green, blue} <= {3{grey[2]}};
+			2'd2:    {red, green, blue} <= green_phosphor ? phosphor(grey[2], P31_GREEN) : {3{grey[2]}};
 			default: {red, green, blue} <= rgb[2];
 		endcase
 	end

@@ -1,9 +1,11 @@
 `timescale 1ns / 1ps
 
-// The three video sources, driven with dot streams as apple3_video makes them.
+// The three video sources and the green-phosphor monitor, driven with dot
+// streams as apple3_video makes them.
 module composite_tb;
 	logic        clk = 0;
 	logic [ 1:0] source = 0;
+	logic        green_phosphor = 0;
 	logic [ 3:0] colour = 0;
 	logic [ 1:0] colour_phase = 0;
 	logic        colour_burst = 0;
@@ -93,9 +95,32 @@ module composite_tb;
 		8'd255
 	};
 
+	// A Monitor /// shows the same ladder in P31 green: each grey level times
+	// 11dd00, worked by hand.
+	logic [23:0] GREEN[16] = '{
+		24'h000000,
+		24'h010d00,
+		24'h021900,
+		24'h032600,
+		24'h043600,
+		24'h054300,
+		24'h064f00,
+		24'h075c00,
+		24'h0a8100,
+		24'h0b8e00,
+		24'h0c9a00,
+		24'h0da700,
+		24'h0eb700,
+		24'h0fc400,
+		24'h10d000,
+		24'h11dd00
+	};
+
 	initial begin
-		// Native colours: a steady colour number is its own hue.
-		source = 2'd1;
+		// Native colours: a steady colour number is its own hue.  The
+		// phosphor option is the monochrome monitor's and leaves them alone.
+		source         = 2'd1;
+		green_phosphor = 1;
 		line_start(1);
 		for (int c = 0; c < 16; c++) begin
 			pattern(c[3:0], c[3:0], c[3:0], c[3:0]);
@@ -128,7 +153,8 @@ module composite_tb;
 		expect_rgb(24'h7f7f7f, "decoded single dots");
 
 		// The B/W jack: grey by colour number, no chroma and no filter.
-		source = 2'd2;
+		source         = 2'd2;
+		green_phosphor = 0;
 		for (int c = 0; c < 16; c++) begin
 			dot(c[3:0]);
 			repeat (3) dot(0);
@@ -136,8 +162,22 @@ module composite_tb;
 			if (c > 0 && GREY[c] <= GREY[c-1]) $fatal(1, "grey scale is not monotonic at %0d", c);
 		end
 
-		// RGB passes through, and every source is four dots late with its
-		// blanking and sync.
+		// The same jack on a green phosphor: every grey level keeps its place,
+		// and a single dot is as sharp and as late as it is in white.
+		green_phosphor = 1;
+		for (int c = 0; c < 16; c++) begin
+			dot(c[3:0]);
+			repeat (2) dot(0);
+			expect_rgb(24'h000000, $sformatf("green %0d arrived early", c));
+			dot(0);
+			expect_rgb(GREEN[c], $sformatf("green %0d", c));
+			if (c > 0 && GREEN[c][15:8] <= GREEN[c-1][15:8]) $fatal(1, "green scale is not monotonic at %0d", c);
+			dot(0);
+			expect_rgb(24'h000000, $sformatf("green %0d lasted two dots", c));
+		end
+
+		// RGB passes through, whatever the phosphor option says, and every
+		// source is four dots late with its blanking and sync.
 		source    = 2'd0;
 		rgb_in    = 24'h123456;
 		hblank_in = 1;

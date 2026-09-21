@@ -111,14 +111,16 @@ module video_tb;
 		scan(0, 42, 0);
 		if (!hblank) $fatal(1, "dot after the last column is visible");
 
-		// 80-column text is white on the colour lines; only the RGB picture
-		// renders it green.
+		// 80-column text is white on the colour lines and on the RGB picture.
 		video_mode                       = 4'b0010;
 		dut.pixel_low                    = 8'hc1;
 		dut.character_ram[{7'h41, 3'd0}] = 8'h01;
 		sample (0, 0);
-		if (colour !== 4'hf || {red, green, blue} !== 24'h11dd00)
+		if (colour !== 4'hf || {red, green, blue} !== 24'hffffff)
 			$fatal(1, "80-col colour=%x rgb=%06x", colour, {red, green, blue});
+		sample (0, 1);
+		if (colour !== 4'h0 || {red, green, blue} !== 24'h000000)
+			$fatal(1, "80-col background colour=%x rgb=%06x", colour, {red, green, blue});
 
 		// A bitmap byte with bit 7 set is shown one 14M dot late, and its
 		// first dot is still the last dot of the byte before it.

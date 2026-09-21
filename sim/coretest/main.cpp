@@ -48,11 +48,13 @@ int main(int argc, char **argv) {
 	bool wp_trace = false;
 	// --frame-out=PATH: after the run, write the next displayed frame as a
 	// 560x192 PPM, the picture the core produces rather than text memory.
-	// --video=rgb|color|mono selects the monitor it is taken from.
+	// --video=rgb|color|mono|green selects the monitor it is taken from; green
+	// is the mono source on a green-phosphor Monitor ///.
 	// --interlace turns on the Apple /// Plus text interlace switch; the frame
 	// is then two fields woven into 560x384, the upper field on the even rows.
 	std::string frame_out;
 	unsigned video_source = 0;
+	bool green_phosphor = false;
 	bool interlace = false;
 	// --dump-mem=ADDR,LEN (hex): hex dump of system-bank memory ($0000-$1FFF or
 	// $A000-$FFFF) at the end of the run, for disassembling a loaded program.
@@ -92,6 +94,10 @@ int main(int argc, char **argv) {
 		if (option.rfind("--frame-out=", 0) == 0) frame_out = option.substr(12);
 		if (option == "--video=color") video_source = 1;
 		if (option == "--video=mono") video_source = 2;
+		if (option == "--video=green") {
+			video_source = 2;
+			green_phosphor = true;
+		}
 		if (option == "--interlace") interlace = true;
 		if (option.rfind("--dump-mem=", 0) == 0) {
 			dump_addr = std::strtoul(argv[i] + 11, nullptr, 16);
@@ -151,6 +157,7 @@ int main(int argc, char **argv) {
 	top.ps2_key = 0;
 	top.plus_keymap = plus_keymap;
 	top.video_source = video_source;
+	top.green_phosphor = green_phosphor;
 	top.interlace = interlace;
 	top.probe_addr = 0;
 	top.probe_font_addr = 0;
