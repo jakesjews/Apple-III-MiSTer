@@ -6,7 +6,8 @@ A complete [Apple ///](https://en.wikipedia.org/wiki/Apple_III) core, and a very
 usable one: most software tried so far runs well.
 
 - 256 KiB RAM, every native video mode and the Apple II modes
-- RGB, color composite with Apple II artifact color, and monochrome composite
+- RGB, color composite with Apple II artifact color, and monochrome composite,
+  with clean, green, amber and color TV monitor presets
 - Apple /// Plus model with its 560 × 384 text interlace
 - Four floppy drives: WOZ, DSK, DO, PO, NIB and 2MG, writable and formattable
 - A hard-disk card with two images, bootable without a floppy
@@ -103,9 +104,10 @@ a program selects page 2, as on the real machine. [Details](docs/INTERLACE.md).
 
 **Video** in the OSD selects the machine's RGB, NTSC color or black-and-white
 output. Apple II hires is in color only on **Color Composite**, as on the real
-machine. Text and monochrome graphics are white on black on all three; with
-**Mono Composite**, **Phosphor** shows that output in the green of a
-Monitor ///. [Details](docs/VIDEO_SOURCES.md).
+machine. Text and monochrome graphics are white on black on all three. With
+either composite output, **Display** chooses the monitor on it: **RGB Monitor**
+for the clean picture, **Monitor /// Green** or **Amber**, or a **Color TV**
+with its soft text and bleeding color. [Details](docs/VIDEO_SOURCES.md).
 
 Controller 1 is the joystick in port B, which SOS and Business BASIC read as
 joystick 0; **Joystick 1 on** in the OSD moves it to port A. Controller 2 uses
@@ -175,16 +177,17 @@ Existing partial implementations are noted where they provide a starting point.
 
 - [x] **Neutral RGB output.** The 80-column-only green override is gone, so
       every monochrome RGB mode is white on black. Green phosphor is an optional
-      monitor on the monochrome output, shown by gray level in every mode.
-      [Phosphor option and tests](docs/VIDEO_SOURCES.md#mono-composite).
+      monitor, shown by gray level in every mode.
+      [Monitors and tests](docs/VIDEO_SOURCES.md#monitors).
 
-- [ ] **Display monitor presets.** Separate source accuracy from presentation:
-      offer Reference, Monitor /// Green, Amber and Color TV presets rather than
-      individual tint, saturation or bandwidth controls. Apply monochrome presets
-      to the complete B/W signal, preserving its gray levels in every mode.
-      MiSTer's gamma and video-processing presets will be used for generic softness,
-      scanlines and masks so do not duplcate these capabilities in the core.
-      Keep source-specific NTSC decoding in the core and a clean Direct Video path for external scalers.
+- [x] **Display monitor presets.** The **Display** option puts a monitor on a
+      composite output, separate from the signal: RGB Monitor (clean),
+      Monitor /// Green, Amber and Color TV, each a preset with no tint,
+      saturation or bandwidth controls. Monochrome tubes show the whole signal
+      by level in every mode; the television keeps its chroma trap and narrow
+      chroma. Generic softness, scanlines and masks are left to MiSTer, and
+      every preset keeps sync and latency, so Direct Video stays clean.
+      [Monitors and tests](docs/VIDEO_SOURCES.md#monitors).
 
 - [ ] **PROM-backed memory-map validation.** Build an independent reference from
       the stock 5 V/256 KiB board's 342-0061 and 342-0063 decoder dumps, the

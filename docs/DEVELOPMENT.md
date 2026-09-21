@@ -25,8 +25,9 @@ behaviour to its source.
 - Downloadable character generator, inverse and flashing attributes, page
   selection, screen blanking and smooth vertical scrolling.
 - The [three video outputs](VIDEO_SOURCES.md): RGB, the NTSC colour encoder
-  with a decoding monitor, and the black-and-white output's grey scale, in
-  white or on a green phosphor.
+  with a decoding monitor, and the black-and-white output's grey scale; and
+  the monitors on the composite ones: clean, green and amber tubes, and a
+  colour television.
 - The Apple /// Plus [text interlace](INTERLACE.md): its scan PROM's two
   fields and the page each one shows.
 - Both 6522 VIAs, the keyboard encoder with its two repeat rates, the cursor
@@ -204,7 +205,7 @@ mount the three external drives on the shared transfer bus, and
 saves the rendered 560x192 picture at the end of a run, which is what a
 MiSTer screenshot shows; the text dumps decode display memory instead.
 `--video=color` or `--video=mono` takes it from that [video source](VIDEO_SOURCES.md),
-and `--video=green` from the mono source on a green phosphor.
+and `--monitor=green`, `amber` or `tv` from that monitor on it.
 `--interlace` turns on the /// Plus [text interlace](INTERLACE.md) switch and
 makes that picture two fields woven into 560x384.
 `--wp-trace` logs each write-protect sense read with the motor timing and

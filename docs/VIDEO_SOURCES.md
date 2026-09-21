@@ -1,7 +1,8 @@
-# Video sources
+# Video sources and monitors
 
 The Apple /// has three video outputs, and the OSD's **Video** option chooses
-which one the core shows:
+which one the core shows. **Display** chooses the monitor on it. The first is
+the machine's signal and is kept exact; the second is only how it is looked at.
 
 | Video | Motherboard output | Picture |
 |---|---|---|
@@ -12,12 +13,20 @@ which one the core shows:
 All three are made from the same four colour lines, RGB8..RGB1 out of H3 on
 sheet 6 of the schematic. `apple3_video` produces those lines for every dot,
 and `apple3_composite` holds the two summing networks and the monitor on each
-output. The picture stays in the same place when the source changes: every
-source leaves the monitor four dots after it arrives, with blanking and sync
-to match.
+output.
 
-With **Mono Composite** the OSD also offers **Phosphor**, White or Green: the
-monitor on the B/W jack, not a fourth output. White is the default.
+| Display | Monitor | On Color Composite | On Mono Composite |
+|---|---|---|---|
+| RGB Monitor | The clean picture, named as the Apple II core names it | Decoded colour; sharp where the colour killer acts | Sixteen greys, every dot |
+| Monitor /// Green | Apple's P31 green tube | The signal's level in green, subcarrier as dots | Sixteen greens, every dot |
+| Amber | The same tube in amber | The same in amber | Sixteen ambers, every dot |
+| Color TV | A television: chroma trap always in, narrow chroma | Decoded colour that bleeds; soft text | Soft greys |
+
+RGB Monitor is the default. The XRGB pins take an RGB monitor and nothing
+else, so **Display** is offered with the two composite sources only. The
+picture stays in the same place whatever is chosen: every source, on every
+monitor, leaves here four dots after it arrives, with blanking and sync to
+match. [Monitors](#monitors) has the detail.
 
 ## Colour lines
 
@@ -27,7 +36,7 @@ monitor on the B/W jack, not a fourth output. White is the default.
   column text and both monochrome graphics modes are white on black on every
   output. The RGB picture used to render 80-column text alone in green, a
   choice borrowed from MAME; the lines say white, so it is white now, and
-  green is the monitor option below.
+  green is a [monitor](#monitors).
 * **Bit 7 delay.** J3 selects BT1, the serial bitmap one 14M clock late, while
   the byte on display has bit 7 set. DHIRES enables it, so it applies to Apple
   II hires and to the native 280 × 192 modes, and to each half of a 560 × 192
@@ -47,14 +56,6 @@ Service Reference Manual says of its colour-bar test, with a larger step
 between 7 and 8 because RGB8 weighs ten times RGB1 rather than eight. Nothing else
 reaches this output: no chroma, no burst and no filtering, so 80-column text and
 560 × 192 graphics keep every dot.
-
-**Phosphor.** The monitor Apple sold for this jack was the Monitor ///, a
-12-inch P31 green tube with 18 MHz of bandwidth, enough for every 14M dot.
-Green shows the B/W signal on it: each grey level times `11dd00`, the green
-the RGB picture gave 80-column text before. It is the whole signal in every
-mode, so text and monochrome graphics are green on black and the colour modes
-keep their sixteen levels. It is a presentation of this output only; RGB and
-Color Composite ignore it.
 
 ## Color Composite
 
@@ -83,7 +84,8 @@ line.
   graphics, including the text lines of mixed mode, which fringe as they do
   on an Apple II. It is absent for black-and-white text, 80-column text,
   280 × 192 and 560 × 192 monochrome and Apple II text.
-* **Monitor.** The monitor samples the burst enable as each line's sync pulse
+* **Decoding.** This is the RGB Monitor display; [Color TV](#monitors) differs
+  as described there. The monitor samples the burst enable as each line's sync pulse
   ends. On a line without a burst its colour killer shows the whole signal as
   luma at full bandwidth, so 80-column text stays sharp. With a burst it
   takes four dots, one subcarrier cycle, at a time: their mean is luma, slot 0
@@ -98,21 +100,58 @@ line.
 | NTSC | `000000` | `861b3f` | `3f27bd` | `c643fd` | `00633f` | `7f7f7f` | `388bfd` | `bfa7ff` |
 | B/W | 0 | 15 | 29 | 44 | 62 | 77 | 91 | 106 |
 | Green | `000000` | `010d00` | `021900` | `032600` | `043600` | `054300` | `064f00` | `075c00` |
+| Amber | `000000` | `0f0a00` | `1d1400` | `2c1e00` | `3e2b00` | `4d3500` | `5b3f00` | `6a4900` |
 
 | | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 |
 |---|---|---|---|---|---|---|---|---|
 | NTSC | `3f5700` | `c67301` | `7f7f7f` | `ff9bbf` | `38bb01` | `bfd741` | `78e3bf` | `ffffff` |
 | B/W | 149 | 164 | 178 | 193 | 211 | 226 | 240 | 255 |
 | Green | `0a8100` | `0b8e00` | `0c9a00` | `0da700` | `0eb700` | `0fc400` | `10d000` | `11dd00` |
+| Amber | `956700` | `a47100` | `b27b00` | `c18500` | `d39200` | `e29c00` | `f0a600` | `ffb000` |
 
 The two greys are one colour on the NTSC output, since their chroma cancels.
 Apple II hires dots swing the full black-to-white range, so their artifact
 colours are more saturated than the native ones: violet `f31cff`, green
 `0be200`, blue `0b92ff`, orange `f36c00`.
 
-Not modelled: the monitor's own luma bandwidth (the Service Reference Manual
-warns that 80-column text is hard to read on a colour monitor; here a killed
-line is sharp), and the left-edge flicker Apple describes for Apple II hires.
+Not modelled: the left-edge flicker Apple describes for Apple II hires.
+
+## Monitors
+
+**Display** bundles a monitor's settings into a preset; there are no separate
+tint, saturation or bandwidth controls. Softness, scanlines and masks that any
+CRT would add are MiSTer's gamma and video-processing presets' business and are
+not repeated here. What stays in the core is what depends on this machine's
+signal: how its subcarrier is decoded, trapped or shown. Every preset changes
+the three colour values only, never sync, blanking or latency, and RGB Monitor
+adds nothing at all, so Direct Video to an external scaler or a real CRT gets
+the plain picture by default.
+
+* **RGB Monitor** is the clean picture of the chosen output, the name the
+  Apple II core gives its own: the decoder of the section above on the NTSC
+  pin, the grey ladder on the B/W jack.
+* **Monitor /// Green** and **Amber** are monochrome tubes. Apple's Monitor ///
+  is a 12-inch P31 green tube with 18 MHz of bandwidth, enough for every 14M
+  dot, so the tube is driven by the whole signal, unfiltered, and shows its
+  level times the phosphor's colour: `11dd00`, the green the RGB picture once
+  gave 80-column text, or `ffb000`. On the B/W jack that is the grey ladder in
+  every mode: text and monochrome graphics are one colour on black and the
+  colour modes keep their sixteen levels. On the NTSC pin the level is 5/4 of
+  the RP3 sum, clipped at black, burst or no burst: text and Apple II hires
+  are the same dots as on the B/W jack, because white and black carry no
+  chroma, and a colour is its subcarrier as a pattern of dots. Colour 1 is 141,
+  63, 0 and 63 in its four slots.
+* **Color TV** is a television set. Its chroma trap is a null at the
+  subcarrier, which the mean of four dots is, and it stays in the luma path
+  when the colour killer acts, so 80-column text is the grey blur the Service
+  Reference Manual warns of: alternate dots are `7f7f7f` and one dot is a
+  quarter as bright over four. Its chroma filter spans two subcarrier cycles
+  rather than one, each axis being the same pair of slots taken twice, so a
+  steady colour or artifact colour is exactly the clean monitor's and a change
+  of hue takes ten dots instead of six; the older cycle trails the luma, as a
+  narrow filter's output does. Tint and saturation are where the Owner's
+  Guide's colour names come out right, the same as the clean monitor. On the
+  B/W jack there is nothing to decode and the trap softens the greys.
 
 ## Results, 2026-09-18
 
@@ -141,38 +180,60 @@ core's 560 × 192:
 
   ![HCOLOR 1 to 7 on NTSC](video/2026-09-18-applesoft-hcolor-ntsc.png)
 
-## Results, 2026-09-20: neutral RGB and the Phosphor option
+## Results, 2026-09-20: neutral RGB and the monitors
 
-Quartus 17.0 closes timing with 0.605 ns of setup slack (the framework's HDMI
-clock; the machine's own clocks have 5.8 and 11.0 ns). On a MiSTer, options
+Quartus 17.0 closes timing with 0.189 ns of setup slack (the framework's HDMI
+clock; the machine's own clocks have 5.6 ns and more). On a MiSTer, options
 preset through `Apple-III.CFG`, screenshots at the core's 560 × 192, which is
 the frame before the scaler presents it at 4:3:
 
-* **System Utilities (80-column text) on RGB, default options.** Two colours,
-  `000000` and `ffffff`, and no pixel differs from the simulated machine's
-  frame (`sim/run_core_boot.sh ... --to-menu --frame-out`). Mono Composite, and
-  RGB and Color Composite with the Phosphor bit set, give that same picture
-  exactly.
-* **The same screen on Mono Composite, Phosphor Green.** Two colours, `000000`
-  and `11dd00`; the same 4,788 dots are lit as on RGB, and the frame is
-  byte-identical to the simulated `--video=green` one.
+* **System Utilities (80-column text), each hookup against the simulated
+  machine's frame** (`sim/run_core_boot.sh ... --to-menu --frame-out`). All
+  are byte-identical:
+
+  | Video | Display | Picture |
+  |---|---|---|
+  | RGB | default | `000000` and `ffffff` only |
+  | Color Composite, Mono Composite | RGB Monitor | that same frame exactly |
+  | RGB | Color TV bits set | that same frame exactly: the option does not reach XRGB |
+  | Mono Composite | Monitor /// Green | the same 4,788 dots in `11dd00` |
+  | Color Composite | Monitor /// Green | that green frame exactly |
+  | Mono Composite | Amber | the same dots in `ffb000` |
+  | Color Composite | Color TV | colourless `3f`, `7f`, `bf` and `ff` greys |
+  | Mono Composite | Color TV | `40`, `80`, `bf` and `ff` greys |
 
   ![80-column text on RGB](video/2026-09-20-text80-rgb.png)
-  ![80-column text on a green phosphor](video/2026-09-20-text80-green.png)
+  ![80-column text on a Monitor ///](video/2026-09-20-text80-green.png)
+  ![80-column text on an amber tube](video/2026-09-20-text80-amber.png)
+  ![80-column text on a television](video/2026-09-20-text80-tv.png)
 
-* **Confidence Program 1.1, Video Tests 1–10 on Phosphor Green.** Every
-  screen contains only values from the green row of the tables above. The
-  colour-bar test shows all sixteen in order, white to black, 28 dots a bar;
-  the two colour-text tests show levels 5 and 9, and 4 and 13, so the colour
-  modes keep their greys in green.
+* **Confidence Program 1.1, Video Tests 1–10 on Mono Composite, Monitor ///
+  Green.** Every screen contains only values from the green row of the
+  tables above. The colour-bar test shows all sixteen in order, white to
+  black, 28 dots a bar; the two colour-text tests show levels 5 and 9, and 4
+  and 13, so the colour modes keep their greys in green.
+* **The colour-bar test on the other monitors.** Amber: the sixteen values of
+  its row in order and nothing else. RGB Monitor and Color TV on the NTSC pin:
+  the centre of every bar is its colour in the NTSC row on both, and the two
+  frames differ only from one dot before each change of colour to five dots
+  after it. Monitor /// Green on the NTSC pin: the bar of colour 1 is
+  `097a00`, `043700` and `000000`, its slot levels 141, 63 and 0, while grey
+  and white are solid.
 
-  ![Colour bars on a green phosphor](video/2026-09-20-color-bars-green.png)
+  ![Colour bars on a Monitor ///](video/2026-09-20-color-bars-green.png)
+  ![Colour bars on an amber tube](video/2026-09-20-color-bars-amber.png)
+  ![Colour bars on a television](video/2026-09-20-color-bars-tv.png)
+  ![Colour bars on a Monitor /// on the NTSC pin](video/2026-09-20-color-bars-green-ntsc.png)
 
 ## Tests
 
 * `sim/composite_tb.sv`: the sixteen NTSC colours, the four artifact colours,
-  the colour killer, the grey ladder in white and in green, single green dots
-  as sharp and as late as white ones, and the four-dot latency of every source.
+  the colour killer, and the grey ladder in white, green and amber with single
+  dots as sharp and as late in each. On a television: the same steady and
+  artifact colours, a hue change in ten dots against six, trapped single dots
+  with and without a burst and on the B/W jack. On a monochrome tube on the
+  NTSC pin: sharp single dots, colour 1's four slot levels and a steady grey.
+  RGB unchanged by the option, and the four-dot latency of every source.
 * `sim/video_tb.sv`: the bit 7 delay in each bitmap mode, the subcarrier slot,
   white 80-column text on the colour lines and the RGB picture, and −COLRKL
   for all 32 mode settings.
@@ -183,10 +244,14 @@ the frame before the scaler presents it at 4:3:
   green, blue, orange and white on NTSC and stay black and white on RGB and
   B/W; mixed-mode text fringes and plain text does not; 80-column text is
   sharp on NTSC and white on black on B/W and RGB; 140-mode colour bars give
-  the tables above. On a green phosphor hires and 80-column text are `11dd00`
-  on black dot for dot, the bars are the green row of the table, and RGB and
-  NTSC frames do not change with the option. `+FRAMES=<directory>` saves each
-  frame as a PPM.
-* `sim/run_core_boot.sh ... --frame-out=frame.ppm --video=color` (or `mono`,
-  or `green` for the B/W jack on a green phosphor) takes the whole machine's
-  picture from the chosen source.
+  the tables above. On a green or amber tube hires and 80-column text are one
+  colour on black dot for dot, identically from the NTSC pin and the B/W
+  jack, and the bars are that row of the table; on the NTSC pin the bar of
+  colour 1 is its three slot levels. On a television 80-column text is a
+  colourless blur from either output, the bars' centres are the sixteen NTSC
+  colours, and they differ from the clean monitor's only near each bar's
+  start. RGB frames do not change with the option. `+FRAMES=<directory>`
+  saves each frame as a PPM.
+* `sim/run_core_boot.sh ... --frame-out=frame.ppm --video=color` (or `mono`)
+  takes the whole machine's picture from the chosen source, and
+  `--monitor=green`, `amber` or `tv` puts that monitor on it.

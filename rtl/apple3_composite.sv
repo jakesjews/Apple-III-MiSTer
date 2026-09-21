@@ -9,18 +9,26 @@
 // an Apple II's low resolution, and a serial bitmap makes Apple II artifact
 // colour by the same route.
 //
-// `source` selects the monitor: 0 RGB, 1 colour composite, 2 monochrome
-// composite.  All three leave here four dots after they arrive, with blanking
-// and sync to match, so the picture does not move when the source changes.
+// `source` selects the output: 0 RGB, 1 colour composite, 2 monochrome
+// composite.  `monitor` is what is plugged into a composite one:
 //
-// `green_phosphor` makes the monochrome monitor a Monitor ///, whose P31 tube
-// shows the B/W signal's grey levels in green.  It is a presentation of that
-// signal alone: the RGB and NTSC pictures are as the motherboard sends them.
+//   0  the clean picture, which the menu calls RGB Monitor as the Apple II
+//      core does: the NTSC signal decoded a subcarrier cycle at a time, with
+//      full bandwidth on lines the colour killer takes, or the B/W signal's
+//      greys in white
+//   1  a Monitor ///, whose P31 tube shows the signal's level in green
+//   2  the same tube in amber
+//   3  a colour television: its chroma trap stays in the luma path on every
+//      line, and its chroma filter spans two subcarrier cycles
+//
+// The XRGB pins take an RGB monitor only, so `monitor` does not reach them.
+// Every picture leaves here four dots after it arrives, with blanking and
+// sync to match, so it does not move when the source or the monitor changes.
 
 module apple3_composite (
 	input logic       clk,
 	input logic [1:0] source,
-	input logic       green_phosphor,
+	input logic [1:0] monitor,
 
 	input logic [ 3:0] colour,
 	input logic [ 1:0] colour_phase,
@@ -60,8 +68,11 @@ module apple3_composite (
 			(lines[3] ? 8'd149 : 8'd0);
 	endfunction
 
-	// A phosphor's picture is the grey level times its colour at full drive.
+	localparam logic [1:0] GREEN_MONITOR = 2'd1, AMBER_MONITOR = 2'd2, COLOUR_TV = 2'd3;
+
+	// A phosphor's picture is the signal's level times its colour at full drive.
 	localparam logic [23:0] P31_GREEN = 24'h11dd00;
+	localparam logic [23:0] AMBER     = 24'hffb000;
 
 	function automatic [7:0] scaled(input logic [7:0] level, input logic [7:0] full);
 		logic [16:0] product;
@@ -76,17 +87,20 @@ module apple3_composite (
 		phosphor = {scaled(level, full[23:16]), scaled(level, full[15:8]), scaled(level, full[7:0])};
 	endfunction
 
-	function automatic [7:0] clip(input logic signed [17:0] value);
+	function automatic [7:0] clip(input logic signed [19:0] value);
 		if (value < 0) clip = 8'd0;
-		else if (value > 18'sd255) clip = 8'd255;
+		else if (value > 20'sd255) clip = 8'd255;
 		else clip = value[7:0];
 	endfunction
 
 	// sample[i] is the composite level i + 1 dots ago, and sample_phase the
-	// slot of sample[0].
+	// slot of sample[0]: one subcarrier cycle, which is all the clean decoder
+	// looks at.  older[i] is sample[i] a cycle earlier, in the same slot, for
+	// the television's chroma filter.
 	logic signed [ 9:0] sample       [4];
+	logic signed [ 9:0] older        [4];
 	logic        [ 1:0] sample_phase;
-	logic        [ 7:0] grey         [3];
+	logic        [ 7:0] grey         [4];
 	logic        [23:0] rgb          [3];
 	logic        [ 3:0] timing       [3];
 	logic               hsync_q;
@@ -97,16 +111,29 @@ module apple3_composite (
 
 	logic signed [11:0] luma_sum;
 	logic signed [10:0] red_axis, blue_axis;
+	logic signed [11:0] tv_red_axis, tv_blue_axis;
 	logic signed [9:0] luma_direct;
+	logic        [7:0] grey_trapped;
+
+	// A monochrome tube is driven by the whole signal at full bandwidth: the
+	// B/W jack's grey, or the NTSC pin's level with its subcarrier as dots.
+	// White is an NTSC level of 204, so 5/4 of it is 255.
+	logic [ 7:0] tube_level;
+	logic [23:0] tube_colour;
+	always_comb begin
+		tube_level  = (source == 2'd1) ? clip((20'sd5 * luma_direct) >>> 2) : grey[2];
+		tube_colour = (monitor == GREEN_MONITOR) ? P31_GREEN : AMBER;
+	end
 
 	always_ff @(posedge clk) begin
-		sample[0]    <= ntsc_level(colour, colour_phase);
-		sample[1]    <= sample[0];
-		sample[2]    <= sample[1];
-		sample[3]    <= sample[2];
+		sample[0] <= ntsc_level(colour, colour_phase);
+		for (int i = 1; i < 4; i++) sample[i] <= sample[i-1];
+		older[0] <= sample[3];
+		for (int i = 1; i < 4; i++) older[i] <= older[i-1];
 		sample_phase <= colour_phase;
 
 		grey[0]   <= grey_level(colour);
+		grey[3]   <= grey[2];
 		rgb[0]    <= rgb_in;
 		timing[0] <= {hblank_in, vblank_in, hsync_in, vsync_in};
 		for (int i = 1; i < 3; i++) begin
@@ -128,22 +155,52 @@ module apple3_composite (
 		blue_axis   <= sample[sample_phase-2'd1] - sample[sample_phase+2'd1];
 		luma_direct <= sample[1];
 
+		// A television's chroma filter is narrower than one cycle.  Over two,
+		// each axis is the same pair of slots taken twice, so a steady colour
+		// decodes as it does above and an edge takes eight dots to change hue.
+		// The older cycle is behind the luma, as a narrow filter's output is.
+		tv_red_axis <= (12'(sample[sample_phase]) + 12'(older[sample_phase])) -
+			(12'(sample[sample_phase^2'd2]) + 12'(older[sample_phase^2'd2]));
+		tv_blue_axis <= (12'(sample[sample_phase-2'd1]) + 12'(older[sample_phase-2'd1])) -
+			(12'(sample[sample_phase+2'd1]) + 12'(older[sample_phase+2'd1]));
+		// Its trap is a null at the subcarrier, which the mean of four dots
+		// is; on the B/W jack it takes the same four dots of grey.
+		grey_trapped <= 8'((10'(grey[0]) + 10'(grey[1]) + 10'(grey[2]) + 10'(grey[3]) + 10'd2) >> 2);
+
 		{hblank, vblank, hsync, vsync} <= timing[2];
 		case (source)
 			2'd1: begin
-				if (burst_seen) begin
+				if (monitor == GREEN_MONITOR || monitor == AMBER_MONITOR) begin
+					{red, green, blue} <= phosphor(tube_level, tube_colour);
+				end else if (burst_seen) begin
 					// White is a sum of 816, so 40/128 of it is 255.  The
-					// chroma gains are the NTSC matrix at 0.8 saturation.
-					red   <= clip((18'sd40 * luma_sum + 18'sd73 * red_axis) >>> 7);
-					green <= clip((18'sd40 * luma_sum - 18'sd37 * red_axis - 18'sd25 * blue_axis) >>> 7);
-					blue  <= clip((18'sd40 * luma_sum + 18'sd130 * blue_axis) >>> 7);
+					// chroma gains are the NTSC matrix at 0.8 saturation; the
+					// television's axes are twice the size.
+					if (monitor == COLOUR_TV) begin
+						red <= clip((20'sd40 * luma_sum + ((20'sd73 * tv_red_axis) >>> 1)) >>> 7);
+						green <= clip(
+							(20'sd40 * luma_sum - ((20'sd37 * tv_red_axis + 20'sd25 * tv_blue_axis) >>> 1)) >>> 7
+						);
+						blue <= clip((20'sd40 * luma_sum + ((20'sd130 * tv_blue_axis) >>> 1)) >>> 7);
+					end else begin
+						red   <= clip((20'sd40 * luma_sum + 20'sd73 * red_axis) >>> 7);
+						green <= clip((20'sd40 * luma_sum - 20'sd37 * red_axis - 20'sd25 * blue_axis) >>> 7);
+						blue  <= clip((20'sd40 * luma_sum + 20'sd130 * blue_axis) >>> 7);
+					end
+				end else if (monitor == COLOUR_TV) begin
+					// The colour killer removes the chroma, not the trap.
+					{red, green, blue} <= {3{clip((20'sd40 * luma_sum) >>> 7)}};
 				end else begin
-					red   <= clip((18'sd5 * luma_direct) >>> 2);
-					green <= clip((18'sd5 * luma_direct) >>> 2);
-					blue  <= clip((18'sd5 * luma_direct) >>> 2);
+					{red, green, blue} <= {3{clip((20'sd5 * luma_direct) >>> 2)}};
 				end
 			end
-			2'd2:    {red, green, blue} <= green_phosphor ? phosphor(grey[2], P31_GREEN) : {3{grey[2]}};
+			2'd2: begin
+				case (monitor)
+					GREEN_MONITOR, AMBER_MONITOR: {red, green, blue} <= phosphor(tube_level, tube_colour);
+					COLOUR_TV:                    {red, green, blue} <= {3{grey_trapped}};
+					default:                      {red, green, blue} <= {3{grey[2]}};
+				endcase
+			end
 			default: {red, green, blue} <= rgb[2];
 		endcase
 	end

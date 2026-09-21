@@ -15,9 +15,10 @@ module core_tb #(
 	input  logic        interlace,
 	output wire         field,
 	// The OSD's Video option: 0 RGB, 1 colour composite, 2 mono composite,
-	// and its Phosphor option for the last of them.
+	// and its Display option for the composite ones: 0 RGB Monitor,
+	// 1 Monitor /// Green, 2 Amber, 3 Color TV.
 	input  logic [ 1:0] video_source,
-	input  logic        green_phosphor,
+	input  logic [ 1:0] video_monitor,
 	input  logic [64:0] host_rtc,
 	input  logic [ 7:0] joy_a_x,
 	input  logic [ 7:0] joy_a_y,
@@ -130,7 +131,7 @@ module core_tb #(
 	apple3_composite monitor (
 		.clk         (clk),
 		.source      (video_source),
-		.green_phosphor,
+		.monitor     (video_monitor),
 		.colour      (video_colour),
 		.colour_phase(video_colour_phase),
 		.colour_burst(video_colour_burst),
