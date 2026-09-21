@@ -126,12 +126,11 @@ module emu (
 	tri [35:0] ext_bus;
 	assign ext_bus[32] = 1'b0;
 
-	// F12 is the Apple /// RESET key (Ctrl+F12 = reset, F12 alone = NMI), so
-	// the framework menu moves to the MiSTer convention of Win+F12.
+	// F12 stays the framework menu key; F2 is the Apple /// RESET key
+	// (Ctrl+F2 = reset, F2 alone = NMI).
 	hps_io #(
-		.CONF_STR (CONF_STR),
-		.VDNUM    (6),
-		.F12KEYMOD(1)
+		.CONF_STR(CONF_STR),
+		.VDNUM   (6)
 	) hps_io_inst (
 		.clk_sys           (clk_14m),
 		.HPS_BUS           (HPS_BUS),

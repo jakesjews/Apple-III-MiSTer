@@ -46,10 +46,13 @@ module keyboard_tb;
 		key_event(8'h58, 0, 1);
 		if (!alpha_lock) $fatal(1, "alpha lock did not toggle");
 		key_event(8'h58, 0, 0);
-		key_event(8'h07, 0, 1);
+		key_event(8'h06, 0, 1);  // F2
 		if (!reset_key) $fatal(1, "reset key make");
-		key_event(8'h07, 0, 0);
+		key_event(8'h06, 0, 0);
 		if (reset_key) $fatal(1, "reset key break");
+		key_event(8'h07, 0, 1);  // F12 belongs to the MiSTer menu
+		if (reset_key) $fatal(1, "F12 must not reach the machine");
+		key_event(8'h07, 0, 0);
 
 		key_event(8'h71, 1, 1);  // Delete on the original keyboard: keypad period
 		if (key_code !== 8'hae) $fatal(1, "delete without the /// Plus keymap=%02x", key_code);

@@ -82,9 +82,8 @@ without the Applesauce hardware.
 
 | Key | Action |
 |---|---|
-| Win + F12 or OSD button | MiSTer menu |
-| Ctrl + F12 | Hardware reset |
-| F12 | Apple /// RESET key (NMI) |
+| F2 | Apple /// RESET key (NMI) |
+| Ctrl + F2 | CONTROL-RESET (hardware reset) |
 | Windows / Command | Open Apple |
 | Alt | Solid Apple |
 | Caps Lock | Alpha Lock |

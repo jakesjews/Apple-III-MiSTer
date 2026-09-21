@@ -139,24 +139,24 @@ module core_slots_tb;
 		repeat (100) @(negedge clk);
 		reset = 0;
 		wait (phase == 7);
-		key(8'h07, 1);  // F12 / Reset alone: NMI, cards keep their state.
+		key(8'h06, 1);  // F2 / Reset alone: NMI, cards keep their state.
 		if (slot_reset || dut.cpu_nmi_n || selected != 1) $fatal(1, "native Reset must preserve cards and assert NMI");
 		repeat (400) @(negedge clk);
 		if (selected != 1 || cards[0].card.registers[0] != 8'h12) $fatal(1, "native NMI changed card state");
 		key(8'h14, 1);  // Control + Reset resets CPU, cards and their ROM latches.
 		if (!dut.machine_reset || !slot_reset || selected != 0 || slot_irq_n != 15 || slot_nmi_n != 15)
 			$fatal(1, "Control-Reset must reset all cards");
-		key(8'h07, 0);
+		key(8'h06, 0);
 		key(8'h14, 0);
 		wait (phase != 7);
 		wait (phase == 7);
 		resume_test = 1;
 		wait (completed != 0);
 		if (dut.native_mode) $fatal(1, "diagnostic did not enter Apple II mode");
-		key(8'h07, 1);
+		key(8'h06, 1);
 		if (!slot_reset || dut.machine_reset || selected != 0 || slot_irq_n != 15 || slot_nmi_n != 15)
 			$fatal(1, "Apple II Reset must reset cards without a native Control-Reset");
-		key(8'h07, 0);
+		key(8'h06, 0);
 		if (slot_reset) $fatal(1, "slot reset did not release");
 		$display("PASS real CPU slot I/O, ROM, VIA IRQ dispatch, NMI and native/II reset (%0d clocks)", cycles);
 		$finish;

@@ -233,7 +233,7 @@ module apple3_keyboard (
 						if (ps2_key[9] && !caps_down) alpha_lock <= ~alpha_lock;
 						caps_down <= ps2_key[9];
 					end
-					9'h007: reset_key <= ps2_key[9];  // F12
+					9'h006: reset_key <= ps2_key[9];  // F2
 					default:
 					if (event_key) begin
 						keys_down[ps2_key[8:0]] <= ps2_key[9];
