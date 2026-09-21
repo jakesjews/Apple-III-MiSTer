@@ -248,20 +248,17 @@ Existing partial implementations are noted where they provide a starting point.
       sequences and the mouse-enabled Selector /// image.
       [Details](docs/MOUSE.md).
 
-- [ ] **Save States**
-
 - [ ] **External memory and optional 512 KiB RAM.** Build on the parameterized
       RAM/MMU support with an external-memory backend and a usable 512 KiB option.
       Preserve paired-byte reads and guest-visible memory timing, and budget for
       future card RAM and disk buffers.
 
-- [ ] **PCPI Appli-Card.** Add it as the first CP/M option and validate its disk
-      services against the chosen storage configuration.
-
 - [ ] **Microsoft SoftCard III.** Add it as a second CP/M option, including the
       required bus integration and storage-driver configuration.
 
 - [ ] **Titan III+IIe.** Add support for this expansion.
+
+- [ ] **Save States**
 
 [Development](docs/DEVELOPMENT.md) · [Hardware design](docs/DESIGN.md) ·
 [Disk validation](docs/DISK_FIDELITY_2026-09-16.md) · [License](LICENSE)
