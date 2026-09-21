@@ -30,6 +30,7 @@ behaviour to its source.
   colour television.
 - The Apple /// Plus [text interlace](INTERLACE.md): its scan PROM's two
   fields and the page each one shows.
+- The Euro system's [50 Hz scan PROM](PAL.md): 310 lines and its later sync.
 - Both 6522 VIAs, the keyboard encoder with its two repeat rates, the cursor
   keys' second contacts and the optional /// Plus DELETE key, the MM58167
   clock, the joysticks' 9708 A/D converter, buttons and latching switches,
@@ -204,6 +205,7 @@ missing; `make test` passes on a fresh clone. The boot test has no fallback.
 | `APPLE3_PROM_12V_DIR` | directory with `341-0042.bin` and `341-0044.bin` | the 128 KiB half of `sim/memmap/run.sh` | the archive.org item below |
 | `APPLE3_DISK_PROM` | `341-0028.bin`, 256 bytes | P6 comparison in `sim/disk/run.sh` | [archive.org `AppleIIIROMs`](https://archive.org/details/AppleIIIROMs) |
 | `APPLE3_PLUS_PROM` | `342-0145-A.bin` | interlace comparison in `sim/accuracy/run.sh` | the same archive.org item |
+| `APPLE3_EURO_PROM` | `AppleIII_341-0060.bin` | 50 Hz comparison in `sim/accuracy/run.sh` | [asimov `rom_images/apple3`](https://mirrors.apple2.org.za/ftp.apple.asimov.net/emulators/rom_images/apple3/) |
 
 The simulator mounts **WOZ images only**; on hardware Main converts the other
 formats. Convert a DSK, PO or NIB with the companion Main's
@@ -239,6 +241,7 @@ and `--monitor=green`, `amber` or `tv` from that monitor on it.
 `--ram128k` runs the 128 KiB memory board.
 `--interlace` turns on the /// Plus [text interlace](INTERLACE.md) switch and
 makes that picture two fields woven into 560x384.
+`--pal` fits the Euro system's [50 Hz scan PROM](PAL.md).
 `--wp-trace` logs each write-protect sense read with the motor timing and
 drive 1's protect terms, and `--dump-mem=A000,2000` prints system-bank memory
 for disassembling a loaded program;

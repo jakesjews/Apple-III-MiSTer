@@ -14,6 +14,8 @@ module core_tb #(
 	input  logic        ram_128k,
 	// The Apple /// Plus text interlace switch, and the field it is showing.
 	input  logic        interlace,
+	// A Euro system's 50 Hz scan PROM.
+	input  logic        euro,
 	output wire         field,
 	// The OSD's Video option: 0 RGB, 1 colour composite, 2 mono composite,
 	// and its Display option for the composite ones: 0 RGB Monitor,
@@ -206,6 +208,7 @@ module core_tb #(
 		.plus_keymap        (plus_keymap),
 		.ram_128k           (ram_128k),
 		.interlace,
+		.euro,
 		.host_rtc,
 		.serial_rx,
 		.serial_cts_n,

@@ -11,6 +11,7 @@ module peripheral_timing_tb;
 	wire  [9:0] h_count;
 	wire  [8:0] v_count;
 	logic       interlace = 0;
+	logic       euro = 0;
 	wire  [8:0] scan_line;
 	wire        field;
 	wire  [6:0] h_state;

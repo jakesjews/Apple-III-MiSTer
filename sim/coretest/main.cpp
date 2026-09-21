@@ -52,10 +52,12 @@ int main(int argc, char **argv) {
 	// --monitor=rgb|green|amber|tv what a composite output is plugged into.
 	// --interlace turns on the Apple /// Plus text interlace switch; the frame
 	// is then two fields woven into 560x384, the upper field on the even rows.
+	// --pal fits the Euro system's 50 Hz scan PROM: 310 lines to the frame.
 	std::string frame_out;
 	unsigned video_source = 0;
 	unsigned video_monitor = 0;
 	bool interlace = false;
+	bool euro = false;
 	// --dump-mem=ADDR,LEN (hex): hex dump of system-bank memory ($0000-$1FFF or
 	// $A000-$FFFF) at the end of the run, for disassembling a loaded program.
 	unsigned dump_addr = 0, dump_len = 0;
@@ -99,6 +101,7 @@ int main(int argc, char **argv) {
 		if (option == "--monitor=amber") video_monitor = 2;
 		if (option == "--monitor=tv") video_monitor = 3;
 		if (option == "--interlace") interlace = true;
+		if (option == "--pal") euro = true;
 		if (option.rfind("--dump-mem=", 0) == 0) {
 			dump_addr = std::strtoul(argv[i] + 11, nullptr, 16);
 			const char *comma = std::strchr(argv[i] + 11, ',');
@@ -161,6 +164,7 @@ int main(int argc, char **argv) {
 	top.video_source = video_source;
 	top.video_monitor = video_monitor;
 	top.interlace = interlace;
+	top.euro = euro;
 	top.probe_addr = 0;
 	top.probe_font_addr = 0;
 	top.joy_a_x = top.joy_a_y = top.joy_b_x = top.joy_b_y = 0x80;

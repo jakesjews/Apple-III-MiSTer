@@ -20,6 +20,7 @@ module core_slots_tb;
 		.plus_keymap        (1'b0),
 		.ram_128k           (1'b0),
 		.interlace          (1'b0),
+		.euro               (1'b0),
 		.host_rtc           (65'd0),
 		.joy_a_x            (8'd128),
 		.joy_a_y            (8'd128),

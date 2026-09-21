@@ -8,12 +8,17 @@
 // The Apple /// Plus scan PROM (342-0145-A) and its text interlace switch add
 // a field flip-flop and a 263-line field, which with the ordinary 262-line
 // field makes a 525-line interlaced frame.
+//
+// The "Euro system" of the schematic's notes has the 341-0060 at G9 instead.
+// Its S50/60 output is the vertical counter's V1 and V2 reload, which makes a
+// 310-line, 50 Hz frame; docs/PAL.md has the PROM and what is inferred.
 
 module apple3_timing (
 	input logic clk_14m,
 	input logic slow_mode,
 	input logic screen_enable,
 	input logic interlace,
+	input logic euro,
 	input logic peripheral_cycle,
 	input logic rtc_cycle,
 	input logic ram_cycle,
@@ -172,7 +177,9 @@ module apple3_timing (
 				// field's PROM answers 0 there for 248.  COMP also reloads VA
 				// in every extended state, and the long field's 1 on entering
 				// line 508 turns it straight into 509: 263 lines in all.
-				if (scan_line == 9'd511) scan_line <= long_field ? 9'd248 : 9'd250;
+				// S50/60 is the reload's V1 and V2.  The 341-0060 holds it low
+				// and keeps COMP = VA, which makes 202 and 310 lines.
+				if (scan_line == 9'd511) scan_line <= euro ? 9'd202 : long_field ? 9'd248 : 9'd250;
 				else if (long_field && scan_line == 9'd507) scan_line <= 9'd509;
 				else scan_line <= scan_line + 1'b1;
 				// v_count is the raster row: 0 on the first picture line.
@@ -199,7 +206,8 @@ module apple3_timing (
 
 		// With the switch open RP10's 1K pull-up on FORCPAGE outweighs R63's
 		// 3K to ground and FIELDIN rests high: the ordinary field, always.
-		if (!interlace) field <= 1'b1;
+		// The 341-0060 has no other field: its RFIELD is high throughout.
+		if (!interlace || euro) field <= 1'b1;
 	end
 
 endmodule

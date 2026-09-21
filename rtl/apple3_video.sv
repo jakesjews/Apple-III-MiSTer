@@ -1,7 +1,7 @@
 // Apple /// video generator.
 //
 // The scanner reads display memory in the video half of every horizontal
-// state, all 65 states of all 262 lines, as the motherboard does.  A processor
+// state, all 65 states of every line, as the motherboard does.  A processor
 // write therefore reaches the screen if it lands before the scanner's slot for
 // that byte, and the character generator is loaded by the same reads when the
 // scan PROM's RTCWRT window finds the scanner in the text-page screen holes.
@@ -22,6 +22,7 @@ module apple3_video (
 	input logic [8:0] v_count,
 	input logic [8:0] scan_line,
 	input logic       field,
+	input logic       euro,
 	input logic [6:0] h_state,
 	input logic [3:0] state_dot,
 	input logic       frame_tick,
@@ -91,7 +92,8 @@ module apple3_video (
 	logic [3:0] fetch_mode, pixel_mode;
 
 	// V7..V0 of the vertical counter, which runs 256..511 then 250..255, or
-	// 248..255 to end the long field of an interlaced pair.
+	// 248..255 to end the long field of an interlaced pair, or 202..255 in a
+	// Euro system.
 	// Visible line y is counter value 256 + y, which puts every blanking line
 	// in the top quarter (V7..V6 = 3) where the scanner reaches the holes.
 	assign vertical  = scan_line[7:0];
@@ -111,13 +113,19 @@ module apple3_video (
 	// states, to begin on the horizontal pulse at H = 48.  The two fields'
 	// pulses are then 262 lines and 33 states apart one way and 262 lines and
 	// 32 states the other, which is the half line that interlaces them.
+	//
+	// The Euro PROM, 341-0060, is the 341-0030 with V1 inverted in its sync and
+	// burst-gate terms: the same pulses 16 lines later, from line 499, which
+	// centres the picture in the longer frame.
 	always_comb begin : vertical_sync
 		logic [9:0] first_dot, last_dot;
+		logic [8:0] first_line;
 
 		first_dot = field ? 10'd252 : 10'd700;
 		last_dot = field ? 10'd140 : 10'd588;
-		vsync     = ((scan_line == 9'd483) && (h_count >= first_dot)) || (scan_line == 9'd484) ||
-			(scan_line == 9'd485) || ((scan_line == 9'd486) && (h_count < last_dot));
+		first_line = euro ? 9'd499 : 9'd483;
+		vsync      = ((scan_line == first_line) && (h_count >= first_dot)) || (scan_line == first_line + 9'd1) ||
+			(scan_line == first_line + 9'd2) || ((scan_line == first_line + 9'd3) && (h_count < last_dot));
 	end
 
 	// FORCPAGE, pin 6 of the mode PROM (342-0032), is pulled high by RP10 and

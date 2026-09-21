@@ -9,6 +9,7 @@ module video_tb;
 	// The vertical counter behind each raster row of an ordinary field.
 	wire  [8:0] scan_line = (v_count < 9'd256) ? v_count + 9'd256 : v_count - 9'd6;
 	logic       field = 1;
+	logic       euro = 0;
 	logic [6:0] h_state = 0;
 	logic [3:0] state_dot = 0;
 	logic frame_tick = 0, screen_enable = 1, native_mode = 1;

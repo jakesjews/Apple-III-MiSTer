@@ -13,6 +13,8 @@ module apple3_core #(
 	input logic        ram_128k,
 	// The Apple /// Plus text interlace switch.
 	input logic        interlace,
+	// A Euro system: the 50 Hz scan PROM, 341-0060, at G9.
+	input logic        euro,
 	input logic [64:0] host_rtc,
 	input logic [ 7:0] joy_a_x,
 	input logic [ 7:0] joy_a_y,
@@ -255,6 +257,7 @@ module apple3_core #(
 		.slow_mode    (environment[7]),
 		.screen_enable(environment[5]),
 		.interlace,
+		.euro,
 		.peripheral_cycle,
 		.rtc_cycle,
 		.ram_cycle    (ram_select),
@@ -557,6 +560,7 @@ module apple3_core #(
 		.v_count,
 		.scan_line,
 		.field        (video_field),
+		.euro,
 		.h_state,
 		.state_dot,
 		.frame_tick,

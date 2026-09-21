@@ -111,6 +111,9 @@ either composite output, **Display** chooses the monitor on it: **RGB Monitor**
 for the clean picture, **Monitor /// Green** or **Amber**, or a **Color TV**
 with its soft text and bleeding color. [Details](docs/VIDEO_SOURCES.md).
 
+**Video Standard** in the OSD selects NTSC or PAL: Apple's 50 Hz "Euro
+system", the same picture in a 310-line frame. [Details](docs/PAL.md).
+
 Controller 1 is the joystick in port B, which SOS and Business BASIC read as
 joystick 0; **Joystick 1 on** in the OSD moves it to port A. Controller 2 uses
 the other port. Button 1 is the joystick's pushbutton, and each press of button
@@ -220,7 +223,11 @@ Existing partial implementations are noted where they provide a starting point.
       0 to 2, nothing behind the rest. 512 KiB comes later.
       [Memory map](docs/MEMORY_MAP.md).
 
-- [ ] **PAL/NTSC Toggle** Allow selecting NTSC or PAL video.
+- [x] **PAL/NTSC toggle.** The **Video Standard** option fits the Euro
+      system's scan PROM, 341-0060: the vertical counter's 50 Hz reload for a
+      310-line frame, and vertical sync 16 lines later, checked against the
+      PROM's dump. The Euro crystal is not modelled, and Text Interlace stays
+      with NTSC. [Hardware and tests](docs/PAL.md).
 
 - [ ] **Scaling Options** Options are Normal, V-Integer, Narrower HV-Integer, Wider HV-Integer.
 

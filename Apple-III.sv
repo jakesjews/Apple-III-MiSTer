@@ -46,6 +46,7 @@ module emu (
 		"O2,Aspect ratio,4:3,16:9;",
 		"ODE,Video,RGB,Color Composite,Mono Composite;",
 		"H1OGH,Display,RGB Monitor,Monitor /// Green,Amber,Color TV;",
+		"OJ,Video Standard,NTSC,PAL;",
 		"O35,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 		"O6,Write Protect 1,Off,On;",
 		"O7,Write Protect 2,Off,On;",
@@ -94,10 +95,17 @@ module emu (
 	wire [ 10:0] ps2_key;
 	wire [ 64:0] host_rtc;
 
+	// "Video Standard" PAL is Apple's Euro system: the 50 Hz scan PROM,
+	// 341-0060, at G9.  Its 14.25045 MHz crystal is not modelled; the machine
+	// keeps the 14.318 MHz clock and makes 50.6 fields a second.
+	wire euro = status[19];
+
 	// The Apple /// Plus differs in its keyboard and its text interlace
-	// switch, which the menu offers with that model.
+	// switch, which the menu offers with that model.  The interlace PROM is a
+	// 60 Hz part and no Euro version of it is known, so the switch goes with
+	// NTSC.
 	wire plus_model = status[8];
-	wire interlace = plus_model && status[15];
+	wire interlace = plus_model && status[15] && !euro;
 
 	// "Display" is the monitor on a composite output.  The XRGB pins take an
 	// RGB monitor only, so the menu offers it with the other two sources.
@@ -138,12 +146,13 @@ module emu (
 		.buttons           (hps_buttons),
 		.forced_scandoubler(forced_scandoubler),
 		.video_rotated     (1'b0),
-		.new_vmode         (1'b0),
+		// The picture's size is the same at 50 Hz; only the frame time moves.
+		.new_vmode         (euro),
 		.gamma_bus         (gamma_bus),
 		.status            (status),
 		.status_in         (status),
 		.status_set        (1'b0),
-		.status_menumask   ({14'd0, !composite_source, plus_model}),
+		.status_menumask   ({14'd0, !composite_source, plus_model && !euro}),
 		.info_req          (1'b0),
 		.info              (8'd0),
 
@@ -344,6 +353,7 @@ module emu (
 		.plus_keymap       (plus_model),
 		.ram_128k          (status[18]),
 		.interlace         (interlace),
+		.euro              (euro),
 		// An unopened HPS UART deasserts RTS. The stock ROM requires CTS
 		// ready during its ACIA test, as with the unplugged motherboard port.
 		.serial_rx         (UART_RXD),

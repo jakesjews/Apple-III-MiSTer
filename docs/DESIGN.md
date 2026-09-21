@@ -184,6 +184,9 @@ Sources (abbreviations used below):
 * Apple /// Plus text interlace (OSD status bits 8 and 15): the 342-0145-A scan
   PROM's field flip-flop, a 263-line field with sync half a line late, and
   FORCPAGE forcing page 1 in that field. See [INTERLACE.md](INTERLACE.md).
+* Video Standard PAL (OSD status bit 19): the Euro system's scan PROM,
+  341-0060. The vertical counter reloads to 202 for 310 lines, VBL lasts 118
+  of them, and vertical sync is 16 lines later. See [PAL.md](PAL.md).
 
 ## I/O ($C000-$C0FF, only with env bit 6)
 

@@ -11,12 +11,14 @@ module timing_tb;
 	wire  [9:0] h_count;
 	wire  [8:0] v_count;
 	logic       interlace = 0;
+	logic       euro = 0;
 	wire  [8:0] scan_line;
 	wire        field;
 	wire  [6:0] h_state;
 	wire  [3:0] state_dot;
 	integer cpu_count, rise_count, fall_count, refresh_count, q3_rise_count;
 	integer character_states, character_lines, character_refresh;
+	integer euro_clocks;
 	logic q3_old, line_had_character;
 
 	apple3_timing dut (.*);
@@ -121,6 +123,27 @@ module timing_tb;
 				character_lines,
 				character_refresh
 			);
+
+
+		// A Euro system's scan PROM reloads the vertical counter to 202: 310
+		// lines from one picture to the next, with the same 192 showing.
+		euro = 1;
+		while (v_count != 9'd0 || h_count != 10'd0) @(negedge clk_14m);
+		euro_clocks = 0;
+		do begin
+			if (scan_line == 9'd511 && h_state == 7'd64 && state_dot == 4'd15) begin
+				@(negedge clk_14m);
+				euro_clocks++;
+				if (scan_line != 9'd202) $fatal(1, "Euro reload went to line %0d", scan_line);
+			end else begin
+				@(negedge clk_14m);
+				euro_clocks++;
+			end
+			if (vblank != (scan_line < 9'd256 || scan_line >= 9'd448))
+				$fatal(1, "Euro blanking at line %0d", scan_line);
+		end while (v_count != 9'd0 || h_count != 10'd0);
+		if (euro_clocks != 310 * 912) $fatal(1, "Euro frame is %0d clocks, expected %0d", euro_clocks, 310 * 912);
+		euro = 0;
 
 		$display("PASS apple3_timing");
 		$finish;

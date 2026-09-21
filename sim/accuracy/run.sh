@@ -67,5 +67,22 @@ if [[ -f "$proms/341-0030.BIN" && -f "$plus_prom" ]]; then
 else
   echo "SKIP interlace PROM comparison: set APPLE3_PLUS_PROM to the 342-0145-A dump"
 fi
+# The Euro system's 50 Hz scan PROM, against the stock one it was made from.
+euro_prom=${APPLE3_EURO_PROM:-research/roms/asimov_rom_images_apple3/AppleIII_341-0060.bin}
+if [[ -f "$proms/341-0030.BIN" && -f "$euro_prom" ]]; then
+  xxd -p -c 1 "$euro_prom" > "$out/euro.hex"
+  if iverilog -g2012 -s euro_prom_tb -o "$out/euro_prom" rtl/apple3_timing.sv rtl/apple3_video.sv \
+      sim/accuracy/euro_prom_tb.sv > "$out/euro_prom.compile.log" 2>&1; then
+    if ! vvp "$out/euro_prom" "+SCAN=$out/scan.hex" "+EURO=$out/euro.hex" > "$out/euro_prom.log" 2>&1; then
+      failures=$((failures+1))
+    fi
+    cat "$out/euro_prom.log"
+  else
+    cat "$out/euro_prom.compile.log"
+    failures=$((failures+1))
+  fi
+else
+  echo "SKIP Euro PROM comparison: set APPLE3_EURO_PROM to the 341-0060 dump"
+fi
 echo "Accuracy test groups failing: $failures"
 test "$failures" -eq 0
