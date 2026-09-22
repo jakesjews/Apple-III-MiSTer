@@ -86,7 +86,9 @@ module core_tb #(
 	output logic [12:0] track1_addr,
 	output logic [ 7:0] qtrack1,
 	output logic        valid1,
-	output logic        write_mode1
+	output logic        write_mode1,
+	// The core's audio output for --audio-out.
+	output wire signed [15:0] audio
 );
 
 	wire [7:0] video_r, video_g, video_b;
@@ -94,7 +96,6 @@ module core_tb #(
 	wire [1:0] video_colour_phase;
 	wire       video_colour_burst;
 	wire hblank, hsync, vsync;
-	wire signed [15:0] audio;
 	wire [3:0] disk_active, disk_motors, disk_ready, disk_wp, disk_flux;
 	wire [3:0] disk_phases;
 	wire disk_write_mode, disk_write_bit, disk_write_strobe;

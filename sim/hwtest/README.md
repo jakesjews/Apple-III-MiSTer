@@ -111,3 +111,27 @@ some of these banks out differently and fails those groups.
 `./sim/run_core_boot.sh 200000000 memmap.woz --dump-mem=0580,10` shows the
 result row in simulation (`D0` is P, `C6` is F); add `--ram128k` for the other
 board.
+
+## `audio.po`: the three sound sources
+
+Plays the speaker toggle, the hardware bell and the six-bit DAC in turn,
+forever, with the step that is playing shown as an inverse bar. There is
+nothing to press. Turn the volume down first: the DAC steps are full scale.
+It is two blocks long, like `memmap.po`.
+
+| Step | Source | What to hear |
+|---|---|---|
+| 1 | Speaker toggle, `$C030` | Three rising notes, C5 E5 G5 (523, 658 and 784 Hz), a third of a second each, at the speaker's level |
+| 2 | Bell, `$C040` | Three 1 kHz beeps of 0.1 s, 0.3 s apart |
+| 3 | DAC square, `$FFE0` bits 5-0 | The same three notes as a full-scale square wave, eight times the speaker's amplitude |
+| 4 | DAC triangle | A soft tone of about 260 Hz for three quarters of a second |
+| 5 | DAC bits 0 to 5 | Six bursts of one pitch (517 Hz), 0.2 s each, every one twice as loud as the one before; the first is faint |
+
+Half a second of silence separates the steps and the character after `PASS`
+changes on each pass, about every eight seconds. The speaker toggle and the
+bell drive the same one-bit speaker, so a silent step 2 after an audible step
+1 is the bell's timer; steps 3 to 5 come from the E VIA's port B, and a step 5
+that starts loud, skips a level or does not grow evenly is a DAC bit stuck or
+crossed. The CPU runs at 1 MHz, so the pitches are counted in even cycles.
+`./sim/run_core_boot.sh 360000000 audio.woz --audio-out=audio.wav` records
+what the core plays through the first pass as a WAV file.

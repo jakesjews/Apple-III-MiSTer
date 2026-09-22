@@ -2,6 +2,7 @@
 #include "verilated.h"
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
@@ -54,6 +55,11 @@ int main(int argc, char **argv) {
 	// is then two fields woven into 560x384, the upper field on the even rows.
 	// --pal fits the Euro system's 50 Hz scan PROM: 310 lines to the frame.
 	std::string frame_out;
+	// --audio-out=PATH: the core's audio output as a 16-bit mono WAV, one
+	// sample every 300 master clocks (47,727 Hz).
+	std::string audio_out;
+	std::vector<int16_t> audio_samples;
+	unsigned audio_divider = 0;
 	unsigned video_source = 0;
 	unsigned video_monitor = 0;
 	bool interlace = false;
@@ -98,6 +104,7 @@ int main(int argc, char **argv) {
 		if (option == "--block-boot") block_boot = true;
 		if (option == "--wp-trace") wp_trace = true;
 		if (option.rfind("--frame-out=", 0) == 0) frame_out = option.substr(12);
+		if (option.rfind("--audio-out=", 0) == 0) audio_out = option.substr(12);
 		if (option == "--video=color") video_source = 1;
 		if (option == "--video=mono") video_source = 2;
 		if (option == "--monitor=green") video_monitor = 1;
@@ -462,6 +469,10 @@ int main(int argc, char **argv) {
 		top.clk ^= 1;
 		top.eval();
 		finish_storage();
+		if (top.clk && !audio_out.empty() && ++audio_divider == 300) {
+			audio_divider = 0;
+			audio_samples.push_back(static_cast<int16_t>(top.audio));
+		}
 		if (top.clk && top.cpu_enable) {
 			++enable_count;
 			// The bytes that cross the mouse card's PIA port A, which are the
@@ -666,6 +677,18 @@ int main(int argc, char **argv) {
 		output << "P6\n" << width << " " << lines << "\n255\n";
 		output.write(reinterpret_cast<const char *>(frame.data()), static_cast<std::streamsize>(width) * lines * 3);
 		std::printf("frame %ux%u saved to %s\n", width, lines, frame_out.c_str());
+	}
+	if (!audio_out.empty()) {
+		const uint32_t rate = 14318181 / 300, bytes = static_cast<uint32_t>(audio_samples.size() * 2);
+		const uint32_t byte_rate = rate * 2, riff_size = 36 + bytes;
+		const uint16_t format = 1, channels = 1, block_align = 2, bits = 16;
+		std::ofstream output(audio_out, std::ios::binary);
+		auto put = [&](const void *data, std::size_t size) { output.write(static_cast<const char *>(data), static_cast<std::streamsize>(size)); };
+		put("RIFF", 4); put(&riff_size, 4); put("WAVEfmt ", 8);
+		const uint32_t fmt_size = 16;
+		put(&fmt_size, 4); put(&format, 2); put(&channels, 2); put(&rate, 4); put(&byte_rate, 4); put(&block_align, 2); put(&bits, 2);
+		put("data", 4); put(&bytes, 4); put(audio_samples.data(), bytes);
+		std::printf("audio: %zu samples at %u Hz saved to %s\n", audio_samples.size(), rate, audio_out.c_str());
 	}
 	if (dump_len) {
 		std::printf("memory %04X:", dump_addr);

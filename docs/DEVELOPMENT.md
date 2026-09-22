@@ -244,6 +244,8 @@ mount the three external drives on the shared transfer bus, and
 ([block storage tests](../sim/blockdev/README.md)). `--frame-out=frame.ppm`
 saves the rendered 560x192 picture at the end of a run, which is what a
 MiSTer screenshot shows; the text dumps decode display memory instead.
+`--audio-out=audio.wav` records the core's audio output through the run as a
+16-bit mono WAV file at 47,727 Hz, one sample every 300 master clocks.
 `--video=color` or `--video=mono` takes it from that [video source](VIDEO_SOURCES.md),
 and `--monitor=green`, `amber` or `tv` from that monitor on it.
 `--ram128k` runs the 128 KiB memory board.
@@ -288,7 +290,8 @@ tells one key code from another when the screen shows the same glyph. See
 [sim/accuracy/README.md](../sim/accuracy/README.md) for the PROM-based timing
 comparison and the 6502 functional test, and
 [sim/hwtest/README.md](../sim/hwtest/README.md) for boot disks that check the
-character-download windows and display fetch timing by eye on a MiSTer.
+character-download windows and display fetch timing by eye, and the three sound
+sources by ear, on a MiSTer.
 
 `sim/joystick/run.sh` runs a test ROM on the whole machine that reads the
 joystick the ways shipped software does: SOS 1.3's GET_ANALOG, timed by the D
