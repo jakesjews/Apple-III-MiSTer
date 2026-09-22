@@ -40,7 +40,7 @@ has native Apple /// games as ready-to-mount disk images.
 
 Use matching core and Main builds. The custom Main is selected only for this
 core. The supplied `MiSTer_AppleIII` binary comes from
-[jakesjews/Main_MiSTer](https://github.com/jakesjews/Main_MiSTer)
+[jakesjews/Main_MiSTer](https://github.com/jakesjews/Main_MiSTer/tree/apple3-disk-storage)
 
 ## Disk images
 
