@@ -5,11 +5,13 @@ This core requires the companion Main changes in
 The patch applies to MiSTer-devel/Main_MiSTer commit
 `5b3ae644069761ef54b92aaa35178771d0d69fec`.
 
-The changes extend `support/a2/iigs_disk.{cpp,h}`, `iigs_fmt.{cpp,h}` and the
-existing `SD_TYPE_IIGS` dispatch in `user_io.cpp`. There is one shared codec;
-Apple III supplies a format profile for its synchronized tracks and, where a
-disk needs it, the SOS protection key. The hardware retains its own P6
-controller and Disk III drive logic.
+The Apple III code lives in `support/apple3/`: `apple3_disk.cpp` mounts and
+serves the images, `apple3_woz.cpp` builds the synchronized tracks and the SOS
+protection key. `user_io.cpp` reaches it through three hook lines, the way the
+Mac support code is wired. The 2MG, DC42, sector-order and 6-and-2 GCR code is
+shared with the //e and IIgs in `support/a2/iigs_fmt.cpp`, which gains a few
+additive functions; the //e and IIgs paths themselves are unchanged. The
+hardware retains its own P6 controller and Disk III drive logic.
 
 | Main mount | Apple III assignment | Policy |
 |---|---|---|
@@ -25,17 +27,18 @@ WOZ cores can use this Main build on S0/S1; four-drive cores require the
 matching Main build so S2/S3 are treated as floppies. The previous Main
 assigned its unused S2/S3 slots to block devices.
 
-Main recognizes Apple III only when its S0 format list advertises WOZ, preserving
-older cores' raw/NIB interface. The //e and IIgs retain their existing, different
-mount assignments and write policies.
+Main recognizes the Apple III by its core name, so every Apple-III build gets
+this path. The //e and IIgs retain their existing, different mount assignments
+and write policies.
 
 ## Formats and transport
 
-- A raw 140K image's sector order is detected from its SOS/ProDOS volume
-  directory (12 or 13 entries per block) or DOS 3.3 VTOC, read in either order;
-  this is upstream's detector. When neither is present, DSK/DO mean DOS order
-  and PO ProDOS order. 2MG's format, data offset, payload length and volume
-  flags take precedence. Invalid headers are rejected.
+- A raw 140K image's sector order is detected from its ProDOS volume directory
+  or DOS 3.3 VTOC, read in either order, with upstream's detector; the Apple III
+  code adds the same check for SOS volumes with 12 directory entries per block.
+  When neither is present, DSK/DO mean DOS order and PO ProDOS order. 2MG's
+  format, data offset, payload length and volume flags take precedence. Invalid
+  headers are rejected.
 - A sector image has no address fields. Their volume number is 254 unless a
   2MG header gives one or the image has a DOS 3.3 VTOC, whose volume byte is
   then used: `INIT` writes that number to the VTOC and to every address field,
@@ -43,8 +46,9 @@ mount assignments and write policies.
   and /// Plus dealer diagnostics are volume 1, and stopped at VOLUME MISMATCH
   before their HELLO ran.
 - 140K ProDOS-order images use the standard sector map: block 2, the volume
-  directory, is DOS sectors 11 and 10. The map inherited from upstream Main
-  placed only sectors 0 and 15 correctly, so real `.po` images did not boot.
+  directory, is DOS sectors 11 and 10. The tests pin upstream's map to those
+  block positions, because an earlier map placed only sectors 0 and 15
+  correctly and real `.po` images did not boot.
 - SOS copy protection (`BFM.INIT2`) reads one address-field volume byte on each
   of tracks 9 to 16. If those tracks are synchronized and the bytes differ, SOS
   takes them as a key and decrypts `SOS.INTERP` in memory. Main rebuilds that
@@ -126,8 +130,10 @@ uses eight-second mount delays and a three-second reset delay (units are seconds
 
 ## Tests and conversion utility
 
-From the Main checkout, run `tests/apple3/run.sh`. It builds the actual shared
-backend with file/SPI shims under address and undefined-behavior sanitizers.
+From this repository, run `support/main/tests/run.sh`; set `MAIN_DIR` if the
+Main checkout is not `../Main_MiSTer-AppleIII`. It builds Main's
+`support/apple3` and `support/a2` sources with file/SPI shims under address
+and undefined-behavior sanitizers.
 Tests cover four simultaneous mounts, independent write protection, writes and
 replacement/ejection, format/slot matching, DOS/PO/2MG equivalence, bit-packed GCR, NIB
 preservation, NIB write-back of whole verified tracks with their volume bytes,
@@ -140,7 +146,8 @@ protection key must appear only for an encrypted `SOS.INTERP`. Sector write-back
 save tracks block by block into DSK, PO and 2MG sources and check after every
 block that each sector holds either its old or its new contents; a bad data
 checksum, a lost data prologue and another track's address fields must all leave
-the affected sectors untouched. The tests are included in both the Main branch and the patch.
+the affected sectors untouched. The tests live here rather than in the Main
+branch or the patch: upstream Main has no test tree.
 
 After that build, use the same backend to save an explicit WOZ2 copy of a sector
 image or a NIB (a native WOZ is served unchanged, so a WOZ1 stays WOZ1):

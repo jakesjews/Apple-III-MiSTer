@@ -266,8 +266,8 @@ whole track at a time, only when all sixteen sectors verify, keeping its
 address-field volume bytes; block images are written in place. WOZ1, FLUX and
 unmapped tracks are protected in the drive as well.
 See `docs/MAIN_STORAGE.md` for the mount assignments and companion Main build.
-`sim/disk` tests P6, cache transfers and physical timing; the Main repository's
-`tests/apple3` tests formats, transport, write policy and file persistence.
+`sim/disk` tests P6, cache transfers and physical timing; `support/main/tests`
+tests Main's formats, transport, write policy and file persistence.
 
 ## Joysticks and A/D converter
 
