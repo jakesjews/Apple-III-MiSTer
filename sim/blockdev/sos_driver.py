@@ -14,6 +14,9 @@ A3Driverutil performs (https://github.com/robjustice/A3Driverutil).
 
 Usage:
     sos_driver.py add DRIVER.o65 SOS.DRIVER     add or replace the driver
+    sos_driver.py copy .NAME FROM.DRIVER SOS.DRIVER
+                                                add or replace the named driver
+                                                from another SOS.DRIVER file
     sos_driver.py list SOS.DRIVER               show the drivers and DIBs
 """
 import struct
@@ -93,7 +96,21 @@ def record_name(record):
 
 
 def add(o65, path):
-    record = convert_o65(o65)
+    install(convert_o65(o65), path)
+
+
+def copy(name, source, path):
+    image = open(source, "rb").read()
+    records, _ = driver_records(image)
+    for start, code, stop in records:
+        if dib_name(image, code + 2).upper() == name.upper():
+            install(image[start:stop], path)
+            break
+    else:
+        raise SystemExit(f"{source}: no driver named {name}")
+
+
+def install(record, path):
     image = bytearray(open(path, "rb").read())
     records, end = driver_records(image)
     name = record_name(record)
@@ -126,6 +143,8 @@ def list_drivers(path):
 if __name__ == "__main__":
     if len(sys.argv) == 4 and sys.argv[1] == "add":
         add(sys.argv[2], sys.argv[3])
+    elif len(sys.argv) == 5 and sys.argv[1] == "copy":
+        copy(sys.argv[2], sys.argv[3], sys.argv[4])
     elif len(sys.argv) == 3 and sys.argv[1] == "list":
         list_drivers(sys.argv[2])
     else:

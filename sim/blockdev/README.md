@@ -49,7 +49,9 @@ shows the directory SOS created.
 `sos_driver.py` converts the o65 file to a `SOS.DRIVER` record and adds it,
 or replaces a driver with the same name; the utilities disk ships a
 `.PROFILE` driver for Apple's ProFile card, which Problock3 replaces.
-`sos_driver.py list` shows the drivers in a file.
+`sos_driver.py copy .NAME FROM SOS.DRIVER` does the same with a driver taken
+from another `SOS.DRIVER` file, and `sos_driver.py list` shows the drivers in
+a file.
 
 For a direct boot, point `APPLE3_ROM` at the soshdboot ROM, use `-` in place
 of the floppy and pass an image that carries the soshdboot loader and kernel:

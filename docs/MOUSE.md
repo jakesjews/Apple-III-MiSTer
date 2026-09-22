@@ -108,14 +108,21 @@ Desktop Manager.
   banner with **Mouse Card** Off
   ([screenshot](mouse/2026-09-21-selector-without-card.png)). Moving a real
   mouse there has not been tried from this desk.
-- **Not shown: the pointer moving a menu.** That image's Desktop Manager turns
+- **Draw ON ///, in simulation.** ON THREE's drawing program opens `.MOUSE`
+  by name. On an image with the driver and without the Desktop Manager
+  ([recipe](../sim/mouse/README.md)) it starts from the Selector, shows `Ms 1`
+  in its status panel once M turns the mouse on, reads the driver every
+  sixtieth of a second, and its option-menu highlight follows the mouse:
+  twenty reports of 30 right and 20 down move it from the top-left panel to
+  the bottom-right one, and a control run without them leaves it where it was.
+- **Not shown: the Desktop Manager moving a menu.** That image's Desktop Manager turns
   mouse movement into cursor keys from the clock chip's tenth-of-a-second
   interrupt. It enables that interrupt in its `D_INIT`, and SOS 1.3's
   `INIT.KRNL` runs `CLK.INIT` after the drivers' inits, which writes zero to
   the clock's interrupt control register. The driver posts movement at
   $190C/$190D every sixtieth and nothing collects it. MAME's MM58167 treats
   that write the same way, so this looks like the software's doing and not the
-  card's; a program that opens `.MOUSE` itself is the test still to run.
+  card's. Draw ON, above, is the program that opens `.MOUSE` itself.
 
 Quartus 17.0: 21,372 ALMs and 498 RAM blocks for the whole core; setup slack
 9.048 ns on the machine clock and 5.220 ns on the video clock.
