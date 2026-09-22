@@ -905,10 +905,10 @@ index 0000000..98ab1fc
 +
 +#endif
 diff --git a/user_io.cpp b/user_io.cpp
-index 45252f4..f9e2931 100644
+index d7a71a7..f6ca853 100644
 --- a/user_io.cpp
 +++ b/user_io.cpp
-@@ -2252,6 +2252,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
+@@ -2262,6 +2262,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
  
  				// Mac CD slot: CUE/CHD/raw image translation (support/mac)
  				if (ret) ret = mac_mount_hook(index, name, &sd_image[index], &writable);
@@ -916,7 +916,7 @@ index 45252f4..f9e2931 100644
  
  				if (ret && is_c128())
  				{
-@@ -2271,6 +2272,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
+@@ -2281,6 +2282,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
  		FileClose(&sd_image[index]);
  		c64_closeGCR(index);
  		mac_cdrom_unmount(index);
@@ -924,7 +924,7 @@ index 45252f4..f9e2931 100644
  	}
  
  	buffer_lba[index] = -1;
-@@ -3447,6 +3449,10 @@ void user_io_poll()
+@@ -3457,6 +3459,10 @@ void user_io_poll()
  				// Mac Toolbox/CD slots (support/mac); SPI is done by the hook.
  				if (macop < 0) break;
  			}

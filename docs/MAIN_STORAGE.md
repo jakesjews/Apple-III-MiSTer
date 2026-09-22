@@ -3,7 +3,7 @@
 This core requires the companion Main changes in
 [`support/main/apple3-storage.patch`](../support/main/apple3-storage.patch).
 The patch applies to MiSTer-devel/Main_MiSTer commit
-`5b3ae644069761ef54b92aaa35178771d0d69fec`.
+`f6a3caa601c22fe1c34647b48ecbff6b9c7ddc09`.
 
 The Apple III code lives in `support/apple3/`: `apple3_disk.cpp` mounts and
 serves the images, `apple3_woz.cpp` builds the synchronized tracks and the SOS
@@ -109,7 +109,7 @@ its patch:
 
 ```sh
 git clone https://github.com/MiSTer-devel/Main_MiSTer.git ../Main_MiSTer-AppleIII
-git -C ../Main_MiSTer-AppleIII checkout 5b3ae644069761ef54b92aaa35178771d0d69fec
+git -C ../Main_MiSTer-AppleIII checkout f6a3caa601c22fe1c34647b48ecbff6b9c7ddc09
 git -C ../Main_MiSTer-AppleIII apply ../Apple-III-MiSTer/support/main/apple3-storage.patch
 ```
 
