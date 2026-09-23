@@ -160,6 +160,10 @@ Booting SOS needs a WOZ disk image.
 
 Existing partial implementations are noted where they provide a starting point.
 
+- [ ] **Validate audio** Verify implementation accuracy against research.
+
+- [ ] **Organize OSD** Move OSD options to categories.
+
 - [ ] **External memory and optional 512 KiB RAM.** Build on the parameterized
       RAM/MMU support with an external-memory backend and a usable 512 KiB option.
       Preserve paired-byte reads and guest-visible memory timing, and budget for
