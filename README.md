@@ -5,14 +5,32 @@ __Warning: This core is vibe coded.__
 A complete [Apple ///](https://en.wikipedia.org/wiki/Apple_III) core, and a very
 usable one: most software tried so far runs well.
 
-- 256 or 128 KiB RAM, every native video mode and the Apple II modes
-- RGB, color composite with Apple II artifact color, and monochrome composite,
-  with clean, green, amber and color TV monitor presets
-- Apple /// Plus model with its 560 × 384 text interlace
-- Four floppy drives: WOZ, DSK, DO, PO, NIB and 2MG, writable and formattable
-- A hard-disk card with two images, bootable without a floppy
+## Features
+
+- Apple /// or Apple /// Plus, with the Plus's DELETE key and 560 × 384
+  interlaced text
+- 256 or 128 KiB of RAM, mapped as on Apple's two memory boards
+  ([details](docs/MEMORY_MAP.md))
+- Every native video mode, and the Apple II modes for Apple II emulation
+- Character-set changes and mid-screen updates display as on real hardware
+- RGB, color composite with Apple II artifact color, or monochrome composite
+- Monitor presets: clean RGB, Monitor /// green, amber or a color TV
+- NTSC or PAL, Apple's 50 Hz "Euro system"
+- MiSTer's aspect ratios, integer scaling and scandoubler effects, with weave
+  or bob deinterlacing for interlaced text
+- Four floppy drives, each with its own write protection
+  ([details](docs/FOUR_DRIVES.md))
+- WOZ, DSK, DO, PO, NIB and 2MG images, writable and formattable
+- Copy-protected originals boot from plain sector dumps
+- Two hard-disk drives for your own images, bootable with the soshdboot ROM
+  ([details](docs/BLOCK_STORAGE.md))
 - Apple's mouse card in slot 4, driven by the MiSTer's mouse
-- Keyboard, joysticks, clock, audio and serial
+- The real keyboard's auto-repeat and Solid Apple speed-up
+- Two joysticks, each with its button and latching switch
+- Speaker and 6-bit DAC sound
+- Clock set from the MiSTer's time
+- Serial port on the MiSTer's UART
+- Apple's boot ROM built in, or load another from the OSD
 
 For something to play, [apple-iii-games](https://github.com/jakesjews/apple-iii-games)
 has native Apple /// games as ready-to-mount disk images.
@@ -141,112 +159,6 @@ Booting SOS needs a WOZ disk image.
 ## Todo
 
 Existing partial implementations are noted where they provide a starting point.
-
-- [x] **Keyboard accuracy and optional III Plus keymap.** Repeat activation
-      ordering, the cursor keys' second contacts and the guest-visible solid
-      Apple state they drive, and an optional Apple /// Plus keymap with its
-      DELETE key.
-
-- [x] **Display-fetch and character-download timing.** The scanner reads
-      display memory in the video slot of every state, and character downloads
-      follow the scan PROM's per-line windows. Tests cover writes during active
-      display, the download boundaries and rendering in every mode.
-
-- [x] **Native joystick accuracy.** The 9708 converter's charge, ramp and
-      comparator follow the schematic's component values, with the joystick
-      spanning SOS's GET_ANALOG window. Each port has a pushbutton and a
-      latching switch, and port A's Silentype lines are wired as on the board.
-      Tests run SOS's timer method and the polling loops of the emulation
-      disk, a game and the boot ROM at every position.
-
-- [x] **All four Disk III drives.** The internal drive and three external
-      drives have independent mounts, write protection and media-change state.
-      Disk II compatibility and shared disk-phase/fine-scroll behavior are
-      retained. [Validation](docs/FOUR_DRIVES.md).
-
-- [x] **Reusable slots 1–4.** Slot I/O, per-card ROM selection/deselection and
-      individual IRQ/NMI routing are available through a reusable card bus.
-      [Interface and tests](docs/SLOTS.md). Coprocessor bus ownership will be
-      added when the first card needs it.
-
-- [x] **Peripheral wait-state and boundary timing.** Delayed IOSTOP and VIA
-      selects align onboard peripheral accesses; card RDY holds reads while
-      allowing writes and interrupt detection. The extended horizontal state
-      stretches CPU, VIA and Q3 timing together and retains refresh arbitration.
-      [Timing model and tests](docs/PERIPHERAL_TIMING.md).
-
-- [x] **One virtual block-storage interface.** A ProDOS block-mode card in
-      slot 1, modeled on the Apple II core's hard-disk card with its own
-      firmware, serves two images from Main's block assignments with reads,
-      writes, status, capacity and error codes; Main writes the images in
-      place. SOS uses it through the
-      [Problock3](https://github.com/robjustice/Problock3) driver, and the
-      [soshdboot](https://github.com/robjustice/soshdboot) ROM and kernel boot
-      from it directly. Stock boot is unchanged.
-      [Card and validation](docs/BLOCK_STORAGE.md).
-
-- [x] **Video source modes.** Color-composite and monochrome-composite
-      pictures alongside RGB, built from the schematic's two summing networks:
-      Apple II artifact color, the ///'s own NTSC colors and color killer, and
-      the monochrome output's sixteen-step gray scale.
-      [Signal model and tests](docs/VIDEO_SOURCES.md).
-
-- [x] **III Plus model with authentic interlace.** The Plus scan PROM's field
-      flip-flop, its 263-line field and half-line sync, and the FORCPAGE wiring
-      that shows page 1 in one field and the selected page in the other.
-      [Hardware and tests](docs/INTERLACE.md).
-
-- [x] **Neutral RGB output.** The 80-column-only green override is gone, so
-      every monochrome RGB mode is white on black. Green phosphor is an optional
-      monitor, shown by gray level in every mode.
-      [Monitors and tests](docs/VIDEO_SOURCES.md#monitors).
-
-- [x] **Display monitor presets.** The **Display** option puts a monitor on a
-      composite output, separate from the signal: RGB Monitor (clean),
-      Monitor /// Green, Amber and Color TV, each a preset with no tint,
-      saturation or bandwidth controls. Monochrome tubes show the whole signal
-      by level in every mode; the television keeps its chroma trap and narrow
-      chroma. Generic softness, scanlines and masks are left to MiSTer, and
-      every preset keeps sync and latency, so Direct Video stays clean.
-      [Monitors and tests](docs/VIDEO_SOURCES.md#monitors).
-
-- [x] **PROM-backed memory-map validation.** An independent reference built
-      from the decoder, status, I/O and timing PROM dumps of Apple's 256 and
-      128 KiB boards and the schematic wiring between them names every DRAM
-      cell and checks the MMU's RAM map and its ROM, VIA and I/O decode
-      against them. It confirmed the `$87` alias of `$8F` and corrected five
-      more cases, among them the bank latch's timing; third-party 512 KiB
-      decoding stays separate and unvalidated.
-      [Sources, findings and tests](docs/MEMORY_MAP.md).
-
-- [x] **Selectable 128 KiB or 256 KiB RAM.** The **Memory** option defaults
-      to 256K; 128K swaps in the 12 V board's map from its own PROMs: banks
-      0 to 2, nothing behind the rest. 512 KiB comes later.
-      [Memory map](docs/MEMORY_MAP.md).
-
-- [x] **PAL/NTSC toggle.** The **Video Standard** option fits the Euro
-      system's scan PROM, 341-0060: the vertical counter's 50 Hz reload for a
-      310-line frame, and vertical sync 16 lines later, checked against the
-      PROM's dump. The Euro crystal is not modelled, and Text Interlace stays
-      with NTSC. [Hardware and tests](docs/PAL.md).
-
-- [x] **Scaling options.** **Scale** offers Normal, V-Integer, Narrower
-      HV-Integer and Wider HV-Integer through the framework's `video_freak`.
-      With Text Interlace on it scales the woven 384-line frame, not the
-      192-line field.
-
-- [x] **Custom aspect ratios.** **Aspect ratio** is Original, Full Screen,
-      [ARC1] and [ARC2], the last two from `MiSTer.ini`. Original is the
-      default; Full Screen replaces the old 16:9.
-
-- [x] **Interlacing options.** With Text Interlace on, **Deinterlacing**
-      chooses Weave or Bob through the framework's scaler. Weave is the
-      default. [Details](docs/INTERLACE.md).
-
-- [x] **Apple II Mouse Interface card.** The card the /// used, in slot 4,
-      driven by the MiSTer's mouse. Checked against Apple's SOS mouse driver
-      sequences and the mouse-enabled Selector /// image.
-      [Details](docs/MOUSE.md).
 
 - [ ] **External memory and optional 512 KiB RAM.** Build on the parameterized
       RAM/MMU support with an external-memory backend and a usable 512 KiB option.
