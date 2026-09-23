@@ -70,6 +70,8 @@ int main(int argc, char **argv) {
 	bool mouse_card = false, mouse_trace = false, key_test = false, warm_reset = false, to_menu = false, disk_trace = false, trace_all = false;
 	bool plus_keymap = false;  // Apple /// Plus keyboard: separate DELETE key
 	bool ram_128k = false;     // 128 KiB memory board instead of 256 KiB
+	bool soshdboot = false;    // the built-in soshdboot ROM instead of Apple's
+	bool alpha_lock = false;   // Alpha Lock down from the start, locked through a reset
 	// --check-font: after --to-menu, the character generator must hold the set
 	// the console driver keeps at $0C00, loaded through the screen holes.
 	bool check_font = false;
@@ -122,6 +124,8 @@ int main(int argc, char **argv) {
 		if (option == "--mouse-card") mouse_card = true;
 		if (option == "--mouse-trace") mouse_trace = true;
 		if (option == "--ram128k") ram_128k = true;
+		if (option == "--soshdboot") soshdboot = true;
+		if (option == "--alpha-lock") alpha_lock = true;
 		if (option == "--check-font") check_font = to_menu = true;
 		if (option.rfind("--font-dump=", 0) == 0)
 			for (std::size_t at = 12; at < option.size(); at = option.find(',', at) + 1) {
@@ -175,6 +179,7 @@ int main(int argc, char **argv) {
 	top.mouse_card_installed = mouse_card;
 	top.plus_keymap = plus_keymap;
 	top.ram_128k = ram_128k;
+	top.soshdboot = soshdboot;
 	top.video_source = video_source;
 	top.video_monitor = video_monitor;
 	top.interlace = interlace;
@@ -312,6 +317,7 @@ int main(int argc, char **argv) {
 		if (only != 0) key_script.push_back({start, code, ext, true});
 		if (only != 1) key_script.push_back({start + second / 20, code, ext, false});
 	};
+	if (alpha_lock) tap(0.0, 0x58, false);  // Caps Lock toggles Alpha Lock on
 	// The script is armed once the System Utilities menu text is on screen;
 	// times are then relative to that moment (t0), matching the hardware test.
 	bool script_armed = false, keys_armed = false;
@@ -767,6 +773,10 @@ int main(int argc, char **argv) {
 	}
 	if (disk_test && !reached_disk_bootstrap) {
 		std::fprintf(stderr, "FAIL: ROM did not read block 0 and jump to $A000\n");
+		return 1;
+	}
+	if (block_boot && !hd_transfers) {
+		std::fprintf(stderr, "FAIL: the boot ROM never read the block card\n");
 		return 1;
 	}
 	if (disk_test && !reached_interpreter && !block_boot) {

@@ -9,6 +9,17 @@ if ! cmp -s sim/obj_dir/apple3_rom.mif rtl/apple3_rom.mif; then
 	echo "rtl/apple3_rom.mif is stale; run python3 tools/hex2mif.py rtl/apple3_rom.hex rtl/apple3_rom.mif" >&2
 	exit 1
 fi
+# The built-in soshdboot ROM must match its source.
+rtl/soshdboot/build_rom.sh sim/obj_dir
+for image in apple3hdboot.hex apple3hdboot.mif; do
+	if ! cmp -s "sim/obj_dir/$image" "rtl/soshdboot/$image"; then
+		echo "rtl/soshdboot/$image is stale; run rtl/soshdboot/build_rom.sh" >&2
+		exit 1
+	fi
+done
+iverilog -g2012 -Wall -s rom_tb -o sim/obj_dir/rom_tb \
+	rtl/apple3_rom.sv sim/rom_tb.sv
+vvp sim/obj_dir/rom_tb
 iverilog -g2012 -Wall -s mmu_tb -o sim/obj_dir/mmu_tb \
 	rtl/apple3_mmu.sv sim/mmu_tb.sv
 vvp sim/obj_dir/mmu_tb

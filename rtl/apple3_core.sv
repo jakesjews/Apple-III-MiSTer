@@ -11,6 +11,8 @@ module apple3_core #(
 	input logic [10:0] ps2_key,
 	input logic        plus_keymap,
 	input logic        ram_128k,
+	// Rob Justice's soshdboot ROM in place of Apple's boot ROM.
+	input logic        soshdboot,
 	// The Apple /// Plus text interlace switch.
 	input logic        interlace,
 	// A Euro system: the 50 Hz scan PROM, 341-0060, at G9.
@@ -130,6 +132,7 @@ module apple3_core #(
 	logic [ 7:0] latched_bank;
 	logic [15:0] bus_addr;
 	logic        ram_128k_q;
+	logic        soshdboot_q;
 	logic [ 7:0] e_pa_external;
 
 	logic [18:0] ram_byte_addr;
@@ -197,6 +200,8 @@ module apple3_core #(
 	// The memory board is changed with the power off: the option takes effect
 	// at the next reset.
 	always_ff @(posedge clk_14m) if (machine_reset) ram_128k_q <= ram_128k;
+	// So does a change of boot ROM, as the chip swap it stands for would.
+	always_ff @(posedge clk_14m) if (machine_reset) soshdboot_q <= soshdboot;
 	assign cpu_irq_n = !(via_d_irq || via_e_irq || acia_irq);
 	assign slot_ionmi_n = &slot_nmi_n;
 	assign cpu_nmi_n = !(environment[4] && ((reset_key && !control_key) || !slot_ionmi_n));
@@ -345,6 +350,7 @@ module apple3_core #(
 		.clk      (clk_14m),
 		.addr     (rom_addr),
 		.q        (rom_q),
+		.soshdboot(soshdboot_q),
 		.host_we  (rom_we),
 		.host_addr(rom_host_addr),
 		.host_data(rom_host_data)

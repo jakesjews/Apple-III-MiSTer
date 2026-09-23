@@ -22,8 +22,8 @@ usable one: most software tried so far runs well.
   ([details](docs/FOUR_DRIVES.md))
 - WOZ, DSK, DO, PO, NIB and 2MG images, writable and formattable
 - Copy-protected originals boot from plain sector dumps
-- Two hard-disk drives for your own images, bootable with the soshdboot ROM
-  ([details](docs/BLOCK_STORAGE.md))
+- Two hard-disk drives for your own images, bootable with the built-in
+  soshdboot ROM ([details](docs/BLOCK_STORAGE.md))
 - Apple's mouse card in slot 4, driven by the MiSTer's mouse
 - The real keyboard's auto-repeat and Solid Apple speed-up
 - Two joysticks, each with its button and latching switch
@@ -114,6 +114,13 @@ a program selects page 2, as on the real machine. [Details](docs/INTERLACE.md).
 
 **Memory** in the OSD selects Apple's 256 KiB board or the earlier 128 KiB
 one. Like a board swap, it takes effect at the next reset.
+
+**Boot ROM** in the OSD selects Rob Justice's soshdboot ROM, which boots
+**Hard Disk 1** if an image is mounted there and the floppy if not. The image
+needs soshdboot's loader and kernel, as on
+[his images](https://github.com/robjustice/soshdboot/tree/master/disks); with
+any other, choose **Apple**, or turn on Alpha Lock and press Ctrl + F2 to boot
+the floppy. It takes effect at the next reset. [Details](docs/BLOCK_STORAGE.md).
 
 **Video** in the OSD selects the machine's RGB, NTSC color or black-and-white
 output. Apple II hires is in color only on **Color Composite**, as on the real
@@ -227,4 +234,5 @@ This core stands on work from the MiSTer and Apple /// communities:
 
 Imported components retain their own license notices, including the
 GPL-3.0-or-later [WOZ implementation](rtl/disk/woz/README.md) and
-[mouse card parts](rtl/cards/mouse/README.md).
+[mouse card parts](rtl/cards/mouse/README.md), and the GPL-3.0
+[soshdboot ROM](rtl/soshdboot/README.md).

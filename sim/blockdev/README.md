@@ -13,14 +13,20 @@ dependencies of the other whole-core tests. Generated files stay in
 - `core_block_tb.sv` boots `diagnostic.s` on the real CPU with the card in
   slot 1, the way SOS's Problock3 driver and the soshdboot ROM use it.
 
+`./sim/blockdev/run_soshdboot.sh`, part of `make test`, boots the built-in
+soshdboot ROM with no floppy from a hard disk it writes itself, whose block 0
+jumps to itself at $A000.
+
 See [the card description](../../docs/BLOCK_STORAGE.md) for the interface.
 
 ## SOS boot with Problock3
 
 The whole-machine harness mounts hard-disk images with `--hd1=IMAGE` and
 `--hd2=IMAGE` (raw ProDOS blocks; strip a 2MG header first). `--hd1-out=PATH`
-saves drive 1 after the run, and `--block-boot` relaxes the stock ROM's
-floppy milestones for a boot ROM that loads from the card.
+saves drive 1 after the run, `--soshdboot` sets **Boot ROM** to soshdboot,
+`--alpha-lock` turns Alpha Lock on as the machine starts, and
+`--block-boot` relaxes the stock ROM's floppy milestones for a boot ROM that
+loads from the card and fails the run if it never does.
 
 To make a stock SOS 1.3 utilities floppy that uses the card, assemble
 [Problock3](https://github.com/robjustice/Problock3) as a relocatable driver,
@@ -53,11 +59,11 @@ or replaces a driver with the same name; the utilities disk ships a
 from another `SOS.DRIVER` file, and `sos_driver.py list` shows the drivers in
 a file.
 
-For a direct boot, point `APPLE3_ROM` at the soshdboot ROM, use `-` in place
-of the floppy and pass an image that carries the soshdboot loader and kernel:
+For a direct boot, select the soshdboot ROM, use `-` in place of the floppy
+and pass an image that carries the soshdboot loader and kernel:
 
 ```sh
-APPLE3_ROM=apple3hdboot.rom ./sim/run_core_boot.sh 1400000000 - \
+./sim/run_core_boot.sh 1400000000 - --soshdboot \
     --hd1=sos_selector_hd.po --block-boot --to-menu --expect=Selector
 ```
 

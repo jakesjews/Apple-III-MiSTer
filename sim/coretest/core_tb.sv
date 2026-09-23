@@ -15,6 +15,8 @@ module core_tb #(
 	input  logic [24:0] ps2_mouse,
 	input  logic        plus_keymap,
 	input  logic        ram_128k,
+	// The OSD's Boot ROM option: Rob Justice's soshdboot ROM.
+	input  logic        soshdboot,
 	// The Apple /// Plus text interlace switch, and the field it is showing.
 	input  logic        interlace,
 	// A Euro system's 50 Hz scan PROM.
@@ -230,6 +232,7 @@ module core_tb #(
 		.ps2_key            (ps2_key),
 		.plus_keymap        (plus_keymap),
 		.ram_128k           (ram_128k),
+		.soshdboot          (soshdboot),
 		.interlace,
 		.euro,
 		.host_rtc,

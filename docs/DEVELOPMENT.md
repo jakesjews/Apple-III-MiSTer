@@ -18,7 +18,8 @@ behaviour to its source.
   [extended-state timing](PERIPHERAL_TIMING.md).
 - The stock 256 KiB memory board with the bank register, relocatable zero page
   and stack, sister-byte reads, write protection and extended addressing.
-- 4 KiB boot ROM in either motherboard bank, or an 8 KiB dual-bank image.
+- 4 KiB boot ROM in either motherboard bank, or an 8 KiB dual-bank image;
+  Apple's ROM and the soshdboot hard-disk boot ROM are built in.
 - All native video modes: 40 and 80 column text, 280 and 560 pixel monochrome,
   140 pixel sixteen colour and 280 pixel foreground/background colour, plus the
   Apple II text, lores and hires modes used by the emulation disk.
@@ -42,7 +43,7 @@ behaviour to its source.
   ROM latches, individual IRQ status, VIA interrupt delivery and masked NMIs.
 - A [virtual block-storage card](BLOCK_STORAGE.md) in slot 1: ProDOS
   block-mode firmware and two hard-disk images, used by SOS through the
-  Problock3 driver and bootable with the soshdboot ROM.
+  Problock3 driver and bootable with the built-in soshdboot ROM.
 - Apple's [mouse card](MOUSE.md) in slot 4, its 68705 running Apple's program.
   Slots 2 and 3 are empty.
 
@@ -60,10 +61,20 @@ second from the first, and `sim/run_tests.sh` checks that it has). It is the
 A widely circulated copy differs in 48 bytes that sit underneath the VIA
 registers and boots identically. An 8,192-byte image is treated as two 4 KiB
 banks selected by environment register bit 1, which is how custom dual-bank
-ROMs are laid out. Another ROM goes in over the built-in one, until the core is
-reloaded: `games/Apple-III/boot.rom`, which MiSTer sends every time the core
-starts, or **Load Boot ROM** in the OSD. The machine is held in reset while
-one arrives.
+ROMs are laid out.
+
+**Boot ROM** selects Rob Justice's soshdboot ROM instead, also built in, in
+both banks: `rtl/soshdboot/apple3hdboot.hex` and `.mif`, which
+`rtl/soshdboot/build_rom.sh` assembles from the upstream source kept beside
+them ([provenance and license](../rtl/soshdboot/README.md)); `sim/run_tests.sh`
+checks both against the source. The core takes the option at reset, like
+**Memory**.
+
+Another ROM goes in over Apple's, until the core is reloaded:
+`games/Apple-III/boot.rom`, which MiSTer sends every time the core starts, or
+**Load Boot ROM** in the OSD. The machine is held in reset while one arrives.
+Choosing soshdboot still selects soshdboot: setups from before Apple's ROM was
+built in keep Apple's ROM as `boot.rom`, and it must not undo that choice.
 
 ## Serial port
 
@@ -195,19 +206,20 @@ packages (Icarus 12, Verilator 5.020, GHDL 4.1).
 make check-tools   # what is installed, and the brew/apt line for what is not
 make test-quick    # unit, disk, memory map, slot, block card, mouse card and timing benches, about a minute
 make test          # everything that needs no disk image, about ten minutes
-make boot                                   # stock ROM to the disk bootstrap (also the last step of make test)
+make boot                                   # stock ROM to the disk bootstrap (also a step of make test)
 make boot DISK=system.woz ARGS=--to-menu    # SOS to the Utilities menu, about five minutes
-make boot ROM=apple3hdboot.rom ...          # another 4 KiB boot ROM
+make boot ARGS=--soshdboot ...              # the built-in soshdboot ROM
+make boot ROM=other.rom ...                 # another 4 KiB boot ROM
 ```
 
-The boot ROM and the [mouse card's two ROMs](MOUSE.md) are the only Apple
-images in the repository, so the tests that compare against Apple's PROMs take
+The two boot ROMs and the [mouse card's two ROMs](MOUSE.md) are the only
+Apple images in the repository, so the tests that compare against Apple's PROMs take
 their dumps from the environment and skip when one is missing; `make test`
 passes on a fresh clone.
 
 | Variable | File | Used by | Source |
 |---|---|---|---|
-| `APPLE3_ROM` (`ROM=` for `make boot`) | another 4,096-byte boot ROM in place of the built-in one | `sim/run_core_boot.sh` | for example the [soshdboot](https://github.com/robjustice/soshdboot) ROM |
+| `APPLE3_ROM` (`ROM=` for `make boot`) | another 4,096-byte boot ROM in place of Apple's | `sim/run_core_boot.sh` | any 4 KiB Apple /// boot ROM image |
 | `APPLE3_PROM_DIR` | unpacked `A3PROMs` directory | timing PROM comparison in `sim/accuracy/run.sh`, decoder PROM comparison in `sim/memmap/run.sh` | [bitsavers `A3PROMs.zip`](http://bitsavers.org/pdf/apple/apple_III/firmware/A3PROMs.zip) |
 | `APPLE3_PROM_12V_DIR` | directory with `341-0042.bin` and `341-0044.bin` | the 128 KiB half of `sim/memmap/run.sh` | the archive.org item below |
 | `APPLE3_DISK_PROM` | `341-0028.bin`, 256 bytes | P6 comparison in `sim/disk/run.sh` | [archive.org `AppleIIIROMs`](https://archive.org/details/AppleIIIROMs) |
@@ -221,7 +233,7 @@ formats. Convert a DSK, PO or NIB with the companion Main's
 The individual runners, which `make` calls:
 
 ```sh
-./sim/run_tests.sh                      # unit benches: MMU, timing, memory,
+./sim/run_tests.sh                      # unit benches: MMU, timing, memory, boot ROMs,
                                         # video, keyboard, I/O, RTC, ACIA, disk
 bash sim/accuracy/run.sh                # documentation-derived checks
 ./sim/disk/run.sh                       # P6, WOZ parser/writeback, drive timing
@@ -231,6 +243,7 @@ bash sim/accuracy/run.sh                # documentation-derived checks
 ./sim/blockdev/run.sh                   # block card registers, firmware, real-CPU driver calls
 ./sim/mouse/run.sh                      # mouse card under SOS's mouse driver sequences
 ./sim/run_core_boot.sh 30000000
+./sim/blockdev/run_soshdboot.sh         # soshdboot ROM booting a generated hard disk
 ./sim/run_core_boot.sh 400000000 system.woz --woz
 ./sim/run_core_boot.sh 1400000000 sysutils.woz --keytest
 ```
@@ -241,7 +254,9 @@ image it follows SOS to the interpreter through the real track cache.
 `--drive2=blank.woz`, `--drive3=blank.woz` and `--drive4=blank.woz`
 mount the three external drives on the shared transfer bus, and
 `--hd1=hard.po`/`--hd2=hard.po` mount the block card's images
-([block storage tests](../sim/blockdev/README.md)). `--frame-out=frame.ppm`
+([block storage tests](../sim/blockdev/README.md)); `--soshdboot` sets
+**Boot ROM** to soshdboot, and `--alpha-lock` turns Alpha Lock on as the
+machine starts. `--frame-out=frame.ppm`
 saves the rendered 560x192 picture at the end of a run, which is what a
 MiSTer screenshot shows; the text dumps decode display memory instead.
 `--audio-out=audio.wav` records the core's audio output through the run as a

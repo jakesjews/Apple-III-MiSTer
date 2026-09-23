@@ -13,6 +13,7 @@ help:
 	@echo "make test          Every simulation that needs no disk image (about ten minutes)"
 	@echo "make boot [DISK=system.woz ARGS='--to-menu'] [ROM=other.rom]"
 	@echo "                   Boot the whole machine, from the stock ROM unless ROM= names another"
+	@echo "                   or ARGS has --soshdboot, the OSD's Boot ROM option"
 	@echo "Append FILES='rtl/apple3_acia.sv sim/acia_tb.sv' to select formatter files"
 
 format format-check:
@@ -37,6 +38,7 @@ test: test-quick
 	./sim/joystick/run.sh
 	./sim/serial/run.sh
 	./sim/run_core_boot.sh 30000000
+	./sim/blockdev/run_soshdboot.sh
 
 # 30 M clocks reach the disk bootstrap; SOS needs far more with a disk mounted.
 # The harness treats any argument after the clock count as a disk test.

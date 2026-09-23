@@ -35,7 +35,7 @@ module emu (
 	// 0         1         2         3          4         5         6
 	// 01234567890123456789012345678901 23456789012345678901234567890123
 	// 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-	// X  XXXXXXXXXXXXXXXXXXXXXXX
+	// X  XXXXXXXXXXXXXXXXXXXXXXXX
 	//
 	// Aspect ratio is status[122:121], where the Template keeps it.
 
@@ -63,6 +63,7 @@ module emu (
 		"OC,Write Protect 4,Off,On;",
 		"O8,Model,Apple ///,/// Plus;",
 		"OI,Memory,256K,128K;",
+		"O[26],Boot ROM,Apple,soshdboot;",
 		"h0OF,Text Interlace,Off,On;",
 		"h2O[22],Deinterlacing,Weave,Bob;",
 		"O9,Serial CTS,Always ready,Host RTS;",
@@ -238,10 +239,10 @@ module emu (
 	end
 	wire port_b = status[10];  // the controller in port B
 
-	// Apple's boot ROM is built in.  games/Apple-III/boot.rom, which MiSTer
-	// sends with index 0 when the core starts, and the OSD "Load Boot ROM"
-	// entry (F2) replace it until the core is loaded again; the machine is
-	// held in reset while one arrives.
+	// Apple's boot ROM and the soshdboot ROM that "Boot ROM" selects are built
+	// in.  games/Apple-III/boot.rom, which MiSTer sends with index 0 when the
+	// core starts, and the OSD "Load Boot ROM" entry (F2) replace Apple's until
+	// the core is loaded again; the machine is held in reset while one arrives.
 	wire rom_download = ioctl_download && ((ioctl_index == 16'd0) || (ioctl_index[5:0] == 6'd2));
 	wire rom_write = rom_download && ioctl_wr && (ioctl_addr < 27'd8192);
 	wire core_reset = RESET || status[0] || hps_buttons[1] || !pll_locked || rom_download;
@@ -384,6 +385,7 @@ module emu (
 		// encoder output is the same on both machines.
 		.plus_keymap       (plus_model),
 		.ram_128k          (status[18]),
+		.soshdboot         (status[26]),
 		.interlace         (interlace),
 		.euro              (euro),
 		// An unopened HPS UART deasserts RTS. The stock ROM requires CTS

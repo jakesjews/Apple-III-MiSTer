@@ -27,16 +27,24 @@ $C800 expansion ROM.
    through the System Configuration Program from a driver file. The SOS 1.3
    utilities disk ships a `.PROFILE` driver for Apple's ProFile card; the
    Problock3 driver replaces it.
-3. To boot from the card, supply the soshdboot ROM as `boot.rom` or load it
-   with **Load Boot ROM**, and mount an image that carries its two-block loader
-   and modified `SOS.KERNEL`, such as the ready-made images in that
-   repository. The ROM scans slots 4 to 1 and loads block 0 of drive 1 to
-   $A000; holding Alpha Lock at reset boots the floppy instead, and a key
-   held during the scan boots drive 2. Both the ROM and the images are
-   user-supplied, like the stock ROM.
+3. To boot from the card, set **Boot ROM** to **soshdboot**, mount an image
+   that carries its two-block loader and modified `SOS.KERNEL`, such as the
+   [ready-made images](https://github.com/robjustice/soshdboot/tree/master/disks)
+   in that repository, and reset. The built-in ROM is Rob Justice's
+   ([provenance](../rtl/soshdboot/README.md)). It scans slots 4 to 1 and loads
+   block 0 of drive 1 to $A000, or boots the floppy when drive 1 is empty;
+   Alpha Lock down at reset boots the floppy instead, and a key held during
+   the scan boots drive 2. The images are user-supplied.
 
-Stock boot is unchanged: the stock ROM still boots the internal floppy, with
-or without images on the card.
+   Any other image on drive 1 stops the boot, because the ROM runs its block 0
+   whatever it holds: an AppleCommander volume hangs, a blank block 0 crashes,
+   and Apple's ProDOS/SOS boot block stops at `KERNEL NOT FOUND` or a black
+   screen. Choose **Apple** for such images, or turn on Alpha Lock
+   (Caps Lock) and press Ctrl + F2 to boot the floppy; OSD **Reset** turns
+   Alpha Lock off again.
+
+With **Boot ROM** at **Apple**, the default, boot is unchanged: Apple's ROM
+boots the internal floppy, with or without images on the card.
 
 ## Card interface
 
@@ -130,10 +138,11 @@ SOS boot runs use `sim/run_core_boot.sh` with `--hd1=IMAGE`:
 
 - Stock ROM, SOS 1.3 utilities floppy with Problock3 replacing `.PROFILE`, a
   16 MiB image on drive 1. The utilities list `.PROFILE`.
-- `--block-boot` with the soshdboot ROM (`APPLE3_ROM`), no floppy, the same
-  image on drive 1. SOS boots from the card to the Selector /// menu.
+- `--block-boot` with the soshdboot ROM (`APPLE3_ROM`, now `--soshdboot`), no
+  floppy, the same image on drive 1. SOS boots from the card to the
+  Selector /// menu.
 
-Results are in the [results section](#results-2026-09-18) below.
+Results are in the [results sections](#results-2026-09-18) below.
 
 ## Sources
 
@@ -180,3 +189,31 @@ Results are in the [results section](#results-2026-09-18) below.
   floppy to the [Selector /// menu](blockdev/2026-09-18-soshdboot-selector.png)
   within 45 s of the MGL start, and the one-block `soshdboot.dsk` loader floppy
   boots the same image with the stock ROM.
+
+## Results, 2026-09-22 and 23: built-in soshdboot ROM
+
+- `sim/rom_tb.sv`: every address of both banks reads Apple's ROM, then the
+  soshdboot ROM when selected; a 4 KiB upload replaces Apple's ROM and leaves
+  the soshdboot choice alone. An upload first won over the option, but a
+  MiSTer set up before Apple's ROM was built in still holds it as
+  `games/Apple-III/boot.rom`, which MiSTer sends at every start, so the option
+  did nothing there.
+- `sim/blockdev/run_soshdboot.sh`: with `--soshdboot` and no floppy, one card
+  transfer and a jump to $A000 in 1.6 million CPU cycles. Without the option
+  the same run never reads the card.
+- `--soshdboot`, `sos_selector_hd.po`, no floppy: the Selector /// menu in
+  5.67 million CPU cycles with 172 transfers, as with the ROM file on 2026-09-18.
+- `--soshdboot`, drive 1 empty, SOS 1.3 utilities floppy: the Utilities menu,
+  the card reporting no device.
+- `--soshdboot`, the same floppy, and an 800 KiB ProDOS data volume on drive 1:
+  AppleCommander's block 0 hangs; a blank block 0 crashes into a memory dump;
+  Apple's ProDOS/SOS boot block stops at `KERNEL NOT FOUND`, or at a black
+  screen with the MGL's timing (`--mount-delay=8 --reset-delay=3`), as on the
+  MiSTer. With `--alpha-lock` the ROM skips the card and the utilities boot.
+- MiSTer, 2026-09-23, with Apple's ROM still in `games/Apple-III/boot.rom`:
+  **Boot ROM** soshdboot and `sos_selector_hd.po` on **Hard Disk 1** with no
+  floppy boots to the Selector /// menu; the utilities floppy with **Hard
+  Disk 1** empty boots to the Utilities menu; the floppy with the data volume
+  and Apple's boot block stops at a black screen, and Caps Lock then
+  Ctrl + F2 boots the utilities. **Boot ROM** Apple with the floppy and the
+  Selector image boots the utilities.

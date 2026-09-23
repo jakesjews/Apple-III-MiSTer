@@ -5,7 +5,13 @@
 // when the core starts, or the OSD "Load Boot ROM" file.  A bench puts its own
 // program in with INIT_FILE instead.
 //
+// soshdboot selects Rob Justice's hard-disk boot ROM, also built in, in both
+// banks.  A ROM from the host replaces Apple's only: games/Apple-III/boot.rom,
+// which setups from before the ROM was built in still hold, is Apple's ROM,
+// and the OSD's choice of soshdboot must not be undone by it.
+//
 // apple3_rom.mif is apple3_rom.hex for Quartus; tools/hex2mif.py makes it.
+// rtl/soshdboot/build_rom.sh makes both files of the soshdboot ROM.
 
 module apple3_rom #(
 	parameter         INIT_FILE  = "",
@@ -14,16 +20,22 @@ module apple3_rom #(
 	input  logic        clk,
 	input  logic [12:0] addr,
 	output logic [ 7:0] q,
+	input  logic        soshdboot,
 	input  logic        host_we,
 	input  logic [12:0] host_addr,
 	input  logic [ 7:0] host_data
 );
 
+	logic soshdboot_d = 1'b0;
+	always_ff @(posedge clk) soshdboot_d <= soshdboot;
+
 `ifdef APPLE3_USE_ALTSYNCRAM
-	localparam STOCK_MIF = "rtl/apple3_rom.mif";
+	localparam STOCK_MIF     = "rtl/apple3_rom.mif";
+	localparam SOSHDBOOT_MIF = "rtl/soshdboot/apple3hdboot.mif";
 
 	wire  [7:0] low_q;
 	wire  [7:0] high_q;
+	wire  [7:0] soshdboot_q;
 	logic       bank_select_d;
 
 	// Separate physical banks allow one host write to mirror into both banks
@@ -50,12 +62,26 @@ module apple3_rom #(
 		.host_we  (host_we)
 	);
 
-	always_ff @(posedge clk) bank_select_d <= addr[12];
-	always_comb q = bank_select_d ? high_q : low_q;
-`else
-	localparam STOCK_FILE = "rtl/apple3_rom.hex";
+	apple3_rom_bank #(
+		.INIT_MIF(SOSHDBOOT_MIF)
+	) soshdboot_bank (
+		.clk,
+		.addr     (addr[11:0]),
+		.q        (soshdboot_q),
+		.host_addr(12'd0),
+		.host_data(8'd0),
+		.host_we  (1'b0)
+	);
 
-	(* ramstyle = "M10K" *) logic [7:0] mem[0:8191];
+	always_ff @(posedge clk) bank_select_d <= addr[12];
+	always_comb q = soshdboot_d ? soshdboot_q : bank_select_d ? high_q : low_q;
+`else
+	localparam STOCK_FILE     = "rtl/apple3_rom.hex";
+	localparam SOSHDBOOT_FILE = "rtl/soshdboot/apple3hdboot.hex";
+
+	(* ramstyle = "M10K" *)logic [7:0] mem          [0:8191];
+	(* ramstyle = "M10K" *)logic [7:0] soshdboot_mem[0:4095];
+	logic [7:0] mem_q, soshdboot_q;
 
 	initial begin
 		if (INIT_FILE != "") $readmemh(INIT_FILE, mem, INIT_START);
@@ -63,10 +89,14 @@ module apple3_rom #(
 			$readmemh(STOCK_FILE, mem, 0, 4095);
 			$readmemh(STOCK_FILE, mem, 4096, 8191);
 		end
+		$readmemh(SOSHDBOOT_FILE, soshdboot_mem);
 	end
 
+	always_comb q = soshdboot_d ? soshdboot_q : mem_q;
+
 	always_ff @(posedge clk) begin
-		q <= mem[addr];
+		mem_q       <= mem[addr];
+		soshdboot_q <= soshdboot_mem[addr[11:0]];
 		if (host_we) begin
 			mem[host_addr] <= host_data;
 			// The stock ROM is 4 KiB and is selected in either of the two
