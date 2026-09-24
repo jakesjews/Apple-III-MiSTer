@@ -38,7 +38,8 @@ cover all of these and the pin-level bench in `sim/acia_tb.sv` checks them.
 
 The adapter in `../apple3_acia.sv` supplies a fractional 1.8432 MHz enable from
 14.318182 MHz and synchronizes RX/CTS/DSR/DCD inputs. It connects the chip to
-MiSTer's HPS UART; MiSTer has no separate DCD input, so carrier is asserted.
+MiSTer's HPS UART. MiSTer has no DCD input; the OSD's `Serial DCD` option holds
+carrier on, as an unplugged port reads, follows DSR, or turns it off.
 The OSD's `Serial CTS` option defaults to `Always ready`, matching the unplugged
 motherboard port's receiver pull-up and allowing the stock ROM's self-test to
 pass with no host UART open. `Host RTS` connects the real HPS flow-control line.

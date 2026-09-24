@@ -7,7 +7,7 @@ The shipped MiSTer configuration ties the empty slots' ready inputs high.
 
 ## Onboard peripheral accesses
 
-FSPACE includes the two VIAs, ACIA ($C0F0–$C0F3) and RTC ($C07x), qualified by
+FSPACE includes the two VIAs, ACIA ($C0Fx, four registers repeated) and RTC ($C07x), qualified by
 their actual MMU selects. Hidden I/O and extended RAM accesses do not trigger
 peripheral waits. D11 samples FSPACE at C1M rising. The address of a new cycle
 following an A-slot completion has not settled at that sampling edge; its

@@ -151,7 +151,8 @@ the other port. Button 1 is the joystick's pushbutton, and each press of button
 2 flips its latching switch.
 
 Serial uses MiSTer's UART. Leave **Serial CTS** at **Always ready** unless
-using host hardware flow control. [Serial details](docs/DEVELOPMENT.md#serial-port).
+using host hardware flow control, and **Serial DCD** at **Always on** unless a
+program should see carrier from the host (**Host DTR**) or none (**Off**). [Serial details](docs/DEVELOPMENT.md#serial-port).
 
 ## Building and simulation
 
@@ -171,20 +172,6 @@ Booting SOS needs a WOZ disk image.
 ## Todo
 
 Existing partial implementations are noted where they provide a starting point.
-
-- [ ] **Slot reset.** Sheet 9 resets the cards on RESET, or in Apple II mode
-      whenever NMI is asserted: the Reset key or a card's NMI, both locked out
-      by environment bit 4. The core uses the bare Reset key in Apple II mode.
-
-- [ ] **$C0Fx decode.** The ACIA answers all of $C0F0-$C0FF on A0-A1 with
-      peripheral timing; the core decodes and times only $C0F0-$C0F3.
-
-- [ ] **MM58167 clock.** Limit the counters to the chip's 46 bits, drop the
-      hidden leap year (the chip's February always has 28 days), and stop the
-      per-minute MiSTer clock update from undoing a time set in SOS.
-
-- [ ] **Serial carrier.** DCD is tied asserted. Add an option for it, separate
-      from the CTS setting.
 
 - [ ] **Validate audio** Verify implementation accuracy against research.
 

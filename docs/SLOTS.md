@@ -103,7 +103,8 @@ All four slot NMIs combine onto IONMI. E-VIA PB7 reports the raw active-low
 line; environment bit 4 masks its connection to CPU NMI, just as it masks the
 keyboard NMI. Power-on/core reset and native Control-Reset reset every card.
 Reset alone in native mode leaves the cards intact and requests NMI. In Apple
-II mode Reset alone also asserts the card reset line, per sheet 9.
+II mode the card reset line also follows the NMI net, per sheet 9: Reset alone
+or any card's NMI resets every card, unless environment bit 4 locks both out.
 
 Coprocessor/DMA ownership and memory inhibit are not part of this interface
 yet. Ownership will be added with the first card that needs it.
@@ -136,7 +137,9 @@ The second test boots a self-checking diagnostic on the real T65, MMU and
 6522s with four synthetic cards. It exercises slow/fast reads, read/modify/write,
 RAM overlays, simultaneous interrupts and SOS-style dispatch, held-request
 retriggering, each slot's NMI, NMI masking and the PS/2 Reset/Control-Reset
-paths in native and Apple II modes. No Apple ROM is required for these tests.
+paths in native and Apple II modes. In Apple II mode the bench also checks that
+environment bit 4 keeps Reset from the cards and that a card's NMI resets them.
+No Apple ROM is required for these tests.
 
 Results on 2026-09-18:
 

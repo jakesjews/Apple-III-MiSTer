@@ -13,6 +13,8 @@ module rtc_accuracy_tb;
 	apple3_rtc #(.CLOCKS_PER_MS(1000)) dut (.*);
 	integer failures = 0, ten_hz_events = 0, one_hz_events = 0;
 	logic [7:0] sampled, year_latch;
+	// Data sheet Table I: milliseconds through months, 46 bits.
+	logic [7:0] table_i[8] = '{8'hf0, 8'hff, 8'h7f, 8'h7f, 8'h3f, 8'h07, 8'h3f, 8'h1f};
 	task automatic wr(input [4:0] a, input [7:0] value);
 		@(negedge clk);
 		addr         = a;
@@ -39,6 +41,24 @@ module rtc_accuracy_tb;
 	initial begin
 		repeat (3) @(negedge clk);
 		reset = 0;
+		// Host seed: Thursday 2026-09-17 23:58:07. SOS reads the year back from the
+		// day and month latches as ((month << 2) | 3) & day (SOS 1.3 GET.TIME).
+		host_rtc = {1'b1, 8'h40, 8'h04, 8'h26, 8'h09, 8'h17, 8'h23, 8'h58, 8'h07};
+		repeat (3) @(negedge clk);
+		rd(4, sampled);
+		check(sampled == 8'h23, "host seed sets the hour");
+		rd(7, sampled);
+		check(sampled == 8'h09, "host seed sets the month");
+		rd(6, sampled);
+		check(sampled == 8'h17, "host seed sets the day of month");
+		rd(5, sampled);
+		check(sampled == 8'h05, "host weekday 4 (Thursday) becomes MM58167 day 5");
+		rd(5'h0f, sampled);
+		year_latch = {sampled[5:0], 2'b11};
+		rd(5'h0e, sampled);
+		check((year_latch & sampled) == 8'h26, "SOS reads the seeded year from the day and month latches");
+		check(irq == 0, "don't-care year latches raise no compare interrupt");
+
 		// GO rounds 12:34:45 up to 12:35:00, not merely zeroing fractions.
 		wr(4, 8'h12);
 		wr(3, 8'h34);
@@ -176,23 +196,88 @@ module rtc_accuracy_tb;
 		end
 		check(ten_hz_events == 10 && one_hz_events == 1, $sformatf(
 			  "one second produces ten 10 Hz and one 1 Hz interrupts (%0d,%0d)", ten_hz_events, one_hz_events));
-		// Host seed: Thursday 2026-09-17 23:58:07. SOS reads the year back from the
-		// day and month latches as ((month << 2) | 3) & day (SOS 1.3 GET.TIME).
-		host_rtc = {1'b1, 8'h40, 8'h04, 8'h26, 8'h09, 8'h17, 8'h23, 8'h58, 8'h07};
+		// Data sheet Table I: unused counter bits read as zero and ignore writes,
+		// and AN-353 figure 2 has no RAM behind the low nibble of 08 or the high
+		// nibble of 0D.
+		wait (dut.millisecond_divider == 100);
+		for (integer i = 0; i < 8; i++) begin
+			wr(5'(i), 8'hff);
+			rd(5'(i), sampled);
+			check(sampled == table_i[i], $sformatf("counter %0d keeps only its bits (%02x)", i, sampled));
+		end
+		wr(5'h08, 8'hff);
+		rd(5'h08, sampled);
+		check(sampled == 8'hf0, "RAM at 08 has only its high nibble");
+		wr(5'h0d, 8'hff);
+		rd(5'h0d, sampled);
+		check(sampled == 8'h0f, "RAM at 0D has only its low nibble");
+		wr(5'h0e, 8'hff);
+		rd(5'h0e, sampled);
+		check(sampled == 8'hff, "RAM at 0E keeps all eight bits");
+		wr(5'h13, 8'hff);
+
+		// No year and no leap day: February always has 28 days.
+		wr(7, 8'h02);
+		wr(6, 8'h28);
+		wr(4, 8'h23);
+		wr(3, 8'h59);
+		wr(2, 8'h59);
+		wr(1, 8'h99);
+		wr(0, 8'h90);
+		repeat (2100) @(negedge clk);
+		rd(7, sampled);
+		check(sampled == 8'h03, "February 28 rolls over to March");
+		rd(6, sampled);
+		check(sampled == 8'h01, "February 28 is followed by the 1st");
+		// A written overflow value resets when the write ends and carries.
+		wr(4, 8'h12);
+		wr(7, 8'h02);
+		wr(6, 8'h29);
+		rd(6, sampled);
+		check(sampled == 8'h01, "a written February 29 reads back as the 1st");
+		rd(7, sampled);
+		check(sampled == 8'h03, "a written February 29 reads back as March");
+		// AN-353's leap day: February 31 stands for the 29th and reaches March 1.
+		wr(7, 8'h02);
+		wr(6, 8'h31);
+		repeat (4) @(negedge clk);
+		rd(6, sampled);
+		check(sampled == 8'h31, "February 31 is kept for software's leap day");
+		wr(4, 8'h23);
+		wr(3, 8'h59);
+		wr(2, 8'h59);
+		wr(1, 8'h99);
+		wr(0, 8'h90);
+		repeat (2100) @(negedge clk);
+		rd(7, sampled);
+		check(sampled == 8'h03, "February 31 carries to March");
+		rd(6, sampled);
+		check(sampled == 8'h01, "February 31 carries to the 1st");
+		wr(7, 8'h04);
+		wr(6, 8'h30);
+		wr(4, 8'h23);
+		wr(3, 8'h59);
+		wr(2, 8'h59);
+		wr(1, 8'h99);
+		wr(0, 8'h90);
+		repeat (2100) @(negedge clk);
+		rd(7, sampled);
+		check(sampled == 8'h05, "April 30 rolls over to May");
+		rd(6, sampled);
+		check(sampled == 8'h01, "April 30 is followed by the 1st");
+
+		// Once the Apple /// has set the clock, MiSTer's updates leave it alone.
+		wr(4, 8'h07);
+		wr(3, 8'h00);
+		wr(2, 8'h00);
+		wr(5'h0e, 8'h5a);
+		host_rtc = {1'b0, 8'h40, 8'h04, 8'h27, 8'h10, 8'h18, 8'h21, 8'h30, 8'h07};
 		repeat (3) @(negedge clk);
 		rd(4, sampled);
-		check(sampled == 8'h23, "host seed sets the hour");
-		rd(7, sampled);
-		check(sampled == 8'h09, "host seed sets the month");
-		rd(6, sampled);
-		check(sampled == 8'h17, "host seed sets the day of month");
-		rd(5, sampled);
-		check(sampled == 8'h05, "host weekday 4 (Thursday) becomes MM58167 day 5");
-		rd(5'h0f, sampled);
-		year_latch = {sampled[5:0], 2'b11};
+		check(sampled == 8'h07, "a host update after the machine set the time is ignored");
 		rd(5'h0e, sampled);
-		check((year_latch & sampled) == 8'h26, "SOS reads the seeded year from the day and month latches");
-		check(irq == 0, "don't-care year latches raise no compare interrupt");
+		check(sampled == 8'h5a, "a host update after the machine set the time keeps the year RAM");
+
 		$display("RTC accuracy: %0d failed checks", failures);
 		if (failures) $fatal(1, "RTC accuracy discrepancies");
 		$finish;

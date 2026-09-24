@@ -168,7 +168,13 @@ module apple3_io (
 				8'he8, 8'he9, 8'hea, 8'heb,
 				8'hec, 8'hed, 8'hee, 8'hef:
 				data_out = disk_data;
-				8'hf0, 8'hf1, 8'hf2, 8'hf3: data_out = acia_data;
+				// SRM figure 2.30: FX strobes the ACIA, which decodes A0-A1, so
+				// $C0F4-$C0FF are mirrors of its four registers.
+				8'hf0, 8'hf1, 8'hf2, 8'hf3,
+				8'hf4, 8'hf5, 8'hf6, 8'hf7,
+				8'hf8, 8'hf9, 8'hfa, 8'hfb,
+				8'hfc, 8'hfd, 8'hfe, 8'hff:
+				data_out = acia_data;
 				default: ;
 			endcase
 		end
@@ -177,8 +183,8 @@ module apple3_io (
 		rtc_read    = cycle_strobe && select && cpu_read && (addr[7:4] == 4'h7);
 		rtc_write   = cycle_strobe && select && !cpu_read && (addr[7:4] == 4'h7);
 		disk_strobe = cycle_strobe && select && ((addr[7:4] == 4'hd) || (addr[7:4] == 4'he));
-		acia_read   = cycle_strobe && select && cpu_read && (addr >= 8'hf0) && (addr <= 8'hf3);
-		acia_write  = cycle_strobe && select && !cpu_read && (addr >= 8'hf0) && (addr <= 8'hf3);
+		acia_read   = cycle_strobe && select && cpu_read && (addr[7:4] == 4'hf);
+		acia_write  = cycle_strobe && select && !cpu_read && (addr[7:4] == 4'hf);
 	end
 
 	// Reset does not touch C15.  While PDLEN is low the acquisition current

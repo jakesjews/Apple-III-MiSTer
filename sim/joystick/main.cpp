@@ -52,6 +52,7 @@ int main(int argc, char **argv) {
 	top.serial_rx = 1;
 	top.serial_cts_n = 0;
 	top.serial_dsr_n = 0;
+	top.serial_dcd_n = 0;
 	top.image_change = 0;
 	top.image_size = 0;
 	top.image_readonly = 1;

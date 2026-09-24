@@ -2,8 +2,11 @@
 //
 // The register layout and interrupt semantics follow the MM58167 data sheet
 // and are cross-checked against SOS's clock driver and the Apple /// service
-// manual.  host_rtc uses MiSTer's MSM6242B-format BCD clock and seeds the
-// battery-backed counters whenever its toggle bit changes.
+// manual.  host_rtc uses MiSTer's MSM6242B-format BCD clock, which Main sends
+// at start and every minute.  It keeps the chip set, as a battery would have,
+// until the Apple /// writes the time, the RAM or a reset or GO command; from
+// then on the machine owns the clock and host updates are ignored.  Neither
+// the boot ROM nor SOS's boot writes any of those registers.
 
 module apple3_rtc #(
 	parameter logic [13:0] CLOCKS_PER_MS = 14'd14318
@@ -24,8 +27,8 @@ module apple3_rtc #(
 	logic [ 7:0] compare             [0:7];
 	logic [ 7:0] irq_status;
 	logic [ 7:0] irq_control;
-	logic [ 7:0] year_bcd;
 	logic        host_toggle;
+	logic        guest_set;
 	logic        compare_match;
 	logic        compare_match_d;
 	logic        millisecond_tick;
@@ -43,16 +46,36 @@ module apple3_rtc #(
 		end
 	endfunction
 
-	function automatic [7:0] days_in_month(input logic [7:0] month, input logic [7:0] year);
-		logic leap;
-		begin
-			leap = ((({3'b000, year[7:4], 1'b0} + {4'b0000, year[3:0]}) & 8'h03) == 0);
-			case (month)
-				8'h02:                      days_in_month = leap ? 8'h29 : 8'h28;
-				8'h04, 8'h06, 8'h09, 8'h11: days_in_month = 8'h30;
-				default:                    days_in_month = 8'h31;
-			endcase
-		end
+	// Data sheet Table I: the bits each counter has. The others read as zero
+	// and ignore writes, 46 bits in all.
+	function automatic [7:0] counter_mask(input logic [2:0] index);
+		case (index)
+			3'd0:       counter_mask = 8'hf0;
+			3'd1:       counter_mask = 8'hff;
+			3'd2, 3'd3: counter_mask = 8'h7f;
+			3'd4, 3'd6: counter_mask = 8'h3f;
+			3'd5:       counter_mask = 8'h07;
+			default:    counter_mask = 8'h1f;
+		endcase
+	endfunction
+
+	// AN-353 figure 2: the RAM has no nibble at the low half of 08 or the high
+	// half of 0D, the digits the comparator ignores.
+	function automatic [7:0] ram_mask(input logic [2:0] index);
+		ram_mask = (index == 3'd0) ? 8'hf0 : (index == 3'd5) ? 8'h0f : 8'hff;
+	endfunction
+
+	// A counter rolls over when it decodes its highest value plus one. For the
+	// day of month that is 32 in any month, 31 in a 30-day month and 29 in
+	// February: the chip has no year and no leap day. AN-353 has software write
+	// February 31 for the 29th, which the next day carries to March 1.
+	function automatic logic day_rolls(input logic [7:0] day, input logic [7:0] month);
+		day_rolls = (day == 8'h32) || ((day == 8'h29) && (month == 8'h02)) ||
+			((day == 8'h31) && ((month == 8'h04) || (month == 8'h06) || (month == 8'h09) || (month == 8'h11)));
+	endfunction
+
+	function automatic [7:0] next_month(input logic [7:0] month);
+		next_month = (month == 8'h12) ? 8'h01 : bcd_increment(month);
 	endfunction
 
 	always_comb begin
@@ -88,12 +111,12 @@ module apple3_rtc #(
 	initial begin
 		millisecond_divider  = 14'd0;
 		host_toggle          = 1'b0;
+		guest_set            = 1'b0;
 		compare_match_d      = 1'b0;
 		counter_read_pending = 1'b0;
 		rollover_status      = 1'b0;
 		irq_status           = 8'h00;
 		irq_control          = 8'h00;
-		year_bcd             = 8'h80;
 		counter[0]           = 8'h00;
 		counter[1]           = 8'h00;
 		counter[2]           = 8'h00;
@@ -102,7 +125,7 @@ module apple3_rtc #(
 		counter[5]           = 8'h01;
 		counter[6]           = 8'h01;
 		counter[7]           = 8'h01;
-		for (integer i = 0; i < 8; i = i + 1) compare[i] = 8'hcc;
+		for (integer i = 0; i < 8; i = i + 1) compare[i] = 8'hcc & ram_mask(3'(i));
 	end
 
 	// Both ordinary seconds carry and GO rounding use the same calendar chain.
@@ -121,13 +144,10 @@ module apple3_rtc #(
 						counter[5] <= 8'h01;
 						if (irq_control[6]) irq_status[6] <= 1'b1;
 					end else counter[5] <= counter[5] + 1'b1;
-					if (counter[6] == days_in_month(counter[7], year_bcd)) begin
+					if (day_rolls(bcd_increment(counter[6]), counter[7])) begin
 						counter[6] <= 8'h01;
+						counter[7] <= next_month(counter[7]);
 						if (irq_control[7]) irq_status[7] <= 1'b1;
-						if (counter[7] == 8'h12) begin
-							counter[7] <= 8'h01;
-							year_bcd   <= bcd_increment(year_bcd);
-						end else counter[7] <= bcd_increment(counter[7]);
 					end else counter[6] <= bcd_increment(counter[6]);
 				end
 			end
@@ -151,8 +171,8 @@ module apple3_rtc #(
 			rollover_status      <= 1'b0;
 		end
 
-		if (host_rtc[64] != host_toggle) begin
-			host_toggle         <= host_rtc[64];
+		host_toggle <= host_rtc[64];
+		if ((host_rtc[64] != host_toggle) && !guest_set) begin
 			millisecond_divider <= 14'd0;
 			if (counter_read_pending) rollover_status <= 1'b1;
 			counter[0] <= 8'h00;
@@ -164,7 +184,6 @@ module apple3_rtc #(
 			counter[5] <= {5'b00000, host_rtc[50:48]} + 8'h01;
 			counter[6] <= {2'b00, host_rtc[29:28], host_rtc[27:24]};
 			counter[7] <= {3'b000, host_rtc[36], host_rtc[35:32]};
-			year_bcd   <= host_rtc[47:40];
 			// The chip has no year counter. SOS SET.TIME stores the two-digit year
 			// in the day and month compare latches with the other bits left in the
 			// don't-care state, and GET.TIME reads it back as ((month << 2) | 3) &
@@ -197,16 +216,25 @@ module apple3_rtc #(
 					end
 				end
 			end
-		end
+		end else if (day_rolls(counter[6], counter[7])) begin
+			// A counter written with its overflow value resets when the write is
+			// removed and may carry: February 29 reads back as March 1 (AN-353).
+			counter[6] <= 8'h01;
+			counter[7] <= next_month(counter[7]);
+			if (irq_control[7]) irq_status[7] <= 1'b1;
+		end else if (counter[7] == 8'h13) counter[7] <= 8'h01;
 
 		if (!compare_match_d && compare_match && irq_control[0]) irq_status[0] <= 1'b1;
 
 		if (!reset && read_strobe && (addr == 5'h10)) irq_status <= 8'h00;
 
 		if (!reset && write_strobe) begin
+			if ((addr < 5'h10) || (addr == 5'h12) || (addr == 5'h13) || (addr == 5'h15)) guest_set <= 1'b1;
 			case (addr)
-				5'h00, 5'h01, 5'h02, 5'h03, 5'h04, 5'h05, 5'h06, 5'h07: counter[addr[2:0]] <= data_in;
-				5'h08, 5'h09, 5'h0a, 5'h0b, 5'h0c, 5'h0d, 5'h0e, 5'h0f: compare[addr[2:0]] <= data_in;
+				5'h00, 5'h01, 5'h02, 5'h03, 5'h04, 5'h05, 5'h06, 5'h07:
+				counter[addr[2:0]] <= data_in & counter_mask(addr[2:0]);
+				5'h08, 5'h09, 5'h0a, 5'h0b, 5'h0c, 5'h0d, 5'h0e, 5'h0f:
+				compare[addr[2:0]] <= data_in & ram_mask(addr[2:0]);
 				5'h11: irq_control <= data_in;
 				5'h12:
 				if (data_in == 8'hff) begin

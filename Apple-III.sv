@@ -35,7 +35,7 @@ module emu (
 	// 0         1         2         3          4         5         6
 	// 01234567890123456789012345678901 23456789012345678901234567890123
 	// 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-	// X  XXXXXXXXXXXXXXXXXXXXXXXX
+	// X  XXXXXXXXXXXXXXXXXXXXXXXXXX
 	//
 	// Aspect ratio is status[122:121], where the Template keeps it.
 
@@ -81,6 +81,7 @@ module emu (
 		"P3-;",
 		"P3OA,Joystick 1 on,Port B,Port A;",
 		"P3O9,Serial CTS,Always ready,Host RTS;",
+		"P3O[28:27],Serial DCD,Always on,Host DTR,Off;",
 		"-;",
 		"R0,Reset;",
 		"J,Button,Switch;",
@@ -404,6 +405,11 @@ module emu (
 		.serial_rx         (UART_RXD),
 		.serial_cts_n      (status[9] && UART_CTS),
 		.serial_dsr_n      (UART_DSR),
+		// MiSTer's UART has no carrier line. "Serial DCD" defaults to carrier
+		// present, which is what the port shows with nothing plugged in (R89
+		// pulls its receiver input up, sheet 8). Host DTR follows the pin DSR
+		// uses, as a null-modem cable tying DCD to DSR does; Off drops carrier.
+		.serial_dcd_n      ((status[28:27] == 2'd1) ? UART_DSR : (status[28:27] == 2'd2)),
 		.serial_tx         (UART_TXD),
 		.serial_rts_n      (UART_RTS),
 		.serial_dtr_n      (UART_DTR),

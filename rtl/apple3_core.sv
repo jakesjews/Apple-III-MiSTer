@@ -48,6 +48,7 @@ module apple3_core #(
 	input  logic serial_rx,
 	input  logic serial_cts_n,
 	input  logic serial_dsr_n,
+	input  logic serial_dcd_n,
 	output wire  serial_tx,
 	output wire  serial_rts_n,
 	output wire  serial_dtr_n,
@@ -116,7 +117,7 @@ module apple3_core #(
 	logic        cpu_enable;
 	logic cpu_clock_enable, cpu_ready;
 	logic cpu_irq_n;
-	logic cpu_nmi_n;
+	logic cpu_nmi_n, nmi_asserted;
 
 	logic [7:0] d_pa_o, d_pa_ddr, d_pa_i;
 	logic [7:0] d_pb_o, d_pb_ddr, d_pb_i;
@@ -204,13 +205,18 @@ module apple3_core #(
 	always_ff @(posedge clk_14m) if (machine_reset) soshdboot_q <= soshdboot;
 	assign cpu_irq_n = !(via_d_irq || via_e_irq || acia_irq);
 	assign slot_ionmi_n = &slot_nmi_n;
-	assign cpu_nmi_n = !(environment[4] && ((reset_key && !control_key) || !slot_ionmi_n));
+	// Sheet 9 H10: the /NMI net is the Reset key, with or without Control, or
+	// a card's IONMI, unless environment bit 4 locks both out. During
+	// Control-Reset the hard reset holds the CPU, whose edge detector waits.
+	assign nmi_asserted = environment[4] && (reset_key || !slot_ionmi_n);
+	assign cpu_nmi_n = !nmi_asserted;
 	// J4 + D9 (sheet 5) gate IRQ1-4 with scanner H1. A held request
 	// retriggers the edge-sensitive VIA every four horizontal states.
 	assign slot_ca1 = !((&slot_irq_n) || h_state[1]);
-	// Sheet 9: Reset alone also resets cards in Apple II mode. Native
-	// Reset alone is an NMI; Control-Reset resets the whole machine.
-	assign slot_reset = machine_reset || (!native_mode && reset_key);
+	// Sheet 9: /IORESET is RESET or, through D9 and H9, the /NMI net while
+	// -AIISW selects Apple II mode. Native Reset alone is only an NMI, and
+	// Control-Reset resets the whole machine.
+	assign slot_reset = machine_reset || (!native_mode && nmi_asserted);
 	assign slot_addr = bus_addr;
 	assign slot_data_out = cpu_dout;
 	assign slot_cpu_read = cpu_rwn;
@@ -221,7 +227,7 @@ module apple3_core #(
 	assign cpu_enable = cpu_clock_enable && (cpu_ready || !cpu_rwn);
 	assign rtc_cycle = io_select && (cpu_addr[7:4] == 4'h7);
 	assign peripheral_cycle = via_d_select || via_e_select ||
-		rtc_cycle || (io_select && (cpu_addr[7:0] >= 8'hf0) && (cpu_addr[7:0] <= 8'hf3));
+		rtc_cycle || (io_select && (cpu_addr[7:4] == 4'hf));
 
 	assign ram_cpu_data = ram_lane ? ram_q[15:8] : ram_q[7:0];
 	assign sister_data  = ram_lane ? ram_q[7:0] : ram_q[15:8];
@@ -524,7 +530,7 @@ module apple3_core #(
 		.cts_n       (serial_cts_n),
 		.dsr_n       (serial_dsr_n),
 		// MiSTer's HPS UART has no separate carrier input; the link is local.
-		.dcd_n       (1'b0),
+		.dcd_n       (serial_dcd_n),
 		.data_out    (acia_data),
 		.tx          (serial_tx),
 		.rts_n       (serial_rts_n),

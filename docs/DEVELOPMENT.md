@@ -85,7 +85,8 @@ the common rates and the ACIA implements all fifteen internal dividers.
 **Serial CTS** defaults to **Always ready** so the stock ROM's self-test passes
 when no host program has the UART open. Choose **Host RTS** for hardware flow
 control; the host must assert RTS before the machine boots in that mode. MiSTer
-has no separate carrier-detect line, so DCD is held asserted. See
+has no carrier-detect line: **Serial DCD** keeps carrier on by default, as an
+unplugged port reads, follows DSR with **Host DTR**, or turns it **Off**. See
 [rtl/acia/README.md](../rtl/acia/README.md) for the provenance of the 6551 core
 and [sim/serial/README.md](../sim/serial/README.md) for the serial tests.
 

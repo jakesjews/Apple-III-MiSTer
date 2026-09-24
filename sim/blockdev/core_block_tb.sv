@@ -62,6 +62,7 @@ module core_block_tb;
 		.serial_rx          (1'b1),
 		.serial_cts_n       (1'b0),
 		.serial_dsr_n       (1'b0),
+		.serial_dcd_n       (1'b0),
 		.serial_tx          (),
 		.serial_rts_n       (),
 		.serial_dtr_n       (),

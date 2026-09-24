@@ -12,7 +12,9 @@ module core_timing_tb;
 	wire slot_cpu_read, slot_cycle, slot_reset, slot_io_strobe, slot_rom_deselect, slot_bus_conflict;
 	wire cpu_enable, cpu_rwn;
 	logic [3:0] slot_ready = 4'hf;
-	integer cycles = 0, phase = 0, via_edges = 0, via_accesses = 0;
+	integer cycles = 0, phase = 0, via_edges = 0, via_accesses = 0, acia_edges = 0, acia_accesses = 0;
+	// SRM figure 2.30: FX strobes the ACIA, so all of $C0F0-$C0FF is FSPACE.
+	wire acia_space = dut.io_select && (cpu_addr[7:4] == 4'hf);
 	integer card_reads = 0, card_writes = 0, held_clocks = 0, stalled_ticks = 0;
 	integer scan_before;
 	logic completed = 0, holding = 0, old_rwn;
@@ -57,6 +59,7 @@ module core_timing_tb;
 		.serial_rx          (1'b1),
 		.serial_cts_n       (1'b0),
 		.serial_dsr_n       (1'b0),
+		.serial_dcd_n       (1'b0),
 		.serial_tx          (),
 		.serial_rts_n       (),
 		.serial_dtr_n       (),
@@ -109,6 +112,7 @@ module core_timing_tb;
 		if (!reset) begin
 			if (dut.via_falling && dut.peripheral_select && (dut.via_d_select || dut.via_e_select))
 				via_edges = via_edges + 1;
+			if (dut.via_falling && dut.peripheral_select && acia_space) acia_edges = acia_edges + 1;
 			if (holding) begin
 				held_clocks++;
 				if (dut.via_falling) stalled_ticks++;
@@ -124,6 +128,12 @@ module core_timing_tb;
 					via_accesses++;
 				end
 				via_edges = 0;
+				if (acia_space) begin
+					if (acia_edges != 1 || !(dut.acia_read || dut.acia_write))
+						$fatal(1, "ACIA %04x had %0d peripheral strobes", cpu_addr, acia_edges);
+					acia_accesses++;
+				end
+				acia_edges = 0;
 				if (!cpu_rwn && cpu_addr == 16'h0201) phase <= int'(cpu_dout);
 				if (!cpu_rwn && cpu_addr == 16'h0200) begin
 					if (cpu_dout != 8'h5a) $fatal(1, "diagnostic failed phase=%0d PC=%04x", phase, pc);
@@ -188,8 +198,8 @@ module core_timing_tb;
 		reset      = 0;
 		slot_ready = 4'hf;
 		wait (cpu_addr == 16'hfffc && cpu_enable);
-		$display("PASS T65 peripheral alignment (%0d VIA accesses), four RDY inputs, RMW writes, stalled NMI and reset",
-				 via_accesses);
+		$display("PASS T65 peripheral alignment (%0d VIA, %0d ACIA accesses), four RDY inputs, RMW writes, stalled NMI and reset",
+				 via_accesses, acia_accesses);
 		$finish;
 	end
 endmodule

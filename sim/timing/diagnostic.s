@@ -8,6 +8,11 @@
     jmp fail
 :
 .endmacro
+; Ahead of the loops so their failure branches stay in range.
+fail:
+    lda #$ff
+    sta $0200
+    jmp fail
 reset:
     sei
     cld
@@ -44,6 +49,9 @@ again:
     sta $c0f3                 ; ACIA control, including adjacent reads
     cmp $c0f3
     bne fail
+    sta $c0f7                 ; and through its $C0Fx mirrors
+    cmp $c0ff
+    bne fail
     lda $ffd8                 ; live timer reads
     lda $ffe8
     lda $c071                 ; RTC, addressed through zero page register
@@ -70,10 +78,6 @@ again:
     sta $0200
 done:
     jmp done
-fail:
-    lda #$ff
-    sta $0200
-    jmp fail
 nmi:
     inc $0202
     rti

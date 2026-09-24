@@ -49,6 +49,7 @@ module core_slots_tb;
 		.serial_rx          (1'b1),
 		.serial_cts_n       (1'b0),
 		.serial_dsr_n       (1'b0),
+		.serial_dcd_n       (1'b0),
 		.serial_tx          (),
 		.serial_rts_n       (),
 		.serial_dtr_n       (),
@@ -120,6 +121,8 @@ module core_slots_tb;
 	always @(posedge clk) begin
 		cycles <= cycles + 1;
 		if (slot_bus_conflict) $fatal(1, "ROM contention at PC %04x phase %0d", pc, phase);
+		// Card NMIs and Reset alone never reach the cards in native mode.
+		if (dut.native_mode && slot_reset && !dut.machine_reset) $fatal(1, "native card reset in phase %0d", phase);
 		if (cpu_enable && !cpu_rwn && !dut.machine_reset) begin
 			if (cpu_addr == 16'h0201) begin
 				phase <= int'(cpu_dout);
@@ -149,6 +152,7 @@ module core_slots_tb;
 		key(8'h14, 1);  // Control + Reset resets CPU, cards and their ROM latches.
 		if (!dut.machine_reset || !slot_reset || selected != 0 || slot_irq_n != 15 || slot_nmi_n != 15)
 			$fatal(1, "Control-Reset must reset all cards");
+		if (dut.cpu_nmi_n) $fatal(1, "sheet 9's NMI follows Reset with Control held too");
 		key(8'h06, 0);
 		key(8'h14, 0);
 		wait (phase != 7);
@@ -161,6 +165,19 @@ module core_slots_tb;
 			$fatal(1, "Apple II Reset must reset cards without a native Control-Reset");
 		key(8'h06, 0);
 		if (slot_reset) $fatal(1, "slot reset did not release");
+		// Sheet 9 takes the Apple II card reset from the /NMI net: environment
+		// bit 4 locks it out, and a card's NMI resets every card.
+		force dut.environment = 8'h47;
+		key(8'h06, 1);
+		if (slot_reset || !dut.cpu_nmi_n) $fatal(1, "a locked Reset must not reach the cards or the CPU");
+		key(8'h06, 0);
+		release dut.environment;
+		force slot_nmi_n = 4'b1101;
+		@(negedge clk);
+		if (!slot_reset || dut.machine_reset) $fatal(1, "an Apple II card NMI must reset the cards");
+		release slot_nmi_n;
+		@(negedge clk);
+		if (slot_reset) $fatal(1, "slot reset did not release after the card NMI");
 		$display("PASS real CPU slot I/O, ROM, VIA IRQ dispatch, NMI and native/II reset (%0d clocks)", cycles);
 		$finish;
 	end

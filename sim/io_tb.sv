@@ -81,6 +81,19 @@ module io_tb;
 		#1;
 		if (!acia_read || data_out != 8'h10) $fatal(1, "ACIA decode");
 		cycle_strobe = 0;
+		// The ACIA decodes A0-A1 across all of $C0Fx.
+		for (int a = 8'hf4; a <= 8'hff; a++) begin
+			addr         = 8'(a);
+			cycle_strobe = 1;
+			#1;
+			if (!acia_read || data_out != 8'h10) $fatal(1, "ACIA mirror %02x read", a);
+			cpu_read = 0;
+			#1;
+			if (!acia_write) $fatal(1, "ACIA mirror %02x write", a);
+			cpu_read     = 1;
+			cycle_strobe = 0;
+		end
+		@(negedge clk);  // keep the next clocked access clear of an edge
 
 		access (8'h30, 1);
 		if (!speaker) $fatal(1, "speaker toggle");

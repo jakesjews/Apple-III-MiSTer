@@ -395,13 +395,23 @@ through the calendar. The 10 Hz interrupt includes whole-second rollover. A
 counter read arms a sticky rollover detector with a 150 us update window each
 millisecond; reading status returns and clears that result. [RTC]
 
+Counters keep only the bits of the data sheet's Table I (46 in all); the others
+read as zero and ignore writes, and the RAM has no nibble behind the low half
+of $08 or the high half of $0D. The calendar has no year: a counter rolls over
+when it decodes its highest value plus one, so February always has 28 days, a
+written February 29 reads back as March 1, and AN-353's February 31, which
+software writes for a leap day, reaches March 1 the next day.
+
 FPGA configuration initializes clock state. Machine reset suppresses bus access
 but preserves time, comparison RAM and interrupt settings while the clock runs.
-MiSTer host-clock toggle updates seed the counters, mapping MiSTer's
-Sunday = 0 weekday to the chip's 1 to 7. The chip has no year counter: SOS
+MiSTer sends its clock at start and every minute. Those updates set the
+counters, mapping MiSTer's Sunday = 0 weekday to the chip's 1 to 7, until the
+Apple /// writes the time, the RAM or a reset or GO command; the machine then
+owns the clock, as it does a battery-backed chip, until the core is reloaded.
+Neither the boot ROM nor SOS's boot writes those registers. The chip has no year counter: SOS
 SET.TIME keeps the two-digit year in the day and month compare latches with
 their other bits in the don't-care state, and GET.TIME reads it back as
-((month << 2) | 3) & day. The host seed writes those latches too. Left at
+((month << 2) | 3) & day. Host updates write those latches too. Left at
 power-on don't-care they read as year 00, and Apple Pascal then treats the
 clock as never set and overwrites it with the date saved on the boot disk. The explicit counter/RAM
 reset commands remain available. This models battery retention across machine
@@ -413,8 +423,11 @@ The serial ACIA uses the pinned gyurco UART implementation described in
 [`rtl/acia/README.md`](../rtl/acia/README.md), with documented local accuracy
 corrections. `apple3_acia.sv` adapts bus side-effect strobes, generates a nominal
 1.8432 MHz clock enable, and synchronizes external inputs. TX/RX, RTS/CTS and
-DTR/DSR connect to MiSTer's HPS UART. DCD is asserted because the HPS connection
-has no separate carrier signal. The original motherboard's grounded RxC input
+DTR/DSR connect to MiSTer's HPS UART, which has no carrier line. OSD status bits
+27-28 (Serial DCD) choose DCD: Always on, the default and what an unplugged port
+shows, since R89 pulls the receiver input up (sheet 8); Host DTR, which follows
+the pin DSR uses, as a null-modem cable tying DCD to DSR does; or Off. The
+original motherboard's grounded RxC input
 is represented by an inactive external receive-clock enable.
 
 OSD status bit 9 selects CTS: the default holds it ready, while `Host RTS`

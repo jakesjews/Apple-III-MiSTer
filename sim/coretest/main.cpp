@@ -165,6 +165,7 @@ int main(int argc, char **argv) {
 	top.serial_rx = 1;
 	top.serial_cts_n = 0;
 	top.serial_dsr_n = 0;
+	top.serial_dcd_n = 0;
 	top.clk = 0;
 	top.reset = 1;
 	top.image_change = 0;
