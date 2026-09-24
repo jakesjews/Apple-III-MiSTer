@@ -107,6 +107,11 @@ combinations to a single character. A held arrow key closes the second contact
 that its keyswitch has on real hardware, so it speeds up the same way and reads
 as Solid Apple while it is down.
 
+The OSD keeps the drives, their write protection, the hard disks, **Model**
+and **Video** at the top. **System & ROM** holds Memory, Video Standard and
+Boot ROM, **Scaling & Filters** the scaler and scanline options, and
+**Hardware** the mouse, joystick and serial ones.
+
 **Model** in the OSD selects the Apple /// Plus. It adds that machine's one
 extra key, DELETE, on the host Delete key, and its **Text Interlace** switch:
 two fields half a line apart for 384 lines, showing pages 1 and 2 merged when
@@ -168,8 +173,6 @@ Booting SOS needs a WOZ disk image.
 Existing partial implementations are noted where they provide a starting point.
 
 - [ ] **Validate audio** Verify implementation accuracy against research.
-
-- [ ] **Organize OSD** Move OSD options to categories.
 
 - [ ] **External memory and optional 512 KiB RAM.** Build on the parameterized
       RAM/MMU support with an external-memory backend and a usable 512 KiB option.
