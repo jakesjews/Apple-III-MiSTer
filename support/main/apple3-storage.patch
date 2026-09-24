@@ -11,195 +11,9 @@ index c47056b..936b85e 100644
  
  // Mac
  #include "support/mac/mac.h"
-diff --git a/support/a2/iigs_fmt.cpp b/support/a2/iigs_fmt.cpp
-index ceee58c..2d400e5 100644
---- a/support/a2/iigs_fmt.cpp
-+++ b/support/a2/iigs_fmt.cpp
-@@ -178,6 +178,52 @@ int woz_disk_type(const uint8_t *buf, size_t size)
- 	return -1;
- }
- 
-+int a2_woz_validate(const uint8_t *buf, size_t size, A2WozInfo *info)
-+{
-+	int type = woz_disk_type(buf, size);
-+	if ((type != 1 && type != 2) || memcmp(buf + 4, "\xff\x0a\x0d\x0a", 4)) return 0;
-+	uint32_t crc = rd_le32(buf + 8);
-+	if (crc && crc != woz_crc32(buf + 12, size - 12)) return 0;
-+	const uint8_t *inf = NULL, *map = NULL, *tracks = NULL;
-+	size_t track_size = 0;
-+	int flux = 0;
-+	for (size_t pos = 12; pos < size;) {
-+		if (size - pos < 8) return 0;
-+		uint32_t n = rd_le32(buf + pos + 4);
-+		if (n > size - pos - 8) return 0;
-+		const uint8_t *data = buf + pos + 8;
-+		if (!memcmp(buf + pos, "INFO", 4)) { if (inf || n != 60) return 0; inf = data; }
-+		if (!memcmp(buf + pos, "TMAP", 4)) { if (map || n != 160) return 0; map = data; }
-+		if (!memcmp(buf + pos, "TRKS", 4)) { if (tracks) return 0; tracks = data; track_size = n; }
-+		if (!memcmp(buf + pos, "FLUX", 4)) flux = 1;
-+		pos += 8 + n;
-+	}
-+	if (!inf || !map || !tracks) return 0;
-+	const int v1 = buf[3] == '1';
-+	if ((!v1 && track_size < 1280) || (v1 && track_size % 6656)) return 0;
-+	for (int i = 0; i < 160; ++i) {
-+		if (map[i] != 255 && (map[i] >= 160 || (v1 && (size_t)map[i] >= track_size / 6656))) return 0;
-+		if (v1) continue;
-+		const uint8_t *e = tracks + i * 8;
-+		uint32_t block = rd_le16(e), count = rd_le16(e + 2), bits = rd_le32(e + 4);
-+		if (!count) { if (bits || block) return 0; continue; }
-+		uint64_t begin = (uint64_t)block * 512, end = begin + (uint64_t)count * 512;
-+		if (begin < (size_t)(tracks - buf) + 1280 || end > size ||
-+		    end > (size_t)(tracks - buf) + track_size || !bits || (!flux && bits > count * 4096)) return 0;
-+	}
-+	if (v1) for (size_t pos = 0; pos < track_size; pos += 6656) {
-+		uint32_t bytes = rd_le16(tracks + pos + 6646), bits = rd_le16(tracks + pos + 6648);
-+		if (bytes > 6646 || bits > bytes * 8 || !bits) return 0;
-+	}
-+	if (info) {
-+		info->disk_type = type;
-+		info->version = v1 ? 1 : 2;
-+		info->write_protected = inf[2] != 0;
-+		info->has_flux = flux;
-+	}
-+	return 1;
-+}
-+
- // ===========================================================================
- // 140K sector order (DOS 3.3 <-> ProDOS), with automated detection
- // ( these files are infamously inconsistent,
-@@ -285,6 +331,13 @@ A2SectorOrder a2_detect_525_order(const uint8_t *image, size_t size)
- 	return A2_ORDER_UNKNOWN;
- }
- 
-+uint8_t a2_dos33_volume(const uint8_t *dsk)
-+{
-+	if (!dsk || !dos_vtoc_probe(dsk, DOS_PHYSICAL)) return 0;
-+	uint8_t volume = dsk[17 * A2_TRACK_SIZE + 6];
-+	return volume == 0xFF ? 0 : volume;
-+}
-+
- static int ext_is_ascii(const char *ext, const char *want)
- {
- 	if (!ext || !want) return 0;
-@@ -380,13 +433,38 @@ static void nibbilize(const uint8_t *src, uint8_t *dest)
- 	dest[idx++] = translate(primary[PRIMARY_BUF_LEN - 1]);   // data checksum
- }
- 
-+void a2_nibbilize_sector(uint8_t *nibbles, const uint8_t *sector)
-+{
-+	nibbilize(sector, nibbles);
-+}
-+
-+int a2_denibbilize_sector(uint8_t *sector, const uint8_t *nibbles)
-+{
-+	uint8_t primary[PRIMARY_BUF_LEN], secondary[SECONDARY_BUF_LEN], x = 0;
-+	for (int k = 0; k <= DATA_LEN; k++) {
-+		const uint8_t *p = (const uint8_t *)memchr(gcr6_table, nibbles[k], 0x40);
-+		if (!p) return 0;
-+		x ^= (uint8_t)(p - gcr6_table);
-+		if (k < SECONDARY_BUF_LEN) secondary[k] = x;
-+		else if (k < DATA_LEN) primary[k - SECONDARY_BUF_LEN] = x;
-+	}
-+	if (x) return 0;
-+	for (int k = 0; k < PRIMARY_BUF_LEN; k++) {
-+		uint8_t pair = (secondary[k % SECONDARY_BUF_LEN] >> (k / SECONDARY_BUF_LEN * 2)) & 3;
-+		sector[k] = (primary[k] << 2) | ((pair & 1) << 1) | (pair >> 1);
-+	}
-+	return 1;
-+}
-+
- // Build one full 6656-byte NIB track from a 4096-byte DOS-order track.
--static void nib_track_from_dsk(uint8_t *nibtrack, const uint8_t *dsktrack, int track)
-+static void nib_track_from_dsk(uint8_t *nibtrack, const uint8_t *dsktrack, int track,
-+                               const uint8_t *volumes)
- {
- 	for (int position = 0; position < A2_SECTORS_PER_TRACK; position++) {
- 		int sector = DOS_PHYSICAL[position];
- 		int file_sector = DOS_PHYSICAL[sector];
- 		const uint8_t *sec = dsktrack + file_sector * A2_SECTOR_SIZE;
-+		uint8_t volume = volumes ? volumes[sector] : DEFAULT_VOLUME;
- 
- 		uint8_t *o = nibtrack + position * BYTES_PER_NIB_SECTOR;
- 		memset(o, GAP_BYTE, GAP1_LEN);
-@@ -394,10 +472,10 @@ static void nib_track_from_dsk(uint8_t *nibtrack, const uint8_t *dsktrack, int t
- 
- 		// address field
- 		memcpy(o, addr_prolog, 3); o += 3;
--		odd_even_encode(o, DEFAULT_VOLUME); o += 2;
-+		odd_even_encode(o, volume);         o += 2;
- 		odd_even_encode(o, track);          o += 2;
- 		odd_even_encode(o, sector);         o += 2;
--		odd_even_encode(o, DEFAULT_VOLUME ^ track ^ sector); o += 2;
-+		odd_even_encode(o, volume ^ track ^ sector); o += 2;
- 		memcpy(o, addr_epilog, 3); o += 3;
- 
- 		memset(o, GAP_BYTE, GAP2_LEN); o += GAP2_LEN;
-@@ -413,7 +491,7 @@ void a2_dsk_to_nib(uint8_t *nib, const uint8_t *dsk)
- {
- 	for (int t = 0; t < A2_TRACKS_525; t++)
- 		nib_track_from_dsk(nib + (size_t)t * A2_NIB_TRACK_SIZE,
--		                   dsk + (size_t)t * A2_TRACK_SIZE, t);
-+		                   dsk + (size_t)t * A2_TRACK_SIZE, t, NULL);
- }
- 
- // Parse one NIB sector out of a byte stream. Returns 1 and fills sector/track
-@@ -515,10 +593,10 @@ int a2_nib_to_dsk(uint8_t *dsk, const uint8_t *nib)
- }
- 
- // Per-track versions of the above, for NIB write-back
--void a2_dsk_track_to_nib(uint8_t *nibtrack, const uint8_t *dsktrack, int track)
-+void a2_dsk_track_to_nib(uint8_t *nibtrack, const uint8_t *dsktrack, int track, const uint8_t *volumes)
- {
- 	if (track < 0 || track >= A2_TRACKS_525) return;
--	nib_track_from_dsk(nibtrack, dsktrack, track);
-+	nib_track_from_dsk(nibtrack, dsktrack, track, volumes);
- }
- 
- int a2_nib_track_to_dsk(const uint8_t *nibtrack, uint8_t *dsktrack)
-diff --git a/support/a2/iigs_fmt.h b/support/a2/iigs_fmt.h
-index 4bcc1d3..194dbf1 100644
---- a/support/a2/iigs_fmt.h
-+++ b/support/a2/iigs_fmt.h
-@@ -86,6 +86,9 @@ size_t dc42_build(uint8_t *out, size_t out_cap, const uint8_t *payload,
- int woz_disk_type(const uint8_t *buf, size_t size);
- // zlib-compatible CRC32 (poly 0xEDB88320), init 0.
- uint32_t woz_crc32(const uint8_t *data, size_t len);
-+// Whole-file check: signature, chunk bounds, track allocations, CRC when set.
-+typedef struct { int disk_type, version, write_protected, has_flux; } A2WozInfo;
-+int a2_woz_validate(const uint8_t *buf, size_t size, A2WozInfo *info);
- 
- // ---- 140K sector order (DOS 3.3 <-> ProDOS) ----
- typedef enum {
-@@ -97,6 +100,8 @@ typedef enum {
- // Detect disk sector order from a ProDOS volume header or DOS 3.3 VTOC (.po, .do, .dsk)
- A2SectorOrder a2_detect_525_order(const uint8_t *image, size_t size);
- A2SectorOrder a2_resolve_525_order(const uint8_t *image, size_t size, const char *ext);
-+// Volume number in the VTOC of a DOS-order DOS 3.3 image, or 0.
-+uint8_t a2_dos33_volume(const uint8_t *dsk);
- 
- // dst and src are 143360-byte 5.25" images; in-place safe only if dst!=src.
- void a2_dos_to_prodos(uint8_t *dst, const uint8_t *src);
-@@ -108,10 +113,15 @@ void a2_dos_track_to_prodos(uint8_t *dst, const uint8_t *src);
- // dsk2nib_lib.cpp path so encode/decode are exact inverses.
- void a2_dsk_to_nib(uint8_t *nib, const uint8_t *dsk);
- int  a2_nib_to_dsk(uint8_t *dsk, const uint8_t *nib);   // 1 if all tracks parsed
-+// One 256-byte sector <-> its 343 data-field nibbles. Decoding returns 0 on an
-+// invalid nibble or a bad checksum.
-+void a2_nibbilize_sector(uint8_t *nibbles, const uint8_t *sector);
-+int  a2_denibbilize_sector(uint8_t *sector, const uint8_t *nibbles);
- 
- // ---- 5.25" per-track nibble encode/decode (NIB write-back) ----
- // Re-encode a DOS-order track as canonical NIB; unchanged tracks remain byte-stable.
--void a2_dsk_track_to_nib(uint8_t *nibtrack, const uint8_t *dsktrack, int track);
-+// volumes: address-field volume per sector number, or NULL for 254 throughout.
-+void a2_dsk_track_to_nib(uint8_t *nibtrack, const uint8_t *dsktrack, int track, const uint8_t *volumes = NULL);
- int  a2_nib_track_to_dsk(const uint8_t *nibtrack, uint8_t *dsktrack);
- 
- // ---- 5.25" "easy WOZ" (DOS-order DSK <-> WOZ2) ----
 diff --git a/support/apple3/README.md b/support/apple3/README.md
 new file mode 100644
-index 0000000..6eb637c
+index 0000000..8623b79
 --- /dev/null
 +++ b/support/apple3/README.md
 @@ -0,0 +1,24 @@
@@ -207,8 +21,8 @@ index 0000000..6eb637c
 +
 +The Apple-III core takes WOZ bitstreams on its Disk III drives and raw ProDOS
 +blocks on its block-storage card. `apple3_disk.cpp` mounts and serves the
-+images; `apple3_woz.cpp` builds the WOZ tracks. The 2MG, DC42 and 6-and-2 GCR
-+code is shared with the IIgs and //e in `support/a2/iigs_fmt.cpp`.
++images; `apple3_woz.cpp` builds the WOZ tracks. It uses the 2MG, DC42 and
++sector-order helpers in `support/a2/iigs_fmt.cpp` and does not change them.
 +
 +| Slot | Device | Formats |
 +|---|---|---|
@@ -229,10 +43,10 @@ index 0000000..6eb637c
 +place behind any 2MG header.
 diff --git a/support/apple3/apple3_disk.cpp b/support/apple3/apple3_disk.cpp
 new file mode 100644
-index 0000000..59a0e9d
+index 0000000..ff86b7e
 --- /dev/null
 +++ b/support/apple3/apple3_disk.cpp
-@@ -0,0 +1,334 @@
+@@ -0,0 +1,349 @@
 +// Apple /// core disk support. See apple3_disk.h.
 +
 +#include <stdio.h>
@@ -342,20 +156,35 @@ index 0000000..59a0e9d
 +	return NULL;
 +}
 +
++// A WOZ chunk's data, or NULL if it is missing or runs past the end of the file.
++static const uint8_t *woz_chunk(const uint8_t *woz, size_t size, const char *id)
++{
++	for (size_t pos = 12; pos + 8 <= size;) {
++		const uint8_t *p = woz + pos;
++		uint32_t n = p[4] | p[5] << 8 | p[6] << 16 | (uint32_t)p[7] << 24;
++		if (n > size - pos - 8) return NULL;
++		if (!memcmp(p, id, 4)) return p + 8;
++		pos += 8 + n;
++	}
++	return NULL;
++}
++
 +static const char *mount_floppy(int index, fileTYPE *f, const uint8_t *head, const char *ext,
 +                                const TwoMG *m, int dc42, int locked, int *writable)
 +{
 +	if (!memcmp(head, "WOZ", 3) || eqi(ext, "woz")) {
 +		size_t n = 0;
 +		uint8_t *woz = read_all(f, &n);
-+		A2WozInfo info;
-+		if (!woz || !a2_woz_validate(woz, n, &info)) { free(woz); return "Invalid WOZ image."; }
-+		if (info.disk_type != 1) { free(woz); return "Disk III needs a 5.25\" WOZ."; }
++		const uint8_t *info = woz && n >= 12 && !memcmp(woz, "WOZ", 3) && (woz[3] == '1' || woz[3] == '2') ?
++		                      woz_chunk(woz, n, "INFO") : NULL;
++		if (!info || info + 3 > woz + n) { free(woz); return "Invalid WOZ image."; }
++		if (info[1] != 1) { free(woz); return "Disk III needs a 5.25\" WOZ."; }
 +		g[index].mode = 2;
 +		g[index].native = 1;
 +		g[index].woz = woz;
 +		g[index].woz_sz = n;
-+		g[index].readonly = locked || info.write_protected || info.version != 2 || info.has_flux;
++		// Only a WOZ2 of bitstream tracks is written, and never one marked write protected.
++		g[index].readonly = locked || woz[3] != '2' || info[2] || woz_chunk(woz, n, "FLUX");
 +		f->size = n;
 +		*writable = !g[index].readonly;
 +		return NULL;
@@ -395,7 +224,7 @@ index 0000000..59a0e9d
 +		else memcpy(dsk, pay, sizeof(dsk));
 +		// A sector image has no address fields. A DOS 3.3 disk's own volume
 +		// number goes there, because the DOS it saved asks for it.
-+		if (!volume) volume = a2_dos33_volume(dsk);
++		if (!volume) volume = apple3_dos33_volume(dsk);
 +		n = apple3_dsk_to_woz(woz, cap, dsk, apple3_sos_interp_encrypted(dsk), volume ? volume : 254);
 +	}
 +	int64_t off = pay - raw;
@@ -466,7 +295,7 @@ index 0000000..59a0e9d
 +	if (g[disk].nib) {
 +		if (good == 0xffff) {
 +			static uint8_t nibtrk[A2_NIB_TRACK_SIZE];
-+			a2_dsk_track_to_nib(nibtrk, trk, t, volumes);
++			apple3_nib_track(nibtrk, trk, t, volumes);
 +			failed = !FileSeek(f, g[disk].off + (int64_t)t * A2_NIB_TRACK_SIZE, SEEK_SET) ||
 +			         FileWriteAdv(f, nibtrk, A2_NIB_TRACK_SIZE) != A2_NIB_TRACK_SIZE;
 +		}
@@ -596,10 +425,10 @@ index 0000000..841ebac
 +#endif
 diff --git a/support/apple3/apple3_woz.cpp b/support/apple3/apple3_woz.cpp
 new file mode 100644
-index 0000000..d7d8a49
+index 0000000..42ceb51
 --- /dev/null
 +++ b/support/apple3/apple3_woz.cpp
-@@ -0,0 +1,270 @@
+@@ -0,0 +1,340 @@
 +// Apple /// 5.25" WOZ images. See apple3_woz.h.
 +
 +#include <string.h>
@@ -623,6 +452,14 @@ index 0000000..d7d8a49
 +// tracks are synchronized and the values differ, uses them as the key.
 +static const uint8_t sos_key[8]        = { 0xb4, 0xc1, 0xe4, 0xf3, 0x9b, 0xbd, 0xbd, 0x7c };
 +static const uint8_t sos_key_sector[8] = { 2, 14, 10, 6, 2, 14, 10, 6 };
++
++// 6-and-2 GCR: the 64 disk nibbles a data field may use.
++static const uint8_t gcr62[64] = {
++	0x96, 0x97, 0x9a, 0x9b, 0x9d, 0x9e, 0x9f, 0xa6, 0xa7, 0xab, 0xac, 0xad, 0xae, 0xaf, 0xb2, 0xb3,
++	0xb4, 0xb5, 0xb6, 0xb7, 0xb9, 0xba, 0xbb, 0xbc, 0xbd, 0xbe, 0xbf, 0xcb, 0xcd, 0xce, 0xcf, 0xd3,
++	0xd6, 0xd7, 0xd9, 0xda, 0xdb, 0xdc, 0xdd, 0xde, 0xdf, 0xe5, 0xe6, 0xe7, 0xe9, 0xea, 0xeb, 0xec,
++	0xed, 0xee, 0xef, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf9, 0xfa, 0xfb, 0xfc, 0xfd, 0xfe, 0xff
++};
 +
 +static uint16_t rd16(const uint8_t *p) { return p[0] | p[1] << 8; }
 +static uint32_t rd32(const uint8_t *p) { return p[0] | p[1] << 8 | p[2] << 16 | (uint32_t)p[3] << 24; }
@@ -674,6 +511,38 @@ index 0000000..d7d8a49
 +	put_byte(out, bit, value | 0xaa);
 +}
 +
++// A 256-byte sector as its 343 data-field nibbles: 342 and the checksum.
++static void nibbilize(uint8_t *nibbles, const uint8_t *sector)
++{
++	uint8_t primary[256], secondary[86] = {}, prev = 0;
++	for (int i = 0; i < 256; ++i) {
++		primary[i] = sector[i] >> 2;
++		secondary[i % 86] |= (((sector[i] & 2) >> 1) | ((sector[i] & 1) << 1)) << (i / 86 * 2);
++	}
++	for (int i = 0; i < 86; ++i) { nibbles[i] = gcr62[secondary[i] ^ prev]; prev = secondary[i]; }
++	for (int i = 0; i < 256; ++i) { nibbles[86 + i] = gcr62[primary[i] ^ prev]; prev = primary[i]; }
++	nibbles[342] = gcr62[prev];
++}
++
++// The reverse. Returns 0 on a nibble outside the table or a bad checksum.
++static int denibbilize(uint8_t *sector, const uint8_t *nibbles)
++{
++	uint8_t primary[256], secondary[86], x = 0;
++	for (int k = 0; k < 343; ++k) {
++		const uint8_t *p = (const uint8_t *)memchr(gcr62, nibbles[k], sizeof(gcr62));
++		if (!p) return 0;
++		x ^= (uint8_t)(p - gcr62);
++		if (k < 86) secondary[k] = x;
++		else if (k < 342) primary[k - 86] = x;
++	}
++	if (x) return 0;
++	for (int k = 0; k < 256; ++k) {
++		uint8_t pair = (secondary[k % 86] >> (k / 86 * 2)) & 3;
++		sector[k] = (primary[k] << 2) | ((pair & 1) << 1) | (pair >> 1);
++	}
++	return 1;
++}
++
 +size_t apple3_dsk_to_woz(uint8_t *woz, size_t cap, const uint8_t *dsk, int key, uint8_t volume)
 +{
 +	size_t size = woz_header(woz, cap, DSK_BLOCKS, 1);
@@ -693,7 +562,7 @@ index 0000000..d7d8a49
 +			for (int i = 0; i < 7; ++i) put_byte(out, bit, 255, 1);
 +			for (uint8_t b : data_prolog) put_byte(out, bit, b);
 +			uint8_t data[343];
-+			a2_nibbilize_sector(data, dsk + t * A2_TRACK_SIZE + DOS_POS[sector] * A2_SECTOR_SIZE);
++			nibbilize(data, dsk + t * A2_TRACK_SIZE + DOS_POS[sector] * A2_SECTOR_SIZE);
 +			for (uint8_t b : data) put_byte(out, bit, b);
 +			for (uint8_t b : data_epilog) put_byte(out, bit, b);
 +			for (int i = 0; i < GAP3_SYNC; ++i) put_byte(out, bit, 255, 1);
@@ -785,7 +654,7 @@ index 0000000..d7d8a49
 +		}
 +		if (d < 0 || d + 345 > len) continue;
 +		uint8_t sector[A2_SECTOR_SIZE];
-+		if (!a2_denibbilize_sector(sector, n + d) || n[d + 343] != 0xde || n[d + 344] != 0xaa) continue;
++		if (!denibbilize(sector, n + d) || n[d + 343] != 0xde || n[d + 344] != 0xaa) continue;
 +		int pos = DOS_POS[sec];
 +		uint16_t bit = 1U << pos;
 +		if ((good & bit) && memcmp(dt + pos * A2_SECTOR_SIZE, sector, A2_SECTOR_SIZE)) conflict |= bit;
@@ -803,6 +672,36 @@ index 0000000..d7d8a49
 +	static uint8_t nib[NIB_CAP];
 +	int count = track_nibbles(woz, size, track, nib);
 +	return count ? verify_sectors(nib, count, track, trk, volumes) : 0;
++}
++
++// Sixteen 416-byte sectors in DOS interleave, each after 48 gap bytes.
++void apple3_nib_track(uint8_t *nib, const uint8_t *trk, int track, const uint8_t *volumes)
++{
++	for (int position = 0; position < 16; ++position) {
++		const uint8_t sector = DOS_POS[position], vol = volumes[sector];
++		const uint8_t address[4] = { vol, (uint8_t)track, sector, (uint8_t)(vol ^ track ^ sector) };
++		uint8_t *o = nib + position * 416;
++		memset(o, 0xff, 48);
++		o += 48;
++		for (uint8_t b : addr_prolog) *o++ = b;
++		for (uint8_t v : address) { *o++ = (v >> 1) | 0xaa; *o++ = v | 0xaa; }
++		for (uint8_t b : addr_epilog) *o++ = b;
++		memset(o, 0xff, 5);
++		o += 5;
++		for (uint8_t b : data_prolog) *o++ = b;
++		nibbilize(o, trk + DOS_POS[sector] * A2_SECTOR_SIZE);
++		o += 343;
++		for (uint8_t b : data_epilog) *o++ = b;
++	}
++}
++
++uint8_t apple3_dos33_volume(const uint8_t *dsk)
++{
++	const uint8_t *vtoc = dsk + 17 * A2_TRACK_SIZE;
++	if (vtoc[1] != 17 || vtoc[2] >= 16 || vtoc[3] != 3 || vtoc[0x34] != TRACKS || vtoc[0x35] != 16 ||
++	    rd16(vtoc + 0x36) != A2_SECTOR_SIZE)
++		return 0;
++	return vtoc[6] == 0xff ? 0 : vtoc[6];
 +}
 +
 +// SOS's DCLOOP: an XOR stream over the interpreter from load+3, the key
@@ -872,10 +771,10 @@ index 0000000..d7d8a49
 +}
 diff --git a/support/apple3/apple3_woz.h b/support/apple3/apple3_woz.h
 new file mode 100644
-index 0000000..98ab1fc
+index 0000000..21df940
 --- /dev/null
 +++ b/support/apple3/apple3_woz.h
-@@ -0,0 +1,28 @@
+@@ -0,0 +1,35 @@
 +// Apple /// 5.25" WOZ images: synchronized track layout, SOS protection key,
 +// strict sector decoding for write-back. No MiSTer dependencies.
 +
@@ -897,6 +796,13 @@ index 0000000..98ab1fc
 +// Returns the mask of DOS-order positions whose sector verified completely;
 +// volumes (16 bytes) receives their address-field volume numbers.
 +uint16_t apple3_verify_track(const uint8_t *woz, size_t size, int track, uint8_t *trk, uint8_t *volumes);
++
++// One 6656-byte track in the standard NIB layout from a DOS-order track, with
++// each sector's address-field volume (16 bytes, by sector number).
++void apple3_nib_track(uint8_t *nib, const uint8_t *trk, int track, const uint8_t *volumes);
++
++// Volume number in the VTOC of a DOS-order DOS 3.3 image, or 0.
++uint8_t apple3_dos33_volume(const uint8_t *dsk);
 +
 +// SOS interpreter cipher (its own inverse) over code loaded at `load`.
 +void apple3_sos_crypt(uint8_t *code, size_t len, uint16_t load);

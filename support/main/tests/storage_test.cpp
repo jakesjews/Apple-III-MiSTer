@@ -35,6 +35,40 @@ void spi_block_write(const uint8_t *p, int, int n) { to_fpga.assign(p, p+n); }
 void spi_block_read(uint8_t *p, int, int n) { assert(from_fpga.size() == unsigned(n)); memcpy(p, from_fpga.data(), n); }
 static void put32(uint8_t *p, uint32_t v) { for(int i=0;i<4;i++) p[i]=v>>(i*8); }
 static uint32_t get32(const uint8_t *p) { return p[0] | p[1]<<8 | p[2]<<16 | uint32_t(p[3])<<24; }
+// Whole-file WOZ check for images the code builds or rewrites: signature, CRC when
+// set, chunk bounds and every track allocation. Main itself reads only what it needs.
+static bool valid_woz(const std::vector<uint8_t> &w) {
+  const uint8_t *b=w.data(); size_t size=w.size();
+  if(size<12 || memcmp(b,"WOZ",3) || (b[3]!='1' && b[3]!='2') || memcmp(b+4,"\xff\x0a\x0d\x0a",4)) return false;
+  if(get32(b+8) && get32(b+8)!=woz_crc32(b+12,size-12)) return false;
+  const uint8_t *inf=nullptr, *map=nullptr, *tracks=nullptr; size_t track_size=0; bool flux=false;
+  for(size_t pos=12;pos<size;) {
+    if(size-pos<8) return false;
+    uint32_t n=get32(b+pos+4); if(n>size-pos-8) return false;
+    const uint8_t *data=b+pos+8;
+    if(!memcmp(b+pos,"INFO",4)) { if(inf || n!=60) return false; inf=data; }
+    if(!memcmp(b+pos,"TMAP",4)) { if(map || n!=160) return false; map=data; }
+    if(!memcmp(b+pos,"TRKS",4)) { if(tracks) return false; tracks=data; track_size=n; }
+    if(!memcmp(b+pos,"FLUX",4)) flux=true;
+    pos+=8+n;
+  }
+  if(!inf || !map || !tracks) return false;
+  const bool v1=b[3]=='1';
+  if((!v1 && track_size<1280) || (v1 && track_size%6656)) return false;
+  for(int i=0;i<160;i++) {
+    if(map[i]!=255 && (map[i]>=160 || (v1 && size_t(map[i])>=track_size/6656))) return false;
+    if(v1) continue;
+    const uint8_t *e=tracks+i*8; uint32_t block=e[0]|e[1]<<8, count=e[2]|e[3]<<8, bits=get32(e+4);
+    if(!count) { if(bits || block) return false; continue; }
+    uint64_t begin=uint64_t(block)*512, end=begin+uint64_t(count)*512;
+    if(begin<size_t(tracks-b)+1280 || end>size || end>size_t(tracks-b)+track_size || !bits || (!flux && bits>count*4096)) return false;
+  }
+  if(v1) for(size_t pos=0;pos<track_size;pos+=6656) {
+    uint32_t n=tracks[pos+6646]|tracks[pos+6647]<<8, bits=tracks[pos+6648]|tracks[pos+6649]<<8;
+    if(n>6646 || bits>n*8 || !bits) return false;
+  }
+  return true;
+}
 static std::vector<uint8_t> bytes(fileTYPE &f) {
   fseeko(f.filp,0,SEEK_END); size_t n=ftello(f.filp); rewind(f.filp);
   std::vector<uint8_t> b(n); assert(fread(b.data(),1,n,f.filp)==n); return b;
@@ -116,7 +150,7 @@ int main(int argc,char **argv) {
   uint32_t rng=1; for(auto &b:dsk) { rng=rng*1664525+1013904223; b=rng>>24; }
   int writable=0;
   auto w=mount_serve(f,dsk,"disk.DSK",0,true);
-  A2WozInfo info; assert(a2_woz_validate(w.data(),w.size(),&info)); assert(w[23]==1);
+  assert(valid_woz(w)); assert(w[23]==1);
   assert(decode_all(w,back)); assert(back==dsk);
   // Apple /// tracks hold 51,424 cells read at 3.875 us, so the machine's own formatter
   // closes them at its nominal 22 sync nibbles; the bare 50,304 reads as a fast drive.
@@ -164,7 +198,7 @@ int main(int argc,char **argv) {
         for(int s=0;s<16;s++) assert(got[s]==want);
       }
     };
-    assert(a2_dos33_volume(dos.data())==1 && !a2_dos33_volume(dsk.data()));
+    assert(apple3_dos33_volume(dos.data())==1 && !apple3_dos33_volume(dsk.data()));
     all(w,254); all(mount_serve(f,dos,"dos.dsk",0,true),1);
     a2_dos_to_prodos(po.data(),dos.data()); all(mount_serve(f,po,"dos.po",0,true),1);
     std::vector<uint8_t> vmg(64+dos.size()); twomg_build(vmg.data(),vmg.size(),po.data(),po.size(),1);
@@ -178,11 +212,17 @@ int main(int argc,char **argv) {
   // is re-nibblized whole and keeps its address-field volume bytes, where SOS's
   // protection key lives. A track with a damaged sector is not stored.
   {
-    uint8_t volumes[16]; memset(volumes,254,16); volumes[2]=0xb4; volumes[14]=0xc1;
+    uint8_t volumes[16]; memset(volumes,254,16);
     std::vector<uint8_t> keyed(A2_NIB_IMAGE_SIZE); a2_dsk_to_nib(keyed.data(),dsk.data());
-    a2_dsk_track_to_nib(keyed.data()+9*A2_NIB_TRACK_SIZE,dsk.data()+9*4096,9,volumes);
+    // With volume 254 throughout, the Apple /// track is the shared nibblizer's byte for byte.
+    for(int t=0;t<35;t++) {
+      uint8_t track[A2_NIB_TRACK_SIZE]; apple3_nib_track(track,dsk.data()+t*4096,t,volumes);
+      assert(!memcmp(track,keyed.data()+t*A2_NIB_TRACK_SIZE,A2_NIB_TRACK_SIZE));
+    }
+    volumes[2]=0xb4; volumes[14]=0xc1;
+    apple3_nib_track(keyed.data()+9*A2_NIB_TRACK_SIZE,dsk.data()+9*4096,9,volumes);
     auto next_dsk=dsk; for(int i=0;i<4096;i++) next_dsk[9*4096+i]^=0x5a;
-    auto next_nib=keyed; a2_dsk_track_to_nib(next_nib.data()+9*A2_NIB_TRACK_SIZE,next_dsk.data()+9*4096,9,volumes);
+    auto next_nib=keyed; apple3_nib_track(next_nib.data()+9*A2_NIB_TRACK_SIZE,next_dsk.data()+9*4096,9,volumes);
     assert(next_nib!=keyed);
     std::vector<uint8_t> next_woz(512*1024); next_woz.resize(apple3_nib_to_woz(next_woz.data(),next_woz.size(),next_nib.data()));
     auto save_nib_track=[&](const std::vector<uint8_t> &woz,int t,const std::vector<uint8_t> &until_last,size_t off) {
@@ -285,14 +325,13 @@ int main(int argc,char **argv) {
   source(f,w); assert(mount(1,"native.woz",f,writable) && writable);
   assert(serve(1,f)==w); from_fpga.assign(w.begin()+1536,w.begin()+2560); from_fpga[345]^=0x20;
   write(1,f,3,1024); auto expected=w; expected[1536+345]^=0x20; memset(expected.data()+8,0,4);
-  assert(bytes(f)==expected); assert(serve(1,f)==expected); assert(a2_woz_validate(expected.data(),expected.size(),&info));
+  assert(bytes(f)==expected); assert(serve(1,f)==expected); assert(valid_woz(expected));
   from_fpga.assign(512,0); write(1,f,0); assert(bytes(f)==expected);
   from_fpga.assign(1024,0); write(1,f,f.size/512,1024); assert(bytes(f)==expected);
   source(f,expected); assert(mount(1,"native.woz",f,writable) && writable); assert(serve(1,f)==expected);
   expected[22]=1; source(f,expected); assert(mount(1,"native.woz",f,writable) && !writable);
   from_fpga.assign(512,0x55); write(1,f,3); assert(bytes(f)==expected); assert(serve(1,f)==expected);
-  auto bad=w; bad.back()^=1; source(f,bad); assert(!mount(0,"broken.woz",f,writable));
-  bad=w; put32(bad.data()+8,0); put32(bad.data()+16,0x7fffffff); source(f,bad); assert(!mount(0,"broken.woz",f,writable));
+  auto bad=w; put32(bad.data()+8,0); put32(bad.data()+16,0x7fffffff); source(f,bad); assert(!mount(0,"broken.woz",f,writable));
   puts("PASS native WOZ: full bursts, CRC, partial EOF, metadata guards, persistence and write protection");
   // Four simultaneous Disk III mounts use separate buffers, permissions and
   // write-back state, including when another drive is replaced or ejected.

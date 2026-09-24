@@ -3,14 +3,14 @@
 This core requires the companion Main changes in
 [`support/main/apple3-storage.patch`](../support/main/apple3-storage.patch).
 The patch applies to MiSTer-devel/Main_MiSTer commit
-`f6a3caa601c22fe1c34647b48ecbff6b9c7ddc09`.
+`aa271e41ebbf616903f9e0216b0900aead5bfce1`.
 
 The Apple III code lives in `support/apple3/`: `apple3_disk.cpp` mounts and
 serves the images, `apple3_woz.cpp` builds the synchronized tracks and the SOS
 protection key. `user_io.cpp` reaches it through three hook lines, the way the
-Mac support code is wired. The 2MG, DC42, sector-order and 6-and-2 GCR code is
-shared with the //e and IIgs in `support/a2/iigs_fmt.cpp`, which gains a few
-additive functions; the //e and IIgs paths themselves are unchanged. The
+Mac support code is wired. It calls the 2MG, DC42 and sector-order helpers
+that the //e and IIgs use in `support/a2/iigs_fmt.cpp`, and changes nothing
+outside `support/apple3/` beyond those hook lines and one include. The
 hardware retains its own P6 controller and Disk III drive logic.
 
 | Main mount | Apple III assignment | Policy |
@@ -61,8 +61,9 @@ and write policies.
   boots.
 - NIB is packed directly into a bitstream without a sector decode/re-encode.
   Standard FF sync gaps acquire ten-bit spacing; data/address bytes stay intact.
-- Native WOZ is fully validated (signature, chunks, track bounds, optional CRC)
-  and served from RAM without normalization. All four drives keep separate buffers.
+- Native WOZ is checked only for its signature, an INFO chunk inside the file
+  and a 5.25" disk type, as the //e and IIgs paths do, and is served from RAM
+  without normalization. All four drives keep separate buffers.
 - WOZ1, FLUX, archived and write-protected images are read-only. Writable
   WOZ2 persists only existing track allocations. It cannot allocate an unmapped
   track or resize tracks.
@@ -109,7 +110,7 @@ its patch:
 
 ```sh
 git clone https://github.com/MiSTer-devel/Main_MiSTer.git ../Main_MiSTer-AppleIII
-git -C ../Main_MiSTer-AppleIII checkout f6a3caa601c22fe1c34647b48ecbff6b9c7ddc09
+git -C ../Main_MiSTer-AppleIII checkout aa271e41ebbf616903f9e0216b0900aead5bfce1
 git -C ../Main_MiSTer-AppleIII apply ../Apple-III-MiSTer/support/main/apple3-storage.patch
 ```
 
