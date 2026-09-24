@@ -174,6 +174,20 @@ Existing partial implementations are noted where they provide a starting point.
 
 - [ ] **Validate audio** Verify implementation accuracy against research.
 
+- [ ] **Slot reset.** Sheet 9 resets the cards on RESET, or in Apple II mode
+      whenever NMI is asserted: the Reset key or a card's NMI, both locked out
+      by environment bit 4. The core uses the bare Reset key in Apple II mode.
+
+- [ ] **$C0Fx decode.** The ACIA answers all of $C0F0-$C0FF on A0-A1 with
+      peripheral timing; the core decodes and times only $C0F0-$C0F3.
+
+- [ ] **MM58167 clock.** Limit the counters to the chip's 46 bits, drop the
+      hidden leap year (the chip's February always has 28 days), and stop the
+      per-minute MiSTer clock update from undoing a time set in SOS.
+
+- [ ] **Serial carrier.** DCD is tied asserted. Add an option for it, separate
+      from the CTS setting.
+
 - [ ] **External memory and optional 512 KiB RAM.** Build on the parameterized
       RAM/MMU support with an external-memory backend and a usable 512 KiB option.
       Preserve paired-byte reads and guest-visible memory timing, and budget for
@@ -183,6 +197,9 @@ Existing partial implementations are noted where they provide a starting point.
       required bus integration and storage-driver configuration.
 
 - [ ] **Titan III+IIe.** Add support for this expansion.
+
+- [ ] **ProFile interface.** Model Apple's ProFile card so the stock `.PROFILE`
+      driver works, alongside the Problock3 block card.
 
 - [ ] **Save States**
 
