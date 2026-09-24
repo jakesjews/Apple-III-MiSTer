@@ -172,8 +172,6 @@ Booting SOS needs a WOZ disk image.
 
 Existing partial implementations are noted where they provide a starting point.
 
-- [ ] **Validate audio** Verify implementation accuracy against research.
-
 - [ ] **Slot reset.** Sheet 9 resets the cards on RESET, or in Apple II mode
       whenever NMI is asserted: the Reset key or a card's NMI, both locked out
       by environment bit 4. The core uses the bare Reset key in Apple II mode.
@@ -187,6 +185,8 @@ Existing partial implementations are noted where they provide a starting point.
 
 - [ ] **Serial carrier.** DCD is tied asserted. Add an option for it, separate
       from the CTS setting.
+
+- [ ] **Validate audio** Verify implementation accuracy against research.
 
 - [ ] **External memory and optional 512 KiB RAM.** Build on the parameterized
       RAM/MMU support with an external-memory backend and a usable 512 KiB option.
