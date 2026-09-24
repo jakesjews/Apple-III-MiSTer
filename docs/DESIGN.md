@@ -436,6 +436,11 @@ using that idle state fails the stock ROM's ACIA self-test. The default models
 the ready CTS level of an unplugged Apple III port with its receiver pull-up.
 Host-controlled flow requires the UART to be open with RTS asserted at boot.
 
+OSD status bit 29 (Serial DSR) does the same for DSR: Always ready, the default,
+is what R88 gives an unplugged port (sheet 8), and `Host DTR` follows the HPS
+UART. MidiLink's modem never asserts DTR, and Apple's `.RS232` driver sends
+nothing while DSR is false, so a modem session needs the default.
+
 The `$00` command reset is intentional: the original Apple III ROM requires it
 and fails its ACIA test with the SY6551 table's `$02` reset variant. Programmed
 reset preserves control/parity fields and unread receive data. Tests operate at

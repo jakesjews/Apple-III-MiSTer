@@ -43,6 +43,7 @@ carrier on, as an unplugged port reads, follows DSR, or turns it off.
 The OSD's `Serial CTS` option defaults to `Always ready`, matching the unplugged
 motherboard port's receiver pull-up and allowing the stock ROM's self-test to
 pass with no host UART open. `Host RTS` connects the real HPS flow-control line.
+`Serial DSR` works the same way with `Host DTR`.
 
 ## Reset variant evidence
 

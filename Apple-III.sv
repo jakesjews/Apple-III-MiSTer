@@ -35,7 +35,7 @@ module emu (
 	// 0         1         2         3          4         5         6
 	// 01234567890123456789012345678901 23456789012345678901234567890123
 	// 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV
-	// X  XXXXXXXXXXXXXXXXXXXXXXXXXX
+	// X  XXXXXXXXXXXXXXXXXXXXXXXXXXX
 	//
 	// Aspect ratio is status[122:121], where the Template keeps it.
 
@@ -81,6 +81,7 @@ module emu (
 		"P3-;",
 		"P3OA,Joystick 1 on,Port B,Port A;",
 		"P3O9,Serial CTS,Always ready,Host RTS;",
+		"P3O[29],Serial DSR,Always ready,Host DTR;",
 		"P3O[28:27],Serial DCD,Always on,Host DTR,Off;",
 		"-;",
 		"R0,Reset;",
@@ -404,7 +405,10 @@ module emu (
 		// ready during its ACIA test, as with the unplugged motherboard port.
 		.serial_rx         (UART_RXD),
 		.serial_cts_n      (status[9] && UART_CTS),
-		.serial_dsr_n      (UART_DSR),
+		// "Serial DSR" defaults to ready, as R88 holds an unplugged port's
+		// receiver input (sheet 8); MidiLink's modem never asserts DTR, and
+		// Apple's .RS232 driver sends nothing while DSR is false.
+		.serial_dsr_n      (status[29] && UART_DSR),
 		// MiSTer's UART has no carrier line. "Serial DCD" defaults to carrier
 		// present, which is what the port shows with nothing plugged in (R89
 		// pulls its receiver input up, sheet 8). Host DTR follows the pin DSR

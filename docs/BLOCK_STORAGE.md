@@ -46,6 +46,25 @@ $C800 expansion ROM.
 With **Boot ROM** at **Apple**, the default, boot is unchanged: Apple's ROM
 boots the internal floppy, with or without images on the card.
 
+### Making an image
+
+`tools/blank_hd.py` writes a formatted, empty volume, 16 MiB unless `--size`
+says otherwise (up to 65,535 blocks). With `--boot-from` and one of Rob Justice's
+images it also takes soshdboot's loader, `SOS.KERNEL`, `SOS.DRIVER` and the
+program that image boots:
+
+```sh
+tools/blank_hd.py data.po                                       # empty, for Hard Disk 2
+tools/blank_hd.py selector.po --boot-from sos_selector_hd.po    # boots the Selector
+```
+
+The Selector keeps that image's menu, whose entries find nothing until their
+folders are copied over. The Utilities floppy's programs cannot boot from the
+card this way: its Pascal system asks for the built-in drive.
+
+The Utilities' **Format a volume** cannot do this on the card: Problock3 has no
+formatter (control code $FE), and SOS reports error 103.
+
 ## Card interface
 
 Slot 1 decodes $C090–$C09F for the registers and $C100–$C1FF for the

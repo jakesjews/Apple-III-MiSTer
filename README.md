@@ -150,9 +150,10 @@ joystick 0; **Joystick 1 on** in the OSD moves it to port A. Controller 2 uses
 the other port. Button 1 is the joystick's pushbutton, and each press of button
 2 flips its latching switch.
 
-Serial uses MiSTer's UART. Leave **Serial CTS** at **Always ready** unless
-using host hardware flow control, and **Serial DCD** at **Always on** unless a
-program should see carrier from the host (**Host DTR**) or none (**Off**). [Serial details](docs/DEVELOPMENT.md#serial-port).
+Serial uses MiSTer's UART. Leave **Serial CTS** and **Serial DSR** at **Always
+ready** unless using host hardware flow control, and **Serial DCD** at **Always
+on** unless a program should see carrier from the host (**Host DTR**) or none
+(**Off**). With MiSTer's modem it can [call a BBS](docs/BBS.md). [Serial details](docs/DEVELOPMENT.md#serial-port).
 
 ## Building and simulation
 
@@ -174,6 +175,10 @@ Booting SOS needs a WOZ disk image.
 Existing partial implementations are noted where they provide a starting point.
 
 - [ ] **Validate audio** Verify implementation accuracy against research.
+
+- [ ] **Problock3 formatter.** The Utilities' Format a volume fails with error
+      103 on the block card, because Problock3 has no formatter (control code
+      $FE). `tools/blank_hd.py` makes formatted images meanwhile.
 
 - [ ] **External memory and optional 512 KiB RAM.** Build on the parameterized
       RAM/MMU support with an external-memory backend and a usable 512 KiB option.
